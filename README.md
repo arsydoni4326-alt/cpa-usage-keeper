@@ -56,6 +56,7 @@ cp .env.example .env
 | `REDIS_QUEUE_BATCH_SIZE` | 否 | `1000` | 每次最多拉取的队列记录数 |
 | `REDIS_QUEUE_IDLE_INTERVAL` | 否 | `1s` | 队列为空时的检查间隔 |
 | `REQUEST_TIMEOUT` | 否 | `30s` | CPA 请求超时 |
+| `TLS_SKIP_VERIFY` | 否 | `false` | 跳过 CPA HTTPS 证书验证；仅在使用自签名证书时启用 |
 | `WORK_DIR` | 否 | `./data` | 应用工作目录；数据库、日志和备份默认分别写入 `app.db`、`logs/`、`backups/` |
 | `LOG_LEVEL` | 否 | `info` | 日志级别 |
 | `LOG_FILE_ENABLED` | 否 | `true` | 是否写入持久化日志文件 |

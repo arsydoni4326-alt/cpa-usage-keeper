@@ -66,6 +66,8 @@ type Config struct {
 	BackupRetentionDays int
 	// RequestTimeout 是访问 CPA HTTP 和 Redis TCP 的超时时间。
 	RequestTimeout time.Duration
+	// TLSSkipVerify 控制是否跳过 CPA HTTPS 证书验证。
+	TLSSkipVerify bool
 	// LogLevel 是应用日志级别。
 	LogLevel string
 	// LogFileEnabled 控制是否写入持久化日志文件。
@@ -174,6 +176,11 @@ func Load(options LoadOptions) (*Config, error) {
 		return nil, err
 	}
 
+	tlsSkipVerify, err := getBool("TLS_SKIP_VERIFY", false)
+	if err != nil {
+		return nil, err
+	}
+
 	appBasePath, err := normalizeBasePath(strings.TrimSpace(os.Getenv("APP_BASE_PATH")))
 	if err != nil {
 		return nil, fmt.Errorf("APP_BASE_PATH is invalid: %w", err)
@@ -199,6 +206,7 @@ func Load(options LoadOptions) (*Config, error) {
 		BackupInterval:         backupInterval,
 		BackupRetentionDays:    backupRetentionDays,
 		RequestTimeout:         requestTimeout,
+		TLSSkipVerify:          tlsSkipVerify,
 		LogLevel:               getString("LOG_LEVEL", "info"),
 		LogFileEnabled:         logFileEnabled,
 		LogDir:                 filepath.Join(workDir, workDirLogsName),
