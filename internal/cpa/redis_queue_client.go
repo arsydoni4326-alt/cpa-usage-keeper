@@ -47,10 +47,23 @@ func (c *RedisQueueClient) PopUsage(ctx context.Context) ([]string, error) {
 	if c.batchSize <= 0 {
 		return nil, fmt.Errorf("redis queue batch size must be positive")
 	}
-	if c.shouldUseHTTPFallback() {
-		return c.popUsageOverHTTP(ctx)
+
+	messages, err := c.popUsageOverRedis(ctx)
+	if err == nil {
+		return messages, nil
+	}
+	if !c.canFallbackToHTTP() {
+		return nil, err
 	}
 
+	messages, fallbackErr := c.popUsageOverHTTP(ctx)
+	if fallbackErr != nil {
+		return nil, fmt.Errorf("redis queue pop failed: %w; http usage queue fallback failed: %w", err, fallbackErr)
+	}
+	return messages, nil
+}
+
+func (c *RedisQueueClient) popUsageOverRedis(ctx context.Context) ([]string, error) {
 	conn, reader, err := c.openAuthenticatedConnection(ctx)
 	if err != nil {
 		return nil, err
@@ -70,19 +83,8 @@ func (c *RedisQueueClient) PopUsage(ctx context.Context) ([]string, error) {
 	return popResponse.strings(), nil
 }
 
-func (c *RedisQueueClient) shouldUseHTTPFallback() bool {
-	if c == nil || c.httpClient == nil {
-		return false
-	}
-	baseURL := strings.TrimSpace(c.httpClient.baseURL)
-	if baseURL == "" {
-		return false
-	}
-	parsed, err := url.Parse(baseURL)
-	if err != nil {
-		return false
-	}
-	return strings.EqualFold(parsed.Scheme, "https")
+func (c *RedisQueueClient) canFallbackToHTTP() bool {
+	return c != nil && c.httpClient != nil && strings.TrimSpace(c.httpClient.baseURL) != ""
 }
 
 func (c *RedisQueueClient) popUsageOverHTTP(ctx context.Context) ([]string, error) {
