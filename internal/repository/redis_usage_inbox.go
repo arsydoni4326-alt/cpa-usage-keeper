@@ -52,7 +52,7 @@ func InsertRedisUsageInboxMessages(db *gorm.DB, inputs []RedisInboxInsert) ([]mo
 	}
 
 	if err := db.Transaction(func(tx *gorm.DB) error {
-		return tx.Create(&rows).Error
+		return tx.CreateInBatches(&rows, defaultRepositoryInsertBatchSize).Error
 	}); err != nil {
 		return nil, err
 	}

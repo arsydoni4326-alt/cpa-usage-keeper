@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -203,6 +204,112 @@ func TestUsageIdentityReplaceForProviderTypesMarksOnlyScopedProviderTypesDeleted
 	anthropic := byIdentity["anthropic-new"]
 	if anthropic.ID == 0 || anthropic.IsDeleted || anthropic.AuthType != models.UsageIdentityAuthTypeAIProvider {
 		t.Fatalf("expected new provider identity active, got %+v", anthropic)
+	}
+}
+
+func TestUsageIdentityReplaceForAuthTypeBatchesLargeUpsertAndMarksStaleRowsDeleted(t *testing.T) {
+	db := openTestDatabase(t)
+	ctx := context.Background()
+	now := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+
+	stale := models.UsageIdentity{
+		Name:     "Stale Auth",
+		AuthType: models.UsageIdentityAuthTypeAuthFile,
+		Identity: "auth-stale",
+		Type:     "account",
+		Provider: "claude",
+	}
+	if err := db.Create(&stale).Error; err != nil {
+		t.Fatalf("seed stale auth identity: %v", err)
+	}
+
+	identities := make([]models.UsageIdentity, 0, 2218)
+	for i := 0; i < 2218; i++ {
+		identities = append(identities, models.UsageIdentity{
+			Name:         fmt.Sprintf("Auth %04d", i),
+			AuthTypeName: "oauth",
+			Identity:     fmt.Sprintf("auth-%04d", i),
+			Type:         "account",
+			Provider:     "claude-code",
+		})
+	}
+
+	if err := ReplaceUsageIdentitiesForAuthType(ctx, db, identities, models.UsageIdentityAuthTypeAuthFile, now); err != nil {
+		t.Fatalf("ReplaceUsageIdentitiesForAuthType returned error: %v", err)
+	}
+
+	var activeCount int64
+	if err := db.Model(&models.UsageIdentity{}).Where("auth_type = ? AND is_deleted = ?", models.UsageIdentityAuthTypeAuthFile, false).Count(&activeCount).Error; err != nil {
+		t.Fatalf("count active auth identities: %v", err)
+	}
+	if activeCount != int64(len(identities)) {
+		t.Fatalf("expected %d active auth identities, got %d", len(identities), activeCount)
+	}
+
+	var storedStale models.UsageIdentity
+	if err := db.Where("identity = ?", "auth-stale").First(&storedStale).Error; err != nil {
+		t.Fatalf("load stale auth identity: %v", err)
+	}
+	if !storedStale.IsDeleted || storedStale.DeletedAt == nil || !storedStale.DeletedAt.Equal(now) {
+		t.Fatalf("expected stale auth identity to be deleted at %s, got %+v", now, storedStale)
+	}
+}
+
+func TestUsageIdentityReplaceForProviderTypesBatchesLargeUpsertAndDeletesOnlyScopedStaleRows(t *testing.T) {
+	db := openTestDatabase(t)
+	ctx := context.Background()
+	now := time.Date(2026, 5, 6, 12, 30, 0, 0, time.UTC)
+
+	seed := []models.UsageIdentity{
+		{Name: "OpenAI Stale", AuthType: models.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "openai-stale", Type: "openai", Provider: "OpenAI"},
+		{Name: "Gemini Untouched", AuthType: models.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "gemini-untouched", Type: "gemini", Provider: "Gemini"},
+		{Name: "Auth Untouched", AuthType: models.UsageIdentityAuthTypeAuthFile, AuthTypeName: "oauth", Identity: "auth-untouched", Type: "account", Provider: "claude"},
+	}
+	if err := db.Create(&seed).Error; err != nil {
+		t.Fatalf("seed usage identities: %v", err)
+	}
+
+	identities := make([]models.UsageIdentity, 0, 2218)
+	for i := 0; i < 2218; i++ {
+		identities = append(identities, models.UsageIdentity{
+			Name:         fmt.Sprintf("OpenAI %04d", i),
+			AuthTypeName: "apikey",
+			Identity:     fmt.Sprintf("openai-%04d", i),
+			Type:         "openai",
+			Provider:     "OpenAI",
+			LookupKey:    fmt.Sprintf("sk-openai-%04d", i),
+		})
+	}
+
+	if err := ReplaceUsageIdentitiesForProviderTypes(ctx, db, identities, []string{"openai"}, now); err != nil {
+		t.Fatalf("ReplaceUsageIdentitiesForProviderTypes returned error: %v", err)
+	}
+
+	var activeOpenAI int64
+	if err := db.Model(&models.UsageIdentity{}).Where("auth_type = ? AND type = ? AND is_deleted = ?", models.UsageIdentityAuthTypeAIProvider, "openai", false).Count(&activeOpenAI).Error; err != nil {
+		t.Fatalf("count active openai identities: %v", err)
+	}
+	if activeOpenAI != int64(len(identities)) {
+		t.Fatalf("expected %d active openai identities, got %d", len(identities), activeOpenAI)
+	}
+
+	rows, err := ListUsageIdentities(ctx, db)
+	if err != nil {
+		t.Fatalf("ListUsageIdentities returned error: %v", err)
+	}
+	byIdentity := usageIdentitiesByIdentity(rows)
+
+	openAIStale := byIdentity["openai-stale"]
+	if !openAIStale.IsDeleted || openAIStale.DeletedAt == nil || !openAIStale.DeletedAt.Equal(now) {
+		t.Fatalf("expected scoped stale provider identity to be deleted, got %+v", openAIStale)
+	}
+	gemini := byIdentity["gemini-untouched"]
+	if gemini.IsDeleted || gemini.DeletedAt != nil {
+		t.Fatalf("expected unmentioned provider type untouched, got %+v", gemini)
+	}
+	auth := byIdentity["auth-untouched"]
+	if auth.IsDeleted || auth.DeletedAt != nil {
+		t.Fatalf("expected auth identity untouched, got %+v", auth)
 	}
 }
 

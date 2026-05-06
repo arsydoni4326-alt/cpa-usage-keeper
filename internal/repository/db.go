@@ -68,11 +68,10 @@ func InsertUsageEvents(db *gorm.DB, events []models.UsageEvent) (int, int, error
 		return 0, 0, nil
 	}
 
-	const batchSize = 100
 	inserted := 0
 
-	for start := 0; start < len(events); start += batchSize {
-		end := min(start+batchSize, len(events))
+	for start := 0; start < len(events); start += defaultRepositoryInsertBatchSize {
+		end := min(start+defaultRepositoryInsertBatchSize, len(events))
 		batch := events[start:end]
 		result := db.Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "event_key"}},

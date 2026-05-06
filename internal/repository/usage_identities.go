@@ -24,18 +24,13 @@ func ReplaceUsageIdentitiesForAuthType(ctx context.Context, db *gorm.DB, identit
 			return err
 		}
 
-		query := tx.Model(&models.UsageIdentity{}).Where("auth_type = ?", authType)
-		if len(incomingIdentities) > 0 {
-			query = query.Where("identity NOT IN ?", incomingIdentities)
-		}
-		if err := query.Updates(map[string]any{
-			"is_deleted": true,
-			"deleted_at": now,
-		}).Error; err != nil {
-			return fmt.Errorf("mark stale usage identities deleted: %w", err)
-		}
-
-		return nil
+		return markStaleUsageIdentitiesDeleted(
+			tx,
+			tx.Model(&models.UsageIdentity{}).Where("auth_type = ?", authType),
+			incomingIdentities,
+			now,
+			"mark stale usage identities deleted",
+		)
 	})
 }
 
@@ -55,17 +50,14 @@ func ReplaceUsageIdentitiesForProviderTypes(ctx context.Context, db *gorm.DB, id
 			return nil
 		}
 
-		query := tx.Model(&models.UsageIdentity{}).
-			Where("auth_type = ?", models.UsageIdentityAuthTypeAIProvider).
-			Where("type IN ?", types)
-		if len(incomingIdentities) > 0 {
-			query = query.Where("identity NOT IN ?", incomingIdentities)
-		}
-		if err := query.Updates(map[string]any{
-			"is_deleted": true,
-			"deleted_at": now,
-		}).Error; err != nil {
-			return fmt.Errorf("mark stale provider usage identities deleted: %w", err)
+		for start := 0; start < len(types); start += defaultRepositoryInsertBatchSize {
+			end := min(start+defaultRepositoryInsertBatchSize, len(types))
+			query := tx.Model(&models.UsageIdentity{}).
+				Where("auth_type = ?", models.UsageIdentityAuthTypeAIProvider).
+				Where("type IN ?", types[start:end])
+			if err := markStaleUsageIdentitiesDeleted(tx, query, incomingIdentities, now, "mark stale provider usage identities deleted"); err != nil {
+				return err
+			}
 		}
 
 		return nil
@@ -257,6 +249,38 @@ func normalizeProviderTypes(providerTypes []string) []string {
 	return types
 }
 
+func markStaleUsageIdentitiesDeleted(tx *gorm.DB, query *gorm.DB, incomingIdentities []string, now time.Time, context string) error {
+	incoming := make(map[string]struct{}, len(incomingIdentities))
+	for _, identity := range incomingIdentities {
+		incoming[identity] = struct{}{}
+	}
+
+	var candidates []struct {
+		ID       uint
+		Identity string
+	}
+	if err := query.Select("id, identity").Find(&candidates).Error; err != nil {
+		return fmt.Errorf("%s: %w", context, err)
+	}
+
+	staleIDs := make([]uint, 0)
+	for _, candidate := range candidates {
+		if _, ok := incoming[candidate.Identity]; ok {
+			continue
+		}
+		staleIDs = append(staleIDs, candidate.ID)
+	}
+	for start := 0; start < len(staleIDs); start += defaultRepositoryInsertBatchSize {
+		end := min(start+defaultRepositoryInsertBatchSize, len(staleIDs))
+		if err := tx.Model(&models.UsageIdentity{}).
+			Where("id IN ?", staleIDs[start:end]).
+			Updates(map[string]any{"is_deleted": true, "deleted_at": now}).Error; err != nil {
+			return fmt.Errorf("%s: %w", context, err)
+		}
+	}
+	return nil
+}
+
 func upsertUsageIdentities(tx *gorm.DB, identities []models.UsageIdentity) error {
 	if len(identities) == 0 {
 		return nil
@@ -274,7 +298,7 @@ func upsertUsageIdentities(tx *gorm.DB, identities []models.UsageIdentity) error
 			"deleted_at":     nil,
 			"updated_at":     gorm.Expr("excluded.updated_at"),
 		}),
-	}).Create(&identities).Error; err != nil {
+	}).CreateInBatches(&identities, defaultRepositoryInsertBatchSize).Error; err != nil {
 		return fmt.Errorf("upsert usage identities: %w", err)
 	}
 	return nil
