@@ -2,6 +2,7 @@ package repository
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -19,6 +20,10 @@ type StorageCleanupResult struct {
 }
 
 func OpenDatabase(cfg config.Config) (*gorm.DB, error) {
+	databaseExists, err := sqliteDatabaseFileExists(cfg.SQLitePath)
+	if err != nil {
+		return nil, err
+	}
 	dsn := sqliteDSN(cfg.SQLitePath)
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
@@ -42,11 +47,22 @@ func OpenDatabase(cfg config.Config) (*gorm.DB, error) {
 		return nil, fmt.Errorf("enable sqlite foreign keys: %w", err)
 	}
 
+	hasTables, err := sqliteDatabaseHasTables(db)
+	if err != nil {
+		return nil, err
+	}
+	if !databaseExists || !hasTables {
+		if err := db.AutoMigrate(models.All()...); err != nil {
+			return nil, fmt.Errorf("auto migrate fresh database: %w", err)
+		}
+		if err := migration.MarkAllAsApplied(db); err != nil {
+			return nil, fmt.Errorf("mark schema migrations applied: %w", err)
+		}
+		return db, nil
+	}
+
 	if err := migration.Run(db); err != nil {
 		return nil, fmt.Errorf("run schema migrations: %w", err)
-	}
-	if err := db.AutoMigrate(models.All()...); err != nil {
-		return nil, fmt.Errorf("auto migrate database: %w", err)
 	}
 
 	return db, nil
@@ -58,6 +74,32 @@ func sqliteDSN(path string) string {
 		return trimmed
 	}
 	return trimmed + "?_busy_timeout=5000&_foreign_keys=on"
+}
+
+func sqliteDatabaseFileExists(path string) (bool, error) {
+	trimmed := strings.TrimSpace(path)
+	if before, _, ok := strings.Cut(trimmed, "?"); ok {
+		trimmed = before
+	}
+	if trimmed == "" || trimmed == ":memory:" {
+		return false, nil
+	}
+	_, err := os.Stat(trimmed)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, fmt.Errorf("check sqlite database %s: %w", filepath.Clean(trimmed), err)
+}
+
+func sqliteDatabaseHasTables(db *gorm.DB) (bool, error) {
+	var count int64
+	if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").Scan(&count).Error; err != nil {
+		return false, fmt.Errorf("check sqlite database tables: %w", err)
+	}
+	return count > 0, nil
 }
 
 func InsertUsageEvents(db *gorm.DB, events []models.UsageEvent) (int, int, error) {
