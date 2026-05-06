@@ -105,7 +105,7 @@ func TestUsageIdentityReplaceForAuthTypeMarksStaleRowsDeletedAndPreservesStats(t
 	}
 }
 
-func TestUsageIdentityReplaceForAuthTypeRestoresDeletedIdentity(t *testing.T) {
+func TestUsageIdentityReplaceForAuthTypeRevivesDeletedIdentity(t *testing.T) {
 	db := openTestDatabase(t)
 	ctx := context.Background()
 	deletedAt := time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)
@@ -128,7 +128,7 @@ func TestUsageIdentityReplaceForAuthTypeRestoresDeletedIdentity(t *testing.T) {
 
 	err := ReplaceUsageIdentitiesForAuthType(ctx, db, []models.UsageIdentity{
 		{
-			Name:         "Restored",
+			Name:         "Incoming Deleted",
 			AuthTypeName: "oauth",
 			Identity:     "auth-1",
 			Type:         "account",
@@ -143,12 +143,12 @@ func TestUsageIdentityReplaceForAuthTypeRestoresDeletedIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListUsageIdentities returned error: %v", err)
 	}
-	restored := usageIdentitiesByIdentity(rows)["auth-1"]
-	if restored.IsDeleted || restored.DeletedAt != nil {
-		t.Fatalf("expected deleted identity to be restored, got %+v", restored)
+	deletedRow := usageIdentitiesByIdentity(rows)["auth-1"]
+	if deletedRow.IsDeleted || deletedRow.DeletedAt != nil {
+		t.Fatalf("expected incoming deleted identity to be restored active, got %+v", deletedRow)
 	}
-	if restored.Name != "Restored" || restored.Provider != "claude-code" || restored.TotalRequests != 7 {
-		t.Fatalf("expected metadata update with stats preserved, got %+v", restored)
+	if deletedRow.Name != "Incoming Deleted" || deletedRow.Provider != "claude-code" || deletedRow.TotalRequests != 7 {
+		t.Fatalf("expected restored identity metadata update with stats preserved, got %+v", deletedRow)
 	}
 }
 
@@ -348,12 +348,126 @@ func TestUsageIdentityReplaceForProviderTypesWithEmptyProviderTypesDoesNotDelete
 		}
 	}
 
-	restored := byIdentity["provider-restore"]
-	if restored.IsDeleted || restored.DeletedAt != nil {
-		t.Fatalf("expected incoming provider identity restored, got %+v", restored)
+	deletedProvider := byIdentity["provider-restore"]
+	if deletedProvider.IsDeleted || deletedProvider.DeletedAt != nil {
+		t.Fatalf("expected incoming deleted provider identity to be restored active, got %+v", deletedProvider)
 	}
-	if restored.Name != "Restored Provider" || restored.Provider != "Anthropic Updated" || restored.AuthTypeName != "apikey" || restored.TotalRequests != 9 {
-		t.Fatalf("expected incoming provider identity updated with stats preserved, got %+v", restored)
+	if deletedProvider.Name != "Restored Provider" || deletedProvider.Provider != "Anthropic Updated" || deletedProvider.AuthTypeName != "apikey" || deletedProvider.TotalRequests != 9 {
+		t.Fatalf("expected restored provider identity updated with stats preserved, got %+v", deletedProvider)
+	}
+}
+
+func TestUsageIdentityReplaceForAuthTypeKeepsAlreadyDeletedRowsOutOfStaleCompare(t *testing.T) {
+	db := openTestDatabase(t)
+	ctx := context.Background()
+	oldDeletedAt := time.Date(2026, 5, 2, 9, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 5, 4, 10, 0, 0, 0, time.UTC)
+
+	seed := []models.UsageIdentity{
+		{Name: "Active Stale", AuthType: models.UsageIdentityAuthTypeAuthFile, AuthTypeName: "oauth", Identity: "auth-active-stale", Type: "account", Provider: "claude"},
+		{Name: "Already Deleted", AuthType: models.UsageIdentityAuthTypeAuthFile, AuthTypeName: "oauth", Identity: "auth-already-deleted", Type: "account", Provider: "claude", IsDeleted: true, DeletedAt: &oldDeletedAt},
+	}
+	if err := db.Create(&seed).Error; err != nil {
+		t.Fatalf("seed usage identities: %v", err)
+	}
+
+	if err := ReplaceUsageIdentitiesForAuthType(ctx, db, nil, models.UsageIdentityAuthTypeAuthFile, now); err != nil {
+		t.Fatalf("ReplaceUsageIdentitiesForAuthType returned error: %v", err)
+	}
+
+	rows, err := ListUsageIdentities(ctx, db)
+	if err != nil {
+		t.Fatalf("ListUsageIdentities returned error: %v", err)
+	}
+	byIdentity := usageIdentitiesByIdentity(rows)
+
+	activeStale := byIdentity["auth-active-stale"]
+	if !activeStale.IsDeleted || activeStale.DeletedAt == nil || !activeStale.DeletedAt.Equal(now) {
+		t.Fatalf("expected active stale auth identity to be deleted at %s, got %+v", now, activeStale)
+	}
+
+	alreadyDeleted := byIdentity["auth-already-deleted"]
+	if !alreadyDeleted.IsDeleted || alreadyDeleted.DeletedAt == nil || !alreadyDeleted.DeletedAt.Equal(oldDeletedAt) {
+		t.Fatalf("expected already deleted auth identity to keep deleted_at %s, got %+v", oldDeletedAt, alreadyDeleted)
+	}
+}
+
+func TestUsageIdentityReplaceForProviderTypesKeepsAlreadyDeletedRowsOutOfStaleCompare(t *testing.T) {
+	db := openTestDatabase(t)
+	ctx := context.Background()
+	oldDeletedAt := time.Date(2026, 5, 2, 9, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 5, 4, 10, 0, 0, 0, time.UTC)
+
+	seed := []models.UsageIdentity{
+		{Name: "OpenAI Active Stale", AuthType: models.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "openai-active-stale", Type: "openai", Provider: "OpenAI"},
+		{Name: "OpenAI Already Deleted", AuthType: models.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "openai-already-deleted", Type: "openai", Provider: "OpenAI", IsDeleted: true, DeletedAt: &oldDeletedAt},
+		{Name: "Gemini Untouched", AuthType: models.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "gemini-untouched", Type: "gemini", Provider: "Gemini"},
+	}
+	if err := db.Create(&seed).Error; err != nil {
+		t.Fatalf("seed usage identities: %v", err)
+	}
+
+	if err := ReplaceUsageIdentitiesForProviderTypes(ctx, db, nil, []string{"openai"}, now); err != nil {
+		t.Fatalf("ReplaceUsageIdentitiesForProviderTypes returned error: %v", err)
+	}
+
+	rows, err := ListUsageIdentities(ctx, db)
+	if err != nil {
+		t.Fatalf("ListUsageIdentities returned error: %v", err)
+	}
+	byIdentity := usageIdentitiesByIdentity(rows)
+
+	activeStale := byIdentity["openai-active-stale"]
+	if !activeStale.IsDeleted || activeStale.DeletedAt == nil || !activeStale.DeletedAt.Equal(now) {
+		t.Fatalf("expected active stale provider identity to be deleted at %s, got %+v", now, activeStale)
+	}
+
+	alreadyDeleted := byIdentity["openai-already-deleted"]
+	if !alreadyDeleted.IsDeleted || alreadyDeleted.DeletedAt == nil || !alreadyDeleted.DeletedAt.Equal(oldDeletedAt) {
+		t.Fatalf("expected already deleted provider identity to keep deleted_at %s, got %+v", oldDeletedAt, alreadyDeleted)
+	}
+
+	gemini := byIdentity["gemini-untouched"]
+	if gemini.IsDeleted || gemini.DeletedAt != nil {
+		t.Fatalf("expected unscoped provider type untouched, got %+v", gemini)
+	}
+}
+
+func TestUsageIdentityListActiveExcludesDeletedRows(t *testing.T) {
+	db := openTestDatabase(t)
+	ctx := context.Background()
+	deletedAt := time.Date(2026, 5, 4, 10, 0, 0, 0, time.UTC)
+
+	seed := []models.UsageIdentity{
+		{Name: "Active Auth", AuthType: models.UsageIdentityAuthTypeAuthFile, AuthTypeName: "oauth", Identity: "auth-active", Type: "account", Provider: "claude"},
+		{Name: "Deleted Auth", AuthType: models.UsageIdentityAuthTypeAuthFile, AuthTypeName: "oauth", Identity: "auth-deleted", Type: "account", Provider: "claude", IsDeleted: true, DeletedAt: &deletedAt},
+		{Name: "Active Provider", AuthType: models.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "provider-active", Type: "openai", Provider: "OpenAI"},
+		{Name: "Deleted Provider", AuthType: models.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: "provider-deleted", Type: "openai", Provider: "OpenAI", IsDeleted: true, DeletedAt: &deletedAt},
+	}
+	if err := db.Create(&seed).Error; err != nil {
+		t.Fatalf("seed usage identities: %v", err)
+	}
+
+	rows, err := ListActiveUsageIdentities(ctx, db)
+	if err != nil {
+		t.Fatalf("ListActiveUsageIdentities returned error: %v", err)
+	}
+
+	got := make([]string, 0, len(rows))
+	for _, row := range rows {
+		got = append(got, row.Identity)
+		if row.IsDeleted {
+			t.Fatalf("expected only active identities, got deleted row %+v", row)
+		}
+	}
+	want := []string{"auth-active", "provider-active"}
+	if len(got) != len(want) {
+		t.Fatalf("expected active identities %v, got %v", want, got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("expected active identities ordered as %v, got %v", want, got)
+		}
 	}
 }
 
