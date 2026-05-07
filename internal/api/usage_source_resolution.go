@@ -11,14 +11,12 @@ import (
 type usageSourceResolver struct {
 	authIdentities     map[string]models.UsageIdentity
 	providerIdentities map[string]models.UsageIdentity
-	providerRawByKey   map[string]string
 }
 
 // newUsageSourceResolver 把活跃 usage identity 建成内存索引，供 Credentials 和事件展示快速解析 source。
 func newUsageSourceResolver(identities []models.UsageIdentity) usageSourceResolver {
 	authIdentities := make(map[string]models.UsageIdentity, len(identities))
 	providerIdentities := make(map[string]models.UsageIdentity, len(identities))
-	providerRawByKey := make(map[string]string, len(identities))
 	for _, identity := range identities {
 		// resolver 索引只收录活跃身份，避免 deleted identity 影响 Credentials 和事件展示解析。
 		if identity.IsDeleted {
@@ -33,17 +31,12 @@ func newUsageSourceResolver(identities []models.UsageIdentity) usageSourceResolv
 			authIdentities[key] = identity
 		case models.UsageIdentityAuthTypeAIProvider:
 			providerIdentities[key] = identity
-			resolved := usageSourceResolutionFromIdentity(identity, key)
-			if resolved.SourceKey != "" {
-				providerRawByKey[resolved.SourceKey] = key
-			}
 		}
 	}
 
 	return usageSourceResolver{
 		authIdentities:     authIdentities,
 		providerIdentities: providerIdentities,
-		providerRawByKey:   providerRawByKey,
 	}
 }
 
@@ -73,25 +66,13 @@ func usageSourceResolutionFromIdentity(item models.UsageIdentity, fallbackIdenti
 	}
 }
 
-// rawSourceForPublicValue 把前端传回的 provider source_key 还原成真实 source，用于后端过滤 usage_events。
-func (r usageSourceResolver) rawSourceForPublicValue(value string) string {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return ""
-	}
-	if raw, ok := r.providerRawByKey[trimmed]; ok {
-		return raw
-	}
-	return trimmed
-}
-
-// resolve 按 provider source、auth_index、fallback 推断的顺序解析一条 usage 记录的前端展示来源。
-func (r usageSourceResolver) resolve(rawSource string, authIndex string) usageSourceResolution {
+// resolve 只在命中活跃 identity 时返回解析结果，Credentials 不展示无效身份的 fallback 数据。
+func (r usageSourceResolver) resolve(rawSource string, authIndex string) (usageSourceResolution, bool) {
 	// 优先用 API key source 匹配 AI provider identity，确保 provider 展示名和 source_key 稳定。
 	normalizedSource := strings.TrimSpace(rawSource)
 	if normalizedSource != "" {
 		if item, ok := r.providerIdentities[normalizedSource]; ok {
-			return usageSourceResolutionFromIdentity(item, normalizedSource)
+			return usageSourceResolutionFromIdentity(item, normalizedSource), true
 		}
 	}
 
@@ -104,32 +85,11 @@ func (r usageSourceResolver) resolve(rawSource string, authIndex string) usageSo
 				DisplayName: displayName,
 				SourceType:  firstNonEmptyString(identity.Type, identity.Provider),
 				SourceKey:   "auth:" + normalizedAuthIndex,
-			}
+			}, true
 		}
 	}
 
-	// 没有 identity 命中时走安全 fallback，避免把原始 API key 暴露给前端。
-	if normalizedSource == "" {
-		return usageSourceResolution{DisplayName: "-", SourceKey: "raw:-"}
-	}
-	if looksLikeEmail(normalizedSource) {
-		return usageSourceResolution{
-			DisplayName: normalizedSource,
-			SourceKey:   "email:" + normalizedSource,
-		}
-	}
-	if inferredProvider := inferUsageProviderType(normalizedSource); inferredProvider != "" {
-		return usageSourceResolution{
-			DisplayName: inferredProvider,
-			SourceType:  inferredProvider,
-			SourceKey:   "provider:fallback:" + inferredProvider,
-		}
-	}
-	masked := redact.APIKeyDisplayName(normalizedSource)
-	return usageSourceResolution{
-		DisplayName: masked,
-		SourceKey:   "raw:" + masked,
-	}
+	return usageSourceResolution{}, false
 }
 
 // uintToString 统一把数据库 ID 转成 source_key 使用的字符串片段。
@@ -146,37 +106,4 @@ func firstNonEmptyString(values ...string) string {
 		}
 	}
 	return ""
-}
-
-// looksLikeEmail 识别邮箱类 source，邮箱本身可作为安全展示值。
-func looksLikeEmail(value string) bool {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return false
-	}
-	atIndex := strings.Index(trimmed, "@")
-	return atIndex > 0 && atIndex < len(trimmed)-1 && strings.Contains(trimmed[atIndex+1:], ".")
-}
-
-// inferUsageProviderType 在没有 metadata 命中时，根据 source 特征推断 provider 类型作为兜底展示。
-func inferUsageProviderType(source string) string {
-	value := strings.ToLower(strings.TrimSpace(source))
-	switch {
-	case value == "":
-		return ""
-	case strings.Contains(value, "ampcode"):
-		return "ampcode"
-	case strings.HasPrefix(value, "sk-ant-") || strings.Contains(value, "anthropic") || strings.Contains(value, "claude"):
-		return "claude"
-	case strings.HasPrefix(value, "sk-proj-") || strings.HasPrefix(value, "sk-") || strings.Contains(value, "openai") || strings.Contains(value, "gpt"):
-		return "openai"
-	case strings.HasPrefix(value, "aiza") || strings.Contains(value, "gemini"):
-		return "gemini"
-	case strings.Contains(value, "vertex"):
-		return "vertex"
-	case strings.Contains(value, "codex"):
-		return "codex"
-	default:
-		return ""
-	}
 }

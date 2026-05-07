@@ -55,7 +55,10 @@ func buildUsageCredentialsPayload(rows []service.UsageCredentialStat, resolver u
 	buckets := make(map[string]*usageCredentialPayload, len(rows))
 	orderedKeys := make([]string, 0, len(rows))
 	for _, row := range rows {
-		resolved := resolver.resolve(row.Source, row.AuthIndex)
+		resolved, ok := resolver.resolve(row.Source, row.AuthIndex)
+		if !ok {
+			continue
+		}
 		bucketKey := resolved.SourceKey
 		if bucketKey == "" {
 			bucketKey = resolved.DisplayName

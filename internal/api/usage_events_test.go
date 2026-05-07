@@ -253,7 +253,7 @@ func TestUsageEventFilterOptionsReturnsStableModelsAndSources(t *testing.T) {
 	}
 }
 
-func TestUsageCredentialsIgnoresDeletedUsageIdentityResolution(t *testing.T) {
+func TestUsageCredentialsOmitsDeletedUsageIdentityRows(t *testing.T) {
 	provider := &usageEventsStub{credentialStats: []service.UsageCredentialStat{{
 		Source:       "sk-deleted-provider-key",
 		Failed:       false,
@@ -269,14 +269,8 @@ func TestUsageCredentialsIgnoresDeletedUsageIdentityResolution(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", resp.Code)
 	}
 	body := resp.Body.String()
-	if !contains(body, `"credentials":[`) || !contains(body, `"total_count":2`) {
-		t.Fatalf("unexpected response body: %s", body)
-	}
-	if contains(body, `Deleted Provider`) || contains(body, `"source_key":"provider:77"`) {
-		t.Fatalf("expected deleted identity resolution to be ignored, got %s", body)
-	}
-	if contains(body, `sk-deleted-provider-key`) {
-		t.Fatalf("expected raw API key to stay redacted when deleted identity is ignored, got %s", body)
+	if body != `{"credentials":[]}` {
+		t.Fatalf("expected deleted credential row to be omitted, got %s", body)
 	}
 }
 
