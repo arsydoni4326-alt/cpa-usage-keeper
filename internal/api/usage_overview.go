@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"time"
 
-	"cpa-usage-keeper/internal/cpa"
 	"cpa-usage-keeper/internal/redact"
+	"cpa-usage-keeper/internal/repository/dto"
 	"cpa-usage-keeper/internal/service"
 	"github.com/gin-gonic/gin"
 )
@@ -134,7 +134,7 @@ func registerUsageOverviewRoute(router gin.IRoutes, usageProvider service.UsageP
 			return
 		}
 
-		var usage *cpa.StatisticsSnapshot
+		var usage *dto.StatisticsSnapshot
 		if overview != nil {
 			usage = overview.Usage
 		}
@@ -153,7 +153,7 @@ func registerUsageOverviewRoute(router gin.IRoutes, usageProvider service.UsageP
 	})
 }
 
-func buildUsageOverviewPayload(snapshot *cpa.StatisticsSnapshot) usageOverviewPayload {
+func buildUsageOverviewPayload(snapshot *dto.StatisticsSnapshot) usageOverviewPayload {
 	if snapshot == nil {
 		return usageOverviewPayload{
 			APIs:           map[string]usageOverviewAPISnapshot{},

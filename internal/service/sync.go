@@ -8,20 +8,24 @@ import (
 
 	"cpa-usage-keeper/internal/config"
 	"cpa-usage-keeper/internal/cpa"
-	"cpa-usage-keeper/internal/models"
+	"cpa-usage-keeper/internal/entities"
 	"cpa-usage-keeper/internal/repository"
 
+	"cpa-usage-keeper/internal/cpa/dto/authfiles"
+	"cpa-usage-keeper/internal/cpa/dto/providerconfig"
+	"cpa-usage-keeper/internal/cpa/dto/response"
+	"cpa-usage-keeper/internal/repository/dto"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
 type MetadataFetcher interface {
-	FetchAuthFiles(ctx context.Context) (*cpa.AuthFilesResult, error)
-	FetchGeminiAPIKeys(ctx context.Context) (*cpa.ProviderKeyConfigResult, error)
-	FetchClaudeAPIKeys(ctx context.Context) (*cpa.ProviderKeyConfigResult, error)
-	FetchCodexAPIKeys(ctx context.Context) (*cpa.ProviderKeyConfigResult, error)
-	FetchVertexAPIKeys(ctx context.Context) (*cpa.ProviderKeyConfigResult, error)
-	FetchOpenAICompatibility(ctx context.Context) (*cpa.OpenAICompatibilityResult, error)
+	FetchAuthFiles(ctx context.Context) (*response.AuthFilesResult, error)
+	FetchGeminiAPIKeys(ctx context.Context) (*response.ProviderKeyConfigResult, error)
+	FetchClaudeAPIKeys(ctx context.Context) (*response.ProviderKeyConfigResult, error)
+	FetchCodexAPIKeys(ctx context.Context) (*response.ProviderKeyConfigResult, error)
+	FetchVertexAPIKeys(ctx context.Context) (*response.ProviderKeyConfigResult, error)
+	FetchOpenAICompatibility(ctx context.Context) (*response.OpenAICompatibilityResult, error)
 }
 
 type CPAClientFetcher interface {
@@ -264,10 +268,10 @@ func (s *SyncService) SyncRedisBatch(ctx context.Context) (*RedisBatchSyncResult
 
 // processRedisInboxRows 只从已落库的原始消息解码和写入事件，坏消息会标记为 decode_failed，不阻塞同批其它数据。
 // 可解码但入库失败的消息标记为 process_failed，后续 ProcessRedisUsageInbox 会按 id 顺序重试。
-func (s *SyncService) processRedisInboxRows(inboxRows []models.RedisUsageInbox, fetchedAt time.Time) (*RedisBatchSyncResult, error) {
+func (s *SyncService) processRedisInboxRows(inboxRows []entities.RedisUsageInbox, fetchedAt time.Time) (*RedisBatchSyncResult, error) {
 	logrus.WithField("row_count", len(inboxRows)).Debug("redis usage inbox processing started")
-	validRows := make([]models.RedisUsageInbox, 0, len(inboxRows))
-	events := make([]models.UsageEvent, 0, len(inboxRows))
+	validRows := make([]entities.RedisUsageInbox, 0, len(inboxRows))
+	events := make([]entities.UsageEvent, 0, len(inboxRows))
 	decodeErrs := make([]error, 0)
 	for _, row := range inboxRows {
 		event, _, decodeErr := DecodeRedisUsageMessage(row.RawMessage, fetchedAt)
@@ -334,7 +338,7 @@ func (s *SyncService) processRedisInboxRows(inboxRows []models.RedisUsageInbox, 
 }
 
 // persistRedisUsageEvents 写入 Redis inbox 解码出的 usage_events。
-func (s *SyncService) persistRedisUsageEvents(events []models.UsageEvent) (*SyncResult, error) {
+func (s *SyncService) persistRedisUsageEvents(events []entities.UsageEvent) (*SyncResult, error) {
 	var err error
 	events, err = alignUsageEventKeysWithExistingCanonicalEvents(s.db, events)
 	if err != nil {
@@ -352,7 +356,7 @@ func (s *SyncService) persistRedisUsageEvents(events []models.UsageEvent) (*Sync
 	return &SyncResult{Status: "completed", InsertedEvents: inserted, DedupedEvents: deduped}, nil
 }
 
-func alignUsageEventKeysWithExistingCanonicalEvents(db *gorm.DB, events []models.UsageEvent) ([]models.UsageEvent, error) {
+func alignUsageEventKeysWithExistingCanonicalEvents(db *gorm.DB, events []entities.UsageEvent) ([]entities.UsageEvent, error) {
 	if len(events) == 0 {
 		return events, nil
 	}
@@ -378,7 +382,7 @@ func alignUsageEventKeysWithExistingCanonicalEvents(db *gorm.DB, events []models
 			continue
 		}
 
-		var existing models.UsageEvent
+		var existing entities.UsageEvent
 		result := db.Select("event_key").Where(
 			"TRIM(api_group_key) = ? AND TRIM(model) = ? AND timestamp = ? AND TRIM(source) = ? AND TRIM(auth_index) = ? AND failed = ? AND input_tokens = ? AND output_tokens = ? AND reasoning_tokens = ? AND cached_tokens = ? AND total_tokens = ?",
 			strings.TrimSpace(events[i].APIGroupKey),
@@ -424,13 +428,13 @@ func alignUsageEventKeysWithExistingCanonicalEvents(db *gorm.DB, events []models
 
 func redisInboxAlreadyReferencesEventKey(db *gorm.DB, eventKey string) (bool, error) {
 	var count int64
-	if err := db.Model(&models.RedisUsageInbox{}).Where("status = ? AND usage_event_key = ?", repository.RedisUsageInboxStatusProcessed, eventKey).Count(&count).Error; err != nil {
+	if err := db.Model(&entities.RedisUsageInbox{}).Where("status = ? AND usage_event_key = ?", repository.RedisUsageInboxStatusProcessed, eventKey).Count(&count).Error; err != nil {
 		return false, fmt.Errorf("count redis inbox references: %w", err)
 	}
 	return count > 0, nil
 }
 
-func canonicalUsageEventKey(event models.UsageEvent) string {
+func canonicalUsageEventKey(event entities.UsageEvent) string {
 	return BuildEventKey(
 		event.APIGroupKey,
 		event.Model,
@@ -438,7 +442,7 @@ func canonicalUsageEventKey(event models.UsageEvent) string {
 		event.Source,
 		event.AuthIndex,
 		event.Failed,
-		cpa.TokenStats{
+		dto.TokenStats{
 			InputTokens:     event.InputTokens,
 			OutputTokens:    event.OutputTokens,
 			ReasoningTokens: event.ReasoningTokens,
@@ -467,10 +471,10 @@ func (s *SyncService) validate(syncMetadata bool) error {
 }
 
 // insertRedisInboxMessages 在解码前先把 Redis 原始消息落库，降低 LPOP 后本地处理失败导致的数据丢失风险。
-func insertRedisInboxMessages(db *gorm.DB, queueKey string, messages []string, poppedAt time.Time) ([]models.RedisUsageInbox, error) {
-	inputs := make([]repository.RedisInboxInsert, 0, len(messages))
+func insertRedisInboxMessages(db *gorm.DB, queueKey string, messages []string, poppedAt time.Time) ([]entities.RedisUsageInbox, error) {
+	inputs := make([]dto.RedisInboxInsert, 0, len(messages))
 	for _, message := range messages {
-		inputs = append(inputs, repository.RedisInboxInsert{
+		inputs = append(inputs, dto.RedisInboxInsert{
 			QueueKey:   queueKey,
 			RawMessage: message,
 			PoppedAt:   poppedAt,
@@ -479,7 +483,7 @@ func insertRedisInboxMessages(db *gorm.DB, queueKey string, messages []string, p
 	return repository.InsertRedisUsageInboxMessages(db, inputs)
 }
 
-func markRedisInboxRowsProcessFailed(db *gorm.DB, rows []models.RedisUsageInbox, err error) {
+func markRedisInboxRowsProcessFailed(db *gorm.DB, rows []entities.RedisUsageInbox, err error) {
 	if err == nil {
 		return
 	}
@@ -488,7 +492,7 @@ func markRedisInboxRowsProcessFailed(db *gorm.DB, rows []models.RedisUsageInbox,
 			logrus.WithError(markErr).WithField("inbox_id", row.ID).Warn("failed to mark redis usage inbox process failure")
 			continue
 		}
-		var stored models.RedisUsageInbox
+		var stored entities.RedisUsageInbox
 		if loadErr := db.First(&stored, row.ID).Error; loadErr != nil {
 			logrus.WithError(loadErr).WithField("inbox_id", row.ID).Warn("failed to load redis usage inbox after process failure")
 			continue
@@ -521,7 +525,7 @@ func errorMessage(err error) string {
 	return strings.TrimSpace(err.Error())
 }
 
-func syncAuthFiles(ctx context.Context, db *gorm.DB, result *cpa.AuthFilesResult, fetchErr error, now time.Time) error {
+func syncAuthFiles(ctx context.Context, db *gorm.DB, result *response.AuthFilesResult, fetchErr error, now time.Time) error {
 	if fetchErr != nil {
 		return fmt.Errorf("fetch auth files: %w", fetchErr)
 	}
@@ -532,24 +536,24 @@ func syncAuthFiles(ctx context.Context, db *gorm.DB, result *cpa.AuthFilesResult
 		return fmt.Errorf("fetch auth files: empty response")
 	}
 
-	identities := make([]models.UsageIdentity, 0, len(result.Payload.Files))
+	identities := make([]entities.UsageIdentity, 0, len(result.Payload.Files))
 	for _, file := range result.Payload.Files {
 		identities = append(identities, authFileUsageIdentity(file))
 	}
-	if err := repository.ReplaceUsageIdentitiesForAuthType(ctx, db, identities, models.UsageIdentityAuthTypeAuthFile, now); err != nil {
+	if err := repository.ReplaceUsageIdentitiesForAuthType(ctx, db, identities, entities.UsageIdentityAuthTypeAuthFile, now); err != nil {
 		return fmt.Errorf("sync auth file usage identities: %w", err)
 	}
 	return nil
 }
 
-type authFileUsageIdentityExtension func(cpa.AuthFile, *models.UsageIdentity)
+type authFileUsageIdentityExtension func(authfiles.AuthFile, *entities.UsageIdentity)
 
 var authFileUsageIdentityExtensions = map[string]authFileUsageIdentityExtension{
 	"codex": extendCodexAuthFileUsageIdentity,
 }
 
 // auth_files 先走通用身份映射，再按 type 追加各来源特有字段，方便后续扩展新类型。
-func authFileUsageIdentity(file cpa.AuthFile) models.UsageIdentity {
+func authFileUsageIdentity(file authfiles.AuthFile) entities.UsageIdentity {
 	identity := baseAuthFileUsageIdentity(file)
 	if extend, ok := authFileUsageIdentityExtensions[strings.ToLower(strings.TrimSpace(file.Type))]; ok {
 		extend(file, &identity)
@@ -557,10 +561,10 @@ func authFileUsageIdentity(file cpa.AuthFile) models.UsageIdentity {
 	return identity
 }
 
-func baseAuthFileUsageIdentity(file cpa.AuthFile) models.UsageIdentity {
-	return models.UsageIdentity{
+func baseAuthFileUsageIdentity(file authfiles.AuthFile) entities.UsageIdentity {
+	return entities.UsageIdentity{
 		Name:         firstNonEmpty(file.Email, file.Label, file.Name, file.AuthIndex),
-		AuthType:     models.UsageIdentityAuthTypeAuthFile,
+		AuthType:     entities.UsageIdentityAuthTypeAuthFile,
 		AuthTypeName: "oauth",
 		Identity:     file.AuthIndex,
 		Type:         file.Type,
@@ -569,7 +573,7 @@ func baseAuthFileUsageIdentity(file cpa.AuthFile) models.UsageIdentity {
 }
 
 // Codex 的 ChatGPT id_token 字段只在 type=codex 且字段存在时写入；缺失字段保持 nil，入库后就是 NULL。
-func extendCodexAuthFileUsageIdentity(file cpa.AuthFile, identity *models.UsageIdentity) {
+func extendCodexAuthFileUsageIdentity(file authfiles.AuthFile, identity *entities.UsageIdentity) {
 	if file.IDToken == nil {
 		return
 	}
@@ -579,8 +583,8 @@ func extendCodexAuthFileUsageIdentity(file cpa.AuthFile, identity *models.UsageI
 	identity.PlanType = file.IDToken.PlanType
 }
 
-func fetchProviderMetadata(ctx context.Context, fetcher MetadataFetcher) (cpa.ProviderMetadataConfig, []string, error) {
-	var cfg cpa.ProviderMetadataConfig
+func fetchProviderMetadata(ctx context.Context, fetcher MetadataFetcher) (providerconfig.ProviderMetadataConfig, []string, error) {
+	var cfg providerconfig.ProviderMetadataConfig
 	var fetchedProviderTypes []string
 	var errs []error
 
@@ -628,7 +632,7 @@ func fetchProviderMetadata(ctx context.Context, fetcher MetadataFetcher) (cpa.Pr
 	return cfg, fetchedProviderTypes, joinErrors(errs...)
 }
 
-func syncProviderMetadata(ctx context.Context, db *gorm.DB, cfg cpa.ProviderMetadataConfig, fetchedProviderTypes []string, fetchErr error, now time.Time) (error, error) {
+func syncProviderMetadata(ctx context.Context, db *gorm.DB, cfg providerconfig.ProviderMetadataConfig, fetchedProviderTypes []string, fetchErr error, now time.Time) (error, error) {
 	if db == nil {
 		return fmt.Errorf("database is nil"), nil
 	}
@@ -652,12 +656,12 @@ type providerMetadataInput struct {
 	AuthIndex    string
 }
 
-func providerMetadataUsageIdentities(inputs []providerMetadataInput) []models.UsageIdentity {
-	identities := make([]models.UsageIdentity, 0, len(inputs))
+func providerMetadataUsageIdentities(inputs []providerMetadataInput) []entities.UsageIdentity {
+	identities := make([]entities.UsageIdentity, 0, len(inputs))
 	for _, input := range inputs {
-		identities = append(identities, models.UsageIdentity{
+		identities = append(identities, entities.UsageIdentity{
 			Name:         input.DisplayName,
-			AuthType:     models.UsageIdentityAuthTypeAIProvider,
+			AuthType:     entities.UsageIdentityAuthTypeAIProvider,
 			AuthTypeName: "apikey",
 			Identity:     input.AuthIndex,
 			Type:         input.ProviderType,
@@ -669,7 +673,7 @@ func providerMetadataUsageIdentities(inputs []providerMetadataInput) []models.Us
 	return identities
 }
 
-func flattenProviderMetadata(cfg cpa.ProviderMetadataConfig) []providerMetadataInput {
+func flattenProviderMetadata(cfg providerconfig.ProviderMetadataConfig) []providerMetadataInput {
 	items := make([]providerMetadataInput, 0)
 	seen := make(map[string]struct{})
 	// Provider metadata 只生成 auth-index 身份；prefix 作为同一身份的附加字段保存，不再生成独立行。
@@ -694,7 +698,7 @@ func flattenProviderMetadata(cfg cpa.ProviderMetadataConfig) []providerMetadataI
 			AuthIndex:    authIndex,
 		})
 	}
-	appendProviderEntries := func(providerType string, configs []cpa.ProviderKeyConfig) {
+	appendProviderEntries := func(providerType string, configs []providerconfig.ProviderKeyConfig) {
 		for _, cfg := range configs {
 			displayName := firstNonEmpty(cfg.Name, providerType)
 			appendItem(cfg.APIKey, cfg.Prefix, providerType, displayName, cfg.AuthIndex)

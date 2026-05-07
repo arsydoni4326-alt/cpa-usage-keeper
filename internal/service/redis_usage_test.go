@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"cpa-usage-keeper/internal/cpa"
+	"cpa-usage-keeper/internal/repository/dto"
 )
 
 func TestDecodeRedisUsageMessageMapsPayloadToUsageEvent(t *testing.T) {
@@ -70,7 +70,7 @@ func TestDecodeRedisUsageMessageFallsBackFieldsAndEventKey(t *testing.T) {
 	if !event.Timestamp.Equal(fetchedAt) {
 		t.Fatalf("expected fetchedAt timestamp, got %s", event.Timestamp)
 	}
-	expectedKey := BuildEventKey("/fallback", "unknown", fetchedAt, "", "", false, cpa.TokenStats{InputTokens: 1, OutputTokens: 2})
+	expectedKey := BuildEventKey("/fallback", "unknown", fetchedAt, "", "", false, dto.TokenStats{InputTokens: 1, OutputTokens: 2})
 	if event.EventKey != expectedKey {
 		t.Fatalf("expected fallback event key %s, got %s", expectedKey, event.EventKey)
 	}

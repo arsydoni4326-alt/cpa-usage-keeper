@@ -7,21 +7,21 @@ import (
 	"testing"
 	"time"
 
-	"cpa-usage-keeper/internal/models"
+	"cpa-usage-keeper/internal/entities"
 	"cpa-usage-keeper/internal/redact"
 )
 
 type usageIdentitiesStub struct {
-	items       []models.UsageIdentity
-	activeItems []models.UsageIdentity
+	items       []entities.UsageIdentity
+	activeItems []entities.UsageIdentity
 	err         error
 }
 
-func (s usageIdentitiesStub) ListUsageIdentities(context.Context) ([]models.UsageIdentity, error) {
+func (s usageIdentitiesStub) ListUsageIdentities(context.Context) ([]entities.UsageIdentity, error) {
 	return s.items, s.err
 }
 
-func (s usageIdentitiesStub) ListActiveUsageIdentities(context.Context) ([]models.UsageIdentity, error) {
+func (s usageIdentitiesStub) ListActiveUsageIdentities(context.Context) ([]entities.UsageIdentity, error) {
 	if s.activeItems != nil {
 		return s.activeItems, s.err
 	}
@@ -36,11 +36,11 @@ func TestUsageIdentitiesRouteReturnsMetadataStatsAndDeletedRows(t *testing.T) {
 	updatedAt := time.Date(2026, 5, 4, 10, 30, 0, 0, time.UTC)
 	deletedAt := time.Date(2026, 5, 4, 11, 0, 0, 0, time.UTC)
 
-	router := NewRouter(nil, nil, nil, nil, AuthConfig{}, nil, "", usageIdentitiesStub{items: []models.UsageIdentity{
+	router := NewRouter(nil, nil, nil, nil, AuthConfig{}, nil, "", usageIdentitiesStub{items: []entities.UsageIdentity{
 		{
 			ID:                         1,
 			Name:                       "Claude Desktop",
-			AuthType:                   models.UsageIdentityAuthTypeAuthFile,
+			AuthType:                   entities.UsageIdentityAuthTypeAuthFile,
 			AuthTypeName:               "oauth",
 			Identity:                   "2",
 			Type:                       "auth-file",
@@ -63,7 +63,7 @@ func TestUsageIdentitiesRouteReturnsMetadataStatsAndDeletedRows(t *testing.T) {
 		{
 			ID:           2,
 			Name:         "Deleted Provider",
-			AuthType:     models.UsageIdentityAuthTypeAIProvider,
+			AuthType:     entities.UsageIdentityAuthTypeAIProvider,
 			AuthTypeName: "apikey",
 			Identity:     "sk-deleted-provider-secret",
 			Type:         "openai",
@@ -127,10 +127,10 @@ func TestUsageIdentitiesRouteDoesNotReturnUnpublishedMetadataFields(t *testing.T
 	secondaryLimit := 604800
 	secondaryResetSeconds := 86400
 	secondaryResetAt := time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)
-	router := NewRouter(nil, nil, nil, nil, AuthConfig{}, nil, "", usageIdentitiesStub{items: []models.UsageIdentity{{
+	router := NewRouter(nil, nil, nil, nil, AuthConfig{}, nil, "", usageIdentitiesStub{items: []entities.UsageIdentity{{
 		ID:                          1,
 		Name:                        "Codex Account",
-		AuthType:                    models.UsageIdentityAuthTypeAuthFile,
+		AuthType:                    entities.UsageIdentityAuthTypeAuthFile,
 		AuthTypeName:                "oauth",
 		Identity:                    "codex-auth",
 		Type:                        "codex",
@@ -185,8 +185,8 @@ func TestUsageIdentitiesRouteMasksAIProviderIdentity(t *testing.T) {
 	rawLookupKey := "sk-live-secret-value"
 	rawPrefix := "sk-live-prefix"
 	maskedLookupKey := redact.APIKeyDisplayName(rawLookupKey)
-	router := NewRouter(nil, nil, nil, nil, AuthConfig{}, nil, "", usageIdentitiesStub{items: []models.UsageIdentity{
-		{ID: 1, Name: rawPrefix, AuthType: models.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: rawLookupKey, Type: "openai " + rawLookupKey, Provider: "OpenAI " + rawPrefix},
+	router := NewRouter(nil, nil, nil, nil, AuthConfig{}, nil, "", usageIdentitiesStub{items: []entities.UsageIdentity{
+		{ID: 1, Name: rawPrefix, AuthType: entities.UsageIdentityAuthTypeAIProvider, AuthTypeName: "apikey", Identity: rawLookupKey, Type: "openai " + rawLookupKey, Provider: "OpenAI " + rawPrefix},
 	}})
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/usage/identities", nil)
 	resp := httptest.NewRecorder()

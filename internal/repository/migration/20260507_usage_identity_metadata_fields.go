@@ -3,13 +3,13 @@ package migration
 import (
 	"fmt"
 
-	"cpa-usage-keeper/internal/models"
+	"cpa-usage-keeper/internal/entities"
 
 	"gorm.io/gorm"
 )
 
 func addUsageIdentityMetadataFieldsMigration(tx *gorm.DB) error {
-	if !tx.Migrator().HasTable(&models.UsageIdentity{}) {
+	if !tx.Migrator().HasTable(&entities.UsageIdentity{}) {
 		return nil
 	}
 
@@ -34,7 +34,7 @@ func addUsageIdentityMetadataFieldsMigration(tx *gorm.DB) error {
 	}
 
 	for _, column := range columns {
-		if tx.Migrator().HasColumn(&models.UsageIdentity{}, column.name) {
+		if tx.Migrator().HasColumn(&entities.UsageIdentity{}, column.name) {
 			continue
 		}
 		if err := tx.Exec(column.sql).Error; err != nil {

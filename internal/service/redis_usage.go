@@ -7,19 +7,19 @@ import (
 	"strings"
 	"time"
 
-	"cpa-usage-keeper/internal/cpa"
-	"cpa-usage-keeper/internal/models"
+	"cpa-usage-keeper/internal/entities"
+	"cpa-usage-keeper/internal/repository/dto"
 )
 
 type RedisQueue interface {
 	PopUsage(ctx context.Context) ([]string, error)
 }
 
-func DecodeRedisUsageMessage(message string, fetchedAt time.Time) (models.UsageEvent, json.RawMessage, error) {
+func DecodeRedisUsageMessage(message string, fetchedAt time.Time) (entities.UsageEvent, json.RawMessage, error) {
 	raw := json.RawMessage(message)
 	var payload queuedUsageDetail
 	if err := json.Unmarshal(raw, &payload); err != nil {
-		return models.UsageEvent{}, nil, fmt.Errorf("decode redis usage message: %w", err)
+		return entities.UsageEvent{}, nil, fmt.Errorf("decode redis usage message: %w", err)
 	}
 	return payload.toUsageEvent(fetchedAt), raw, nil
 }
@@ -29,7 +29,7 @@ type queuedUsageDetail struct {
 	LatencyMS int64          `json:"latency_ms"`
 	Source    string         `json:"source"`
 	AuthIndex string         `json:"auth_index"`
-	Tokens    cpa.TokenStats `json:"tokens"`
+	Tokens    dto.TokenStats `json:"tokens"`
 	Failed    bool           `json:"failed"`
 	Provider  string         `json:"provider"`
 	Model     string         `json:"model"`
@@ -59,7 +59,7 @@ func trimRedisOptionalString(value *string) *string {
 	return &trimmed
 }
 
-func (d queuedUsageDetail) toUsageEvent(fetchedAt time.Time) models.UsageEvent {
+func (d queuedUsageDetail) toUsageEvent(fetchedAt time.Time) entities.UsageEvent {
 	tokens := normalizeTokens(d.Tokens)
 	apiGroupKey := firstNonEmpty(d.APIKey, d.Provider, d.Endpoint, "unknown")
 	model := firstNonEmpty(d.Model, "unknown")
@@ -73,7 +73,7 @@ func (d queuedUsageDetail) toUsageEvent(fetchedAt time.Time) models.UsageEvent {
 	if eventKey == "" {
 		eventKey = BuildEventKey(apiGroupKey, model, timestamp, source, authIndex, d.Failed, tokens)
 	}
-	return models.UsageEvent{
+	return entities.UsageEvent{
 		EventKey:        eventKey,
 		APIGroupKey:     apiGroupKey,
 		Provider:        strings.TrimSpace(d.Provider),

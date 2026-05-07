@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"cpa-usage-keeper/internal/models"
+	"cpa-usage-keeper/internal/entities"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -47,7 +47,7 @@ func TestAddUsageIdentityMetadataFieldsMigrationAddsNullableColumns(t *testing.T
 		t.Fatalf("create legacy usage_identities table: %v", err)
 	}
 	if err := db.Exec(`INSERT INTO usage_identities (name, auth_type, auth_type_name, identity, type, provider, lookup_key, is_deleted)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, "Legacy", models.UsageIdentityAuthTypeAuthFile, "oauth", "legacy-auth", "codex", "codex", "", false).Error; err != nil {
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, "Legacy", entities.UsageIdentityAuthTypeAuthFile, "oauth", "legacy-auth", "codex", "codex", "", false).Error; err != nil {
 		t.Fatalf("seed legacy usage identity: %v", err)
 	}
 
@@ -72,7 +72,7 @@ func TestAddUsageIdentityMetadataFieldsMigrationAddsNullableColumns(t *testing.T
 		"secondary_window_reset_at",
 	}
 	for _, column := range newColumns {
-		if !db.Migrator().HasColumn(&models.UsageIdentity{}, column) {
+		if !db.Migrator().HasColumn(&entities.UsageIdentity{}, column) {
 			t.Fatalf("expected usage_identities.%s column to exist", column)
 		}
 	}

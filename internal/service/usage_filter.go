@@ -3,7 +3,7 @@ package service
 import (
 	"time"
 
-	"cpa-usage-keeper/internal/cpa"
+	"cpa-usage-keeper/internal/repository/dto"
 )
 
 type UsageFilter struct {
@@ -143,7 +143,7 @@ type UsageOverviewHealth struct {
 }
 
 type UsageOverviewSnapshot struct {
-	Usage        *cpa.StatisticsSnapshot
+	Usage        *dto.StatisticsSnapshot
 	Summary      UsageOverviewSummary
 	Series       UsageOverviewSeries
 	HourlySeries UsageOverviewSeries

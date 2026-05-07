@@ -3,12 +3,12 @@ package repository
 import (
 	"testing"
 
-	"cpa-usage-keeper/internal/models"
+	"cpa-usage-keeper/internal/entities"
 )
 
 func TestInsertBatchSizeUsesModelColumnCount(t *testing.T) {
-	usageIdentityColumnCount := insertBatchColumnCount(models.UsageIdentity{})
-	usageIdentityBatchSize := insertBatchSize(models.UsageIdentity{})
+	usageIdentityColumnCount := insertBatchColumnCount(entities.UsageIdentity{})
+	usageIdentityBatchSize := insertBatchSize(entities.UsageIdentity{})
 	if usageIdentityBatchSize >= maxRepositoryInsertBatchSize {
 		t.Fatalf("expected wide usage identity model to reduce batch below %d, got %d", maxRepositoryInsertBatchSize, usageIdentityBatchSize)
 	}
@@ -27,7 +27,7 @@ type narrowInsertBatchModel struct {
 }
 
 func TestInsertBatchSizeCachesModelColumnCount(t *testing.T) {
-	model := models.UsageIdentity{}
+	model := entities.UsageIdentity{}
 	first := insertBatchSize(model)
 	if insertBatchColumnCountCacheEntries() == 0 {
 		t.Fatal("expected insert batch size to cache column count")

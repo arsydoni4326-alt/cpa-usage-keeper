@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"cpa-usage-keeper/internal/cpa"
 	"cpa-usage-keeper/internal/redact"
+	"cpa-usage-keeper/internal/repository/dto"
 	"cpa-usage-keeper/internal/service"
 )
 
@@ -19,7 +19,7 @@ type usageAnalysisStub struct {
 	analysisCalls int
 }
 
-func (s *usageAnalysisStub) GetUsageWithFilter(context.Context, service.UsageFilter) (*cpa.StatisticsSnapshot, error) {
+func (s *usageAnalysisStub) GetUsageWithFilter(context.Context, service.UsageFilter) (*dto.StatisticsSnapshot, error) {
 	return nil, nil
 }
 

@@ -3,16 +3,16 @@ package migration
 import (
 	"fmt"
 
-	"cpa-usage-keeper/internal/models"
+	"cpa-usage-keeper/internal/entities"
 
 	"gorm.io/gorm"
 )
 
 func addUsageEventModelAliasMigration(tx *gorm.DB) error {
-	if !tx.Migrator().HasTable(&models.UsageEvent{}) {
+	if !tx.Migrator().HasTable(&entities.UsageEvent{}) {
 		return nil
 	}
-	if tx.Migrator().HasColumn(&models.UsageEvent{}, "model_alias") {
+	if tx.Migrator().HasColumn(&entities.UsageEvent{}, "model_alias") {
 		return nil
 	}
 	if err := tx.Exec("ALTER TABLE usage_events ADD COLUMN model_alias TEXT").Error; err != nil {

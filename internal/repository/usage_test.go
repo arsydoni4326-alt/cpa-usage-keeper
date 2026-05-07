@@ -1,12 +1,13 @@
 package repository
 
 import (
+	"cpa-usage-keeper/internal/repository/dto"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"cpa-usage-keeper/internal/config"
-	"cpa-usage-keeper/internal/models"
+	"cpa-usage-keeper/internal/entities"
 	"gorm.io/gorm"
 )
 
@@ -27,7 +28,7 @@ func TestBuildUsageSnapshotReturnsEmptyStructureWithoutEvents(t *testing.T) {
 
 func TestBuildUsageSnapshotAggregatesEvents(t *testing.T) {
 	db := openUsageTestDatabase(t)
-	events := []models.UsageEvent{
+	events := []entities.UsageEvent{
 		{EventKey: "event-1", APIGroupKey: "provider-a", Model: "claude-sonnet", Timestamp: time.Date(2026, 4, 16, 9, 0, 0, 0, time.UTC), Source: "codex-a", AuthIndex: "1", Failed: false, LatencyMS: 100, InputTokens: 10, OutputTokens: 20, ReasoningTokens: 5, CachedTokens: 0, TotalTokens: 35},
 		{EventKey: "event-2", APIGroupKey: "provider-a", Model: "claude-sonnet", Timestamp: time.Date(2026, 4, 16, 10, 0, 0, 0, time.UTC), Source: "codex-b", AuthIndex: "2", Failed: true, LatencyMS: 200, InputTokens: 2, OutputTokens: 3, ReasoningTokens: 0, CachedTokens: 0, TotalTokens: 5},
 		{EventKey: "event-3", APIGroupKey: "provider-b", Model: "claude-opus", Timestamp: time.Date(2026, 4, 17, 10, 0, 0, 0, time.UTC), Source: "codex-c", AuthIndex: "3", Failed: false, LatencyMS: 300, InputTokens: 100, OutputTokens: 50, ReasoningTokens: 25, CachedTokens: 10, TotalTokens: 185},
@@ -71,12 +72,12 @@ func TestBuildUsageSnapshotBucketsDaysByLocalTime(t *testing.T) {
 	time.Local = location
 	t.Cleanup(func() { time.Local = previousLocal })
 	db := openUsageTestDatabase(t)
-	events := []models.UsageEvent{{
-		EventKey:      "event-local-day",
-		APIGroupKey:   "provider-a",
-		Model:         "claude-sonnet",
-		Timestamp:     time.Date(2026, 4, 16, 23, 30, 0, 0, time.UTC),
-		TotalTokens:   20,
+	events := []entities.UsageEvent{{
+		EventKey:    "event-local-day",
+		APIGroupKey: "provider-a",
+		Model:       "claude-sonnet",
+		Timestamp:   time.Date(2026, 4, 16, 23, 30, 0, 0, time.UTC),
+		TotalTokens: 20,
 	}}
 	if _, _, err := InsertUsageEvents(db, events); err != nil {
 		t.Fatalf("InsertUsageEvents returned error: %v", err)
@@ -109,14 +110,14 @@ func TestUsageOverviewDailyBucketUsesLocalTime(t *testing.T) {
 
 func TestBuildUsageSnapshotPreservesStoredAPIKey(t *testing.T) {
 	db := openUsageTestDatabase(t)
-	events := []models.UsageEvent{{
-		EventKey:      "event-1",
-		APIGroupKey:   "sk-live-secret-value",
-		Model:         "claude-sonnet",
-		Timestamp:     time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC),
-		Source:        "source-a",
-		AuthIndex:     "1",
-		TotalTokens:   20,
+	events := []entities.UsageEvent{{
+		EventKey:    "event-1",
+		APIGroupKey: "sk-live-secret-value",
+		Model:       "claude-sonnet",
+		Timestamp:   time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC),
+		Source:      "source-a",
+		AuthIndex:   "1",
+		TotalTokens: 20,
 	}}
 	if _, _, err := InsertUsageEvents(db, events); err != nil {
 		t.Fatalf("InsertUsageEvents returned error: %v", err)
@@ -133,7 +134,7 @@ func TestBuildUsageSnapshotPreservesStoredAPIKey(t *testing.T) {
 
 func TestUsageAggregatesApplyModelSourceAuthAndResultFilters(t *testing.T) {
 	db := openUsageTestDatabase(t)
-	events := []models.UsageEvent{
+	events := []entities.UsageEvent{
 		{EventKey: "event-1", APIGroupKey: "provider-a", Model: "claude-sonnet", Timestamp: time.Date(2026, 4, 16, 9, 0, 0, 0, time.UTC), Source: "source-a", AuthIndex: "1", Failed: false, TotalTokens: 35},
 		{EventKey: "event-2", APIGroupKey: "provider-a", Model: "claude-sonnet", Timestamp: time.Date(2026, 4, 16, 10, 0, 0, 0, time.UTC), Source: "source-a", AuthIndex: "1", Failed: true, TotalTokens: 5},
 		{EventKey: "event-3", APIGroupKey: "provider-b", Model: "claude-opus", Timestamp: time.Date(2026, 4, 16, 11, 0, 0, 0, time.UTC), Source: "source-b", AuthIndex: "2", Failed: false, TotalTokens: 185},
@@ -141,7 +142,7 @@ func TestUsageAggregatesApplyModelSourceAuthAndResultFilters(t *testing.T) {
 	if _, _, err := InsertUsageEvents(db, events); err != nil {
 		t.Fatalf("InsertUsageEvents returned error: %v", err)
 	}
-	filter := UsageQueryFilter{Model: "claude-sonnet", Source: "source-a", AuthIndex: "1", Result: "success"}
+	filter := dto.UsageQueryFilter{Model: "claude-sonnet", Source: "source-a", AuthIndex: "1", Result: "success"}
 
 	snapshot, err := BuildUsageSnapshotWithFilter(db, filter)
 	if err != nil {
@@ -181,7 +182,7 @@ func TestUsageAggregatesApplyModelSourceAuthAndResultFilters(t *testing.T) {
 
 func openUsageTestDatabase(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := OpenDatabase(config.Config{SQLitePath: filepath.Join(t.TempDir(), "usage.db")})
+	db, err := OpenDatabase(config.Config{SQLitePath: filepath.Join(t.TempDir(), "dto.db")})
 	if err != nil {
 		t.Fatalf("OpenDatabase returned error: %v", err)
 	}

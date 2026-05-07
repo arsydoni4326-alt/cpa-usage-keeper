@@ -4,19 +4,19 @@ import (
 	"strconv"
 	"strings"
 
-	"cpa-usage-keeper/internal/models"
+	"cpa-usage-keeper/internal/entities"
 	"cpa-usage-keeper/internal/redact"
 )
 
 type usageSourceResolver struct {
-	authIdentities     map[string]models.UsageIdentity
-	providerIdentities map[string]models.UsageIdentity
+	authIdentities     map[string]entities.UsageIdentity
+	providerIdentities map[string]entities.UsageIdentity
 }
 
 // newUsageSourceResolver 把活跃 usage identity 建成内存索引，供 Credentials 和事件展示快速解析 source。
-func newUsageSourceResolver(identities []models.UsageIdentity) usageSourceResolver {
-	authIdentities := make(map[string]models.UsageIdentity, len(identities))
-	providerIdentities := make(map[string]models.UsageIdentity, len(identities))
+func newUsageSourceResolver(identities []entities.UsageIdentity) usageSourceResolver {
+	authIdentities := make(map[string]entities.UsageIdentity, len(identities))
+	providerIdentities := make(map[string]entities.UsageIdentity, len(identities))
 	for _, identity := range identities {
 		// resolver 索引只收录活跃身份，避免 deleted identity 影响 Credentials 和事件展示解析。
 		if identity.IsDeleted {
@@ -27,9 +27,9 @@ func newUsageSourceResolver(identities []models.UsageIdentity) usageSourceResolv
 			continue
 		}
 		switch identity.AuthType {
-		case models.UsageIdentityAuthTypeAuthFile:
+		case entities.UsageIdentityAuthTypeAuthFile:
 			authIdentities[key] = identity
-		case models.UsageIdentityAuthTypeAIProvider:
+		case entities.UsageIdentityAuthTypeAIProvider:
 			providerIdentities[key] = identity
 		}
 	}
@@ -47,7 +47,7 @@ type usageSourceResolution struct {
 }
 
 // usageSourceResolutionFromIdentity 从 provider identity 生成前端展示名、类型和稳定 source_key。
-func usageSourceResolutionFromIdentity(item models.UsageIdentity, fallbackIdentity string) usageSourceResolution {
+func usageSourceResolutionFromIdentity(item entities.UsageIdentity, fallbackIdentity string) usageSourceResolution {
 	identityType := safeAIProviderDisplayValue(item.Type, fallbackIdentity, "")
 	displayName := firstNonEmptyString(
 		safeAIProviderDisplayValue(item.Name, fallbackIdentity, ""),

@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"cpa-usage-keeper/internal/cpa"
+	"cpa-usage-keeper/internal/repository/dto"
 	"cpa-usage-keeper/internal/service"
 )
 
 type usageFilterStub struct {
-	usage         *cpa.StatisticsSnapshot
+	usage         *dto.StatisticsSnapshot
 	overview      *service.UsageOverviewSnapshot
 	err           error
 	lastFilter    service.UsageFilter
@@ -20,7 +20,7 @@ type usageFilterStub struct {
 	overviewCalls int
 }
 
-func (s *usageFilterStub) GetUsageWithFilter(_ context.Context, filter service.UsageFilter) (*cpa.StatisticsSnapshot, error) {
+func (s *usageFilterStub) GetUsageWithFilter(_ context.Context, filter service.UsageFilter) (*dto.StatisticsSnapshot, error) {
 	s.lastFilter = filter
 	s.filterCalls++
 	return s.usage, s.err
@@ -86,7 +86,7 @@ func TestUsageOverviewResponseIncludesResolvedRangeAndTimezone(t *testing.T) {
 
 func TestUsageOverviewReturnsFilteredSnapshot(t *testing.T) {
 	provider := &usageFilterStub{overview: &service.UsageOverviewSnapshot{
-		Usage: &cpa.StatisticsSnapshot{
+		Usage: &dto.StatisticsSnapshot{
 			TotalRequests: 1,
 			SuccessCount:  1,
 			TotalTokens:   20,
@@ -96,12 +96,12 @@ func TestUsageOverviewReturnsFilteredSnapshot(t *testing.T) {
 			TokensByHour: map[string]int64{
 				"2026-04-22T11:00:00Z": 20,
 			},
-			APIs: map[string]cpa.APISnapshot{
+			APIs: map[string]dto.APISnapshot{
 				"provider-a": {
 					TotalRequests: 1,
 					SuccessCount:  1,
 					TotalTokens:   20,
-					Models: map[string]cpa.ModelSnapshot{
+					Models: map[string]dto.ModelSnapshot{
 						"claude-sonnet": {
 							TotalRequests: 1,
 							SuccessCount:  1,

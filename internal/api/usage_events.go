@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"cpa-usage-keeper/internal/models"
+	"cpa-usage-keeper/internal/entities"
 	"cpa-usage-keeper/internal/service"
 	"github.com/gin-gonic/gin"
 )
@@ -195,7 +195,7 @@ func usageEventPublicSource(row service.UsageEventRecord) (string, string) {
 	}
 }
 
-func buildUsageSourceFilterOptions(sources []string, identities []models.UsageIdentity) []usageSourceFilterOption {
+func buildUsageSourceFilterOptions(sources []string, identities []entities.UsageIdentity) []usageSourceFilterOption {
 	if len(identities) == 0 {
 		return []usageSourceFilterOption{}
 	}
@@ -219,9 +219,9 @@ func buildUsageSourceFilterOptions(sources []string, identities []models.UsageId
 	return options
 }
 
-func usageSourceFilterOptionFromIdentity(identity models.UsageIdentity) (usageSourceFilterOption, bool) {
+func usageSourceFilterOptionFromIdentity(identity entities.UsageIdentity) (usageSourceFilterOption, bool) {
 	switch identity.AuthType {
-	case models.UsageIdentityAuthTypeAuthFile, models.UsageIdentityAuthTypeAIProvider:
+	case entities.UsageIdentityAuthTypeAuthFile, entities.UsageIdentityAuthTypeAIProvider:
 		value := strings.TrimSpace(identity.Identity)
 		if value == "" {
 			return usageSourceFilterOption{}, false
