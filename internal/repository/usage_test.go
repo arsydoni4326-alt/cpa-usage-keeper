@@ -160,14 +160,6 @@ func TestUsageAggregatesApplyModelSourceAuthAndResultFilters(t *testing.T) {
 		t.Fatalf("expected overview to include only matching successful event, got %+v", overview.Summary)
 	}
 
-	credentials, err := ListUsageCredentialStatsWithFilter(db, filter)
-	if err != nil {
-		t.Fatalf("ListUsageCredentialStatsWithFilter returned error: %v", err)
-	}
-	if len(credentials) != 1 || credentials[0].Source != "source-a" || credentials[0].AuthIndex != "1" || credentials[0].Failed || credentials[0].RequestCount != 1 {
-		t.Fatalf("expected credential stats to include only matching successful event, got %+v", credentials)
-	}
-
 	apis, models, err := ListUsageAnalysisWithFilter(db, filter)
 	if err != nil {
 		t.Fatalf("ListUsageAnalysisWithFilter returned error: %v", err)

@@ -153,23 +153,6 @@ func applyUsageEventsListFilter(query *gorm.DB, filter dto.UsageQueryFilter) *go
 	return query
 }
 
-func ListUsageCredentialStatsWithFilter(db *gorm.DB, filter dto.UsageQueryFilter) ([]dto.UsageCredentialStatRecord, error) {
-	if db == nil {
-		return nil, fmt.Errorf("database is nil")
-	}
-
-	query := applyUsageEventsListFilter(db.Model(&entities.UsageEvent{}), filter)
-	query = query.Select("TRIM(source) AS source, TRIM(auth_index) AS auth_index, failed, COUNT(*) AS request_count")
-	query = query.Group("TRIM(source), TRIM(auth_index), failed")
-	query = query.Order("request_count DESC, source ASC, auth_index ASC, failed ASC")
-
-	var rows []dto.UsageCredentialStatRecord
-	if err := query.Scan(&rows).Error; err != nil {
-		return nil, fmt.Errorf("load usage credential stats: %w", err)
-	}
-	return rows, nil
-}
-
 func ListUsageAnalysisWithFilter(db *gorm.DB, filter dto.UsageQueryFilter) ([]dto.UsageAnalysisAPIStatRecord, []dto.UsageAnalysisModelStatRecord, error) {
 	if db == nil {
 		return nil, nil, fmt.Errorf("database is nil")

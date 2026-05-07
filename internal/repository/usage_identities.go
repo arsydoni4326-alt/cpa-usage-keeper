@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"cpa-usage-keeper/internal/entities"
+	"cpa-usage-keeper/internal/repository/dto"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -152,22 +153,8 @@ func AggregateUsageIdentityStats(ctx context.Context, db *gorm.DB, now time.Time
 	})
 }
 
-type usageIdentityStatsDelta struct {
-	TotalRequests   int64
-	SuccessCount    int64
-	FailureCount    int64
-	InputTokens     int64
-	OutputTokens    int64
-	ReasoningTokens int64
-	CachedTokens    int64
-	TotalTokens     int64
-	FirstUsedAt     *time.Time
-	LastUsedAt      *time.Time
-	MaxUsageEventID uint
-}
-
-func aggregateUsageIdentityDelta(tx *gorm.DB, identity entities.UsageIdentity) (usageIdentityStatsDelta, error) {
-	var delta usageIdentityStatsDelta
+func aggregateUsageIdentityDelta(tx *gorm.DB, identity entities.UsageIdentity) (dto.UsageIdentityStatsDelta, error) {
+	var delta dto.UsageIdentityStatsDelta
 	// 先按 identity 类型生成 usage_events 过滤条件，避免对无关事件做聚合。
 	query, ok := usageIdentityEventsQuery(tx.Model(&entities.UsageEvent{}), identity)
 	if !ok {
@@ -215,16 +202,18 @@ func aggregateUsageIdentityDelta(tx *gorm.DB, identity entities.UsageIdentity) (
 }
 
 func usageIdentityEventsQuery(query *gorm.DB, identity entities.UsageIdentity) (*gorm.DB, bool) {
+	var eventAuthType string
 	switch identity.AuthType {
 	case entities.UsageIdentityAuthTypeAuthFile:
-		// auth_files 身份对应 usage_events.auth_type=oauth，并通过 auth_index 精确匹配。
-		return query.Where("auth_type = ? AND auth_index = ?", "oauth", identity.Identity), true
+		eventAuthType = "oauth"
 	case entities.UsageIdentityAuthTypeAIProvider:
-		// AI provider 身份对应 usage_events.auth_type=apikey，并通过 auth_index 精确匹配。
-		return query.Where("auth_type = ? AND auth_index = ?", "apikey", identity.Identity), true
+		eventAuthType = "apikey"
 	default:
 		return query, false
 	}
+
+	// usage_events 和 usage_identities 只通过 auth_index 与 identity 精确关联。
+	return query.Where("auth_type = ? AND auth_index = ?", eventAuthType, identity.Identity), true
 }
 
 func normalizeUsageIdentities(identities []entities.UsageIdentity, authType entities.UsageIdentityAuthType) ([]entities.UsageIdentity, []string) {

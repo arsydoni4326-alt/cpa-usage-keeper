@@ -2,7 +2,6 @@ package api
 
 import (
 	"net/http"
-	"strings"
 	"time"
 
 	"cpa-usage-keeper/internal/entities"
@@ -18,6 +17,7 @@ type usageIdentitiesResponse struct {
 type usageIdentityResponse struct {
 	ID                         uint                           `json:"id"`
 	Name                       string                         `json:"name"`
+	DisplayName                string                         `json:"displayName"`
 	AuthType                   entities.UsageIdentityAuthType `json:"auth_type"`
 	AuthTypeName               string                         `json:"auth_type_name"`
 	Identity                   string                         `json:"identity"`
@@ -48,9 +48,9 @@ func registerUsageIdentityRoutes(router gin.IRoutes, usageIdentityProvider servi
 			return
 		}
 
-		items, err := usageIdentityProvider.ListUsageIdentities(c.Request.Context())
+		items, err := usageIdentityProvider.ListActiveUsageIdentities(c.Request.Context())
 		if err != nil {
-			writeInternalError(c, "list usage identities failed", err)
+			writeInternalError(c, "list active usage identities failed", err)
 			return
 		}
 
@@ -64,24 +64,19 @@ func registerUsageIdentityRoutes(router gin.IRoutes, usageIdentityProvider servi
 
 func mapUsageIdentityResponse(item entities.UsageIdentity) usageIdentityResponse {
 	identity := item.Identity
-	name := item.Name
-	identityType := item.Type
-	provider := item.Provider
 	if item.AuthType == entities.UsageIdentityAuthTypeAIProvider {
 		identity = redact.APIKeyDisplayName(item.Identity)
-		identityType = safeAIProviderDisplayValue(item.Type, item.Identity, item.AuthTypeName)
-		provider = safeAIProviderDisplayValue(item.Provider, item.Identity, firstNonEmptyString(identityType, identity))
-		name = safeAIProviderDisplayValue(item.Name, item.Identity, firstNonEmptyString(provider, identityType, identity))
 	}
 
 	return usageIdentityResponse{
 		ID:                         item.ID,
-		Name:                       name,
+		Name:                       item.Name,
+		DisplayName:                usageIdentityDisplayName(item),
 		AuthType:                   item.AuthType,
 		AuthTypeName:               item.AuthTypeName,
 		Identity:                   identity,
-		Type:                       identityType,
-		Provider:                   provider,
+		Type:                       item.Type,
+		Provider:                   item.Provider,
 		TotalRequests:              item.TotalRequests,
 		SuccessCount:               item.SuccessCount,
 		FailureCount:               item.FailureCount,
@@ -99,27 +94,4 @@ func mapUsageIdentityResponse(item entities.UsageIdentity) usageIdentityResponse
 		UpdatedAt:                  item.UpdatedAt,
 		DeletedAt:                  item.DeletedAt,
 	}
-}
-
-func safeAIProviderDisplayValue(value, rawIdentity, fallback string) string {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return fallback
-	}
-	if isSensitiveUsageIdentityValue(trimmed, rawIdentity) {
-		return fallback
-	}
-	return trimmed
-}
-
-func isSensitiveUsageIdentityValue(value, rawIdentity string) bool {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return false
-	}
-	if raw := strings.TrimSpace(rawIdentity); raw != "" && strings.Contains(trimmed, raw) {
-		return true
-	}
-	lower := strings.ToLower(trimmed)
-	return strings.Contains(lower, "sk-") || strings.Contains(lower, "aiza") || strings.Contains(lower, "cr_") || strings.Contains(lower, "cr-")
 }

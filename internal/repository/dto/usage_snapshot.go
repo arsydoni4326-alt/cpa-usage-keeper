@@ -42,7 +42,6 @@ type RequestDetail struct {
 	SourceRaw     string     `json:"source_raw,omitempty"`
 	SourceDisplay string     `json:"source_display,omitempty"`
 	SourceType    string     `json:"source_type,omitempty"`
-	SourceKey     string     `json:"source_key,omitempty"`
 	AuthIndex     string     `json:"auth_index"`
 	Failed        bool       `json:"failed"`
 	Tokens        TokenStats `json:"tokens"`

@@ -14,6 +14,7 @@ import (
 	"cpa-usage-keeper/internal/cpa/dto/response"
 	"cpa-usage-keeper/internal/entities"
 	"cpa-usage-keeper/internal/repository"
+	servicedto "cpa-usage-keeper/internal/service/dto"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -22,7 +23,7 @@ func TestPricingServiceRejectsUnusedModel(t *testing.T) {
 	db := openPricingServiceTestDatabase(t)
 	service := NewPricingService(db)
 
-	_, err := service.UpdatePricing(context.Background(), UpdatePricingInput{
+	_, err := service.UpdatePricing(context.Background(), servicedto.UpdatePricingInput{
 		Model:                "claude-sonnet",
 		PromptPricePer1M:     3,
 		CompletionPricePer1M: 15,
@@ -45,7 +46,7 @@ func TestPricingServiceStoresPricingForUsedModel(t *testing.T) {
 	}
 
 	service := NewPricingService(db)
-	setting, err := service.UpdatePricing(context.Background(), UpdatePricingInput{
+	setting, err := service.UpdatePricing(context.Background(), servicedto.UpdatePricingInput{
 		Model:                "claude-sonnet",
 		PromptPricePer1M:     3,
 		CompletionPricePer1M: 15,
@@ -156,7 +157,7 @@ func TestPricingServiceAllowsPricingForCPAModelWithoutUsage(t *testing.T) {
 	db := openPricingServiceTestDatabase(t)
 	service := NewPricingService(db, stubModelsFetcher{result: &response.ModelsResult{Payload: models.ModelsResponse{Data: []models.ModelInfo{{ID: "claude-opus"}}}}})
 
-	setting, err := service.UpdatePricing(context.Background(), UpdatePricingInput{
+	setting, err := service.UpdatePricing(context.Background(), servicedto.UpdatePricingInput{
 		Model:                "claude-opus",
 		PromptPricePer1M:     3,
 		CompletionPricePer1M: 15,
@@ -182,7 +183,7 @@ func TestPricingServiceRejectsLocalOnlyModelWhenCPAFetchSucceeds(t *testing.T) {
 	}
 	service := NewPricingService(db, stubModelsFetcher{result: &response.ModelsResult{Payload: models.ModelsResponse{Data: []models.ModelInfo{{ID: "cpa-model"}}}}})
 
-	_, err := service.UpdatePricing(context.Background(), UpdatePricingInput{
+	_, err := service.UpdatePricing(context.Background(), servicedto.UpdatePricingInput{
 		Model:                "local-model",
 		PromptPricePer1M:     3,
 		CompletionPricePer1M: 15,
@@ -205,7 +206,7 @@ func TestPricingServiceValidatesWithLocalModelsWhenCPAFetchFails(t *testing.T) {
 	}
 	service := NewPricingService(db, stubModelsFetcher{err: errors.New("cpa unavailable")})
 
-	setting, err := service.UpdatePricing(context.Background(), UpdatePricingInput{
+	setting, err := service.UpdatePricing(context.Background(), servicedto.UpdatePricingInput{
 		Model:                "local-model",
 		PromptPricePer1M:     3,
 		CompletionPricePer1M: 15,

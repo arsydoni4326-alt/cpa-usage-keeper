@@ -8,14 +8,14 @@ import (
 	"testing"
 
 	"cpa-usage-keeper/internal/entities"
-	"cpa-usage-keeper/internal/service"
+	servicedto "cpa-usage-keeper/internal/service/dto"
 )
 
 type pricingStub struct {
 	usedModels []string
 	pricing    []entities.ModelPriceSetting
 	updated    *entities.ModelPriceSetting
-	lastUpdate *service.UpdatePricingInput
+	lastUpdate *servicedto.UpdatePricingInput
 	deleted    string
 	err        error
 }
@@ -28,7 +28,7 @@ func (s pricingStub) ListPricing(context.Context) ([]entities.ModelPriceSetting,
 	return s.pricing, s.err
 }
 
-func (s *pricingStub) UpdatePricing(_ context.Context, input service.UpdatePricingInput) (*entities.ModelPriceSetting, error) {
+func (s *pricingStub) UpdatePricing(_ context.Context, input servicedto.UpdatePricingInput) (*entities.ModelPriceSetting, error) {
 	s.lastUpdate = &input
 	return s.updated, s.err
 }

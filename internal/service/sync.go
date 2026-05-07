@@ -15,6 +15,7 @@ import (
 	"cpa-usage-keeper/internal/cpa/dto/providerconfig"
 	"cpa-usage-keeper/internal/cpa/dto/response"
 	"cpa-usage-keeper/internal/repository/dto"
+	servicedto "cpa-usage-keeper/internal/service/dto"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -47,25 +48,6 @@ type SyncService struct {
 	metadataFetcher MetadataFetcher
 	baseURL         string
 	now             func() time.Time
-}
-
-type SyncResult struct {
-	Status         string
-	InsertedEvents int
-	DedupedEvents  int
-}
-
-type RedisBatchSyncResult struct {
-	Empty          bool
-	Status         string
-	InsertedEvents int
-	DedupedEvents  int
-}
-
-type RedisInboxPullResult struct {
-	Empty        bool
-	Status       string
-	InsertedRows int
 }
 
 func NewSyncService(db *gorm.DB, cfg config.Config) *SyncService {
@@ -127,7 +109,7 @@ func (s *SyncService) SyncOnce(ctx context.Context) error {
 	return err
 }
 
-func (s *SyncService) SyncNow(ctx context.Context) (*SyncResult, error) {
+func (s *SyncService) SyncNow(ctx context.Context) (*servicedto.SyncResult, error) {
 	if _, err := s.PullRedisUsageInbox(ctx); err != nil {
 		return nil, err
 	}
@@ -135,11 +117,11 @@ func (s *SyncService) SyncNow(ctx context.Context) (*SyncResult, error) {
 	return syncResultFromRedisBatch(result), err
 }
 
-func syncResultFromRedisBatch(result *RedisBatchSyncResult) *SyncResult {
+func syncResultFromRedisBatch(result *servicedto.RedisBatchSyncResult) *servicedto.SyncResult {
 	if result == nil {
 		return nil
 	}
-	return &SyncResult{
+	return &servicedto.SyncResult{
 		Status:         result.Status,
 		InsertedEvents: result.InsertedEvents,
 		DedupedEvents:  result.DedupedEvents,
@@ -186,7 +168,7 @@ func (s *SyncService) SyncMetadata(ctx context.Context) error {
 
 // PullRedisUsageInbox 是 Redis 同步的拉取阶段：只 LPOP 队列消息并原样写入 redis_usage_inboxes。
 // 这个阶段不解码消息、不写 usage_events，保证 Redis 消费和本地处理职责分离。
-func (s *SyncService) PullRedisUsageInbox(ctx context.Context) (*RedisInboxPullResult, error) {
+func (s *SyncService) PullRedisUsageInbox(ctx context.Context) (*servicedto.RedisInboxPullResult, error) {
 	if err := s.validate(syncMetadataOptional); err != nil {
 		return nil, err
 	}
@@ -197,40 +179,40 @@ func (s *SyncService) PullRedisUsageInbox(ctx context.Context) (*RedisInboxPullR
 	fetchedAt := s.now().UTC()
 	messages, err := s.redisQueue.PopUsage(ctx)
 	if err != nil {
-		return &RedisInboxPullResult{Status: "failed"}, fmt.Errorf("fetch redis usage: %w", err)
+		return &servicedto.RedisInboxPullResult{Status: "failed"}, fmt.Errorf("fetch redis usage: %w", err)
 	}
 	logrus.WithFields(logrus.Fields{
 		"queue_key":     s.redisQueueKey,
 		"message_count": len(messages),
 	}).Debug("redis usage batch popped")
 	if len(messages) == 0 {
-		return &RedisInboxPullResult{Empty: true, Status: "empty"}, nil
+		return &servicedto.RedisInboxPullResult{Empty: true, Status: "empty"}, nil
 	}
 
 	inboxRows, err := insertRedisInboxMessages(s.db, s.redisQueueKey, messages, fetchedAt)
 	if err != nil {
-		return &RedisInboxPullResult{Status: "failed"}, fmt.Errorf("insert redis usage inbox: %w", err)
+		return &servicedto.RedisInboxPullResult{Status: "failed"}, fmt.Errorf("insert redis usage inbox: %w", err)
 	}
 	logrus.WithFields(logrus.Fields{
 		"queue_key": s.redisQueueKey,
 		"row_count": len(inboxRows),
 	}).Debug("redis usage inbox rows inserted")
-	return &RedisInboxPullResult{Status: "completed", InsertedRows: len(inboxRows)}, nil
+	return &servicedto.RedisInboxPullResult{Status: "completed", InsertedRows: len(inboxRows)}, nil
 }
 
 // ProcessRedisUsageInbox 是 Redis 同步的本地处理阶段：只读取 pending/process_failed inbox 行并写入 usage_events。
 // 成功处理后仅用 usage_event_key 记录 inbox 与最终事件的关联。
-func (s *SyncService) ProcessRedisUsageInbox(ctx context.Context) (*RedisBatchSyncResult, error) {
+func (s *SyncService) ProcessRedisUsageInbox(ctx context.Context) (*servicedto.RedisBatchSyncResult, error) {
 	if err := s.validate(syncMetadataOptional); err != nil {
 		return nil, err
 	}
 	fetchedAt := s.now().UTC()
 	processableRows, err := repository.ListProcessableRedisUsageInbox(s.db, redisInboxProcessLimit)
 	if err != nil {
-		return &RedisBatchSyncResult{Status: "failed"}, fmt.Errorf("list processable redis usage inbox: %w", err)
+		return &servicedto.RedisBatchSyncResult{Status: "failed"}, fmt.Errorf("list processable redis usage inbox: %w", err)
 	}
 	if len(processableRows) == 0 {
-		return &RedisBatchSyncResult{Empty: true, Status: "empty"}, nil
+		return &servicedto.RedisBatchSyncResult{Empty: true, Status: "empty"}, nil
 	}
 	logrus.WithField("row_count", len(processableRows)).Debug("redis usage inbox rows found for processing")
 	return s.processRedisInboxRows(processableRows, fetchedAt)
@@ -256,19 +238,19 @@ func (s *SyncService) CleanupStorage(ctx context.Context) error {
 
 // SyncRedisBatch 保留为兼容入口：先处理本地存量 inbox，空了再拉一次 Redis 并立即处理。
 // 后台任务不要调用它，后台必须使用拆分后的 PullRedisUsageInbox、ProcessRedisUsageInbox 和 CleanupStorage。
-func (s *SyncService) SyncRedisBatch(ctx context.Context) (*RedisBatchSyncResult, error) {
+func (s *SyncService) SyncRedisBatch(ctx context.Context) (*servicedto.RedisBatchSyncResult, error) {
 	if result, err := s.ProcessRedisUsageInbox(ctx); err != nil || result == nil || !result.Empty {
 		return result, err
 	}
 	if _, err := s.PullRedisUsageInbox(ctx); err != nil {
-		return &RedisBatchSyncResult{Status: "failed"}, err
+		return &servicedto.RedisBatchSyncResult{Status: "failed"}, err
 	}
 	return s.ProcessRedisUsageInbox(ctx)
 }
 
 // processRedisInboxRows 只从已落库的原始消息解码和写入事件，坏消息会标记为 decode_failed，不阻塞同批其它数据。
 // 可解码但入库失败的消息标记为 process_failed，后续 ProcessRedisUsageInbox 会按 id 顺序重试。
-func (s *SyncService) processRedisInboxRows(inboxRows []entities.RedisUsageInbox, fetchedAt time.Time) (*RedisBatchSyncResult, error) {
+func (s *SyncService) processRedisInboxRows(inboxRows []entities.RedisUsageInbox, fetchedAt time.Time) (*servicedto.RedisBatchSyncResult, error) {
 	logrus.WithField("row_count", len(inboxRows)).Debug("redis usage inbox processing started")
 	validRows := make([]entities.RedisUsageInbox, 0, len(inboxRows))
 	events := make([]entities.UsageEvent, 0, len(inboxRows))
@@ -277,7 +259,7 @@ func (s *SyncService) processRedisInboxRows(inboxRows []entities.RedisUsageInbox
 		event, _, decodeErr := DecodeRedisUsageMessage(row.RawMessage, fetchedAt)
 		if decodeErr != nil {
 			if markErr := repository.MarkRedisUsageInboxDecodeFailed(s.db, row.ID, decodeErr); markErr != nil {
-				return &RedisBatchSyncResult{Status: "failed"}, fmt.Errorf("mark redis usage inbox decode failed: %w", markErr)
+				return &servicedto.RedisBatchSyncResult{Status: "failed"}, fmt.Errorf("mark redis usage inbox decode failed: %w", markErr)
 			}
 			decodeErrs = append(decodeErrs, decodeErr)
 			continue
@@ -293,9 +275,9 @@ func (s *SyncService) processRedisInboxRows(inboxRows []entities.RedisUsageInbox
 	}).Debug("redis usage inbox rows decoded")
 	if len(events) == 0 {
 		if decodeErr != nil {
-			return &RedisBatchSyncResult{Status: "completed_with_warnings"}, decodeErr
+			return &servicedto.RedisBatchSyncResult{Status: "completed_with_warnings"}, decodeErr
 		}
-		return &RedisBatchSyncResult{Empty: true, Status: "empty"}, nil
+		return &servicedto.RedisBatchSyncResult{Empty: true, Status: "empty"}, nil
 	}
 
 	logrus.WithField("event_count", len(events)).Debug("redis usage events persistence started")
@@ -306,11 +288,11 @@ func (s *SyncService) processRedisInboxRows(inboxRows []entities.RedisUsageInbox
 	}
 	if err != nil && result.Status == "failed" {
 		markRedisInboxRowsProcessFailed(s.db, validRows, err)
-		return &RedisBatchSyncResult{Status: result.Status}, err
+		return &servicedto.RedisBatchSyncResult{Status: result.Status}, err
 	}
 	for i, row := range validRows {
 		if markErr := repository.MarkRedisUsageInboxProcessed(s.db, row.ID, events[i].EventKey, fetchedAt); markErr != nil {
-			return &RedisBatchSyncResult{Status: "failed"}, fmt.Errorf("mark redis usage inbox processed: %w", markErr)
+			return &servicedto.RedisBatchSyncResult{Status: "failed"}, fmt.Errorf("mark redis usage inbox processed: %w", markErr)
 		}
 	}
 	logrus.WithFields(logrus.Fields{
@@ -330,7 +312,7 @@ func (s *SyncService) processRedisInboxRows(inboxRows []entities.RedisUsageInbox
 			returnErr = decodeErr
 		}
 	}
-	return &RedisBatchSyncResult{
+	return &servicedto.RedisBatchSyncResult{
 		Status:         status,
 		InsertedEvents: result.InsertedEvents,
 		DedupedEvents:  result.DedupedEvents,
@@ -338,22 +320,22 @@ func (s *SyncService) processRedisInboxRows(inboxRows []entities.RedisUsageInbox
 }
 
 // persistRedisUsageEvents 写入 Redis inbox 解码出的 usage_events。
-func (s *SyncService) persistRedisUsageEvents(events []entities.UsageEvent) (*SyncResult, error) {
+func (s *SyncService) persistRedisUsageEvents(events []entities.UsageEvent) (*servicedto.SyncResult, error) {
 	var err error
 	events, err = alignUsageEventKeysWithExistingCanonicalEvents(s.db, events)
 	if err != nil {
-		return &SyncResult{Status: "failed"}, fmt.Errorf("align usage events: %w", err)
+		return &servicedto.SyncResult{Status: "failed"}, fmt.Errorf("align usage events: %w", err)
 	}
 	logrus.WithField("event_count", len(events)).Debug("usage events insert started")
 	inserted, deduped, err := repository.InsertUsageEvents(s.db, events)
 	if err != nil {
-		return &SyncResult{Status: "failed"}, fmt.Errorf("insert usage events: %w", err)
+		return &servicedto.SyncResult{Status: "failed"}, fmt.Errorf("insert usage events: %w", err)
 	}
 	logrus.WithFields(logrus.Fields{
 		"inserted_events": inserted,
 		"deduped_events":  deduped,
 	}).Debug("usage events insert finished")
-	return &SyncResult{Status: "completed", InsertedEvents: inserted, DedupedEvents: deduped}, nil
+	return &servicedto.SyncResult{Status: "completed", InsertedEvents: inserted, DedupedEvents: deduped}, nil
 }
 
 func alignUsageEventKeysWithExistingCanonicalEvents(db *gorm.DB, events []entities.UsageEvent) ([]entities.UsageEvent, error) {
@@ -648,15 +630,7 @@ func syncProviderMetadata(ctx context.Context, db *gorm.DB, cfg providerconfig.P
 	return nil, nil
 }
 
-type providerMetadataInput struct {
-	LookupKey    string
-	Prefix       string
-	ProviderType string
-	DisplayName  string
-	AuthIndex    string
-}
-
-func providerMetadataUsageIdentities(inputs []providerMetadataInput) []entities.UsageIdentity {
+func providerMetadataUsageIdentities(inputs []servicedto.ProviderMetadataInput) []entities.UsageIdentity {
 	identities := make([]entities.UsageIdentity, 0, len(inputs))
 	for _, input := range inputs {
 		identities = append(identities, entities.UsageIdentity{
@@ -673,8 +647,8 @@ func providerMetadataUsageIdentities(inputs []providerMetadataInput) []entities.
 	return identities
 }
 
-func flattenProviderMetadata(cfg providerconfig.ProviderMetadataConfig) []providerMetadataInput {
-	items := make([]providerMetadataInput, 0)
+func flattenProviderMetadata(cfg providerconfig.ProviderMetadataConfig) []servicedto.ProviderMetadataInput {
+	items := make([]servicedto.ProviderMetadataInput, 0)
 	seen := make(map[string]struct{})
 	// Provider metadata 只生成 auth-index 身份；prefix 作为同一身份的附加字段保存，不再生成独立行。
 	appendItem := func(lookupKey, prefix, providerType, displayName, authIndex string) {
@@ -690,7 +664,7 @@ func flattenProviderMetadata(cfg providerconfig.ProviderMetadataConfig) []provid
 			return
 		}
 		seen[authIndex] = struct{}{}
-		items = append(items, providerMetadataInput{
+		items = append(items, servicedto.ProviderMetadataInput{
 			LookupKey:    lookupKey,
 			Prefix:       prefix,
 			ProviderType: providerType,

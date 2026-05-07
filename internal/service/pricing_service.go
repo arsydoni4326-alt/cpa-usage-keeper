@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"cpa-usage-keeper/internal/repository/dto"
 	"fmt"
 	"sort"
 	"strings"
@@ -10,6 +9,8 @@ import (
 	"cpa-usage-keeper/internal/cpa/dto/response"
 	"cpa-usage-keeper/internal/entities"
 	"cpa-usage-keeper/internal/repository"
+	repodto "cpa-usage-keeper/internal/repository/dto"
+	servicedto "cpa-usage-keeper/internal/service/dto"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -17,19 +18,12 @@ import (
 type PricingProvider interface {
 	ListUsedModels(context.Context) ([]string, error)
 	ListPricing(context.Context) ([]entities.ModelPriceSetting, error)
-	UpdatePricing(context.Context, UpdatePricingInput) (*entities.ModelPriceSetting, error)
+	UpdatePricing(context.Context, servicedto.UpdatePricingInput) (*entities.ModelPriceSetting, error)
 	DeletePricing(context.Context, string) error
 }
 
 type ModelsFetcher interface {
 	FetchModels(context.Context) (*response.ModelsResult, error)
-}
-
-type UpdatePricingInput struct {
-	Model                string
-	PromptPricePer1M     float64
-	CompletionPricePer1M float64
-	CachePricePer1M      float64
 }
 
 type pricingService struct {
@@ -53,7 +47,7 @@ func (s *pricingService) ListPricing(context.Context) ([]entities.ModelPriceSett
 	return repository.ListModelPriceSettings(s.db)
 }
 
-func (s *pricingService) UpdatePricing(ctx context.Context, input UpdatePricingInput) (*entities.ModelPriceSetting, error) {
+func (s *pricingService) UpdatePricing(ctx context.Context, input servicedto.UpdatePricingInput) (*entities.ModelPriceSetting, error) {
 	modelName := strings.TrimSpace(input.Model)
 	if modelName == "" {
 		return nil, fmt.Errorf("model is required")
@@ -75,7 +69,7 @@ func (s *pricingService) UpdatePricing(ctx context.Context, input UpdatePricingI
 		return nil, fmt.Errorf("model %q has not been used", modelName)
 	}
 
-	return repository.UpsertModelPriceSetting(s.db, dto.ModelPriceSettingInput{
+	return repository.UpsertModelPriceSetting(s.db, repodto.ModelPriceSettingInput{
 		Model:                modelName,
 		PromptPricePer1M:     input.PromptPricePer1M,
 		CompletionPricePer1M: input.CompletionPricePer1M,
