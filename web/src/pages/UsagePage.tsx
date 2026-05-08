@@ -14,7 +14,7 @@ import {
   Legend,
   Filler
 } from 'chart.js';
-import { ApiError, fetchStatus, fetchUpdateCheck, fetchUsageAnalysis, fetchUsageEventFilterOptions, fetchUsageEvents, fetchUsageIdentities } from '@/lib/api';
+import { ApiError, fetchStatus, fetchUpdateCheck, fetchUsageAnalysis, fetchUsageEventModelFilterOptions, fetchUsageEventSourceFilterOptions, fetchUsageEvents, fetchUsageIdentities } from '@/lib/api';
 import type { StatusResponse, UsageAnalysisResponse, UsageEvent, UsageIdentity, UsageSourceFilterOption } from '@/lib/types';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Select } from '@/components/ui/Select';
@@ -391,10 +391,10 @@ const toTimestampMs = (value: string | undefined): number | undefined => {
 };
 
 export const getOverviewChartEndMs = ({ timeRange, filterWindow, fallbackEndMs, resolvedRangeEndMs }: { timeRange: UsageTimeRange; filterWindow: UsageFilterWindow; fallbackEndMs: number; resolvedRangeEndMs?: number }) => {
-  if (resolvedRangeEndMs !== undefined) return resolvedRangeEndMs;
   if (timeRange === 'today' && filterWindow.startMs !== undefined) {
-    return filterWindow.startMs + 24 * 60 * 60 * 1000 - 1;
+    return filterWindow.startMs + 24 * 60 * 60 * 1000;
   }
+  if (resolvedRangeEndMs !== undefined) return resolvedRangeEndMs;
   return filterWindow.endMs ?? fallbackEndMs;
 };
 
@@ -598,6 +598,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     fallbackEndMs: lastRefreshedAt?.getTime() ?? Date.now(),
     resolvedRangeEndMs,
   });
+  const includeFinalHourBucket = timeRange === 'today';
   const preferredOverviewChartPeriod = getPreferredOverviewChartPeriod({
     windowMinutes: filterWindow.windowMinutes,
   });
@@ -724,12 +725,15 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     eventsFilterOptionsRequestControllerRef.current = controller;
 
     try {
-      const response = await fetchUsageEventFilterOptions(controller.signal);
+      const [modelResponse, sourceResponse] = await Promise.all([
+        fetchUsageEventModelFilterOptions(controller.signal),
+        fetchUsageEventSourceFilterOptions(controller.signal),
+      ]);
       if (eventsFilterOptionsRequestControllerRef.current !== controller) {
         return;
       }
-      setEventsModelOptions(response.models ?? []);
-      setEventsSourceOptions(response.sources ?? []);
+      setEventsModelOptions(modelResponse.models ?? []);
+      setEventsSourceOptions(sourceResponse.sources ?? []);
     } catch (error) {
       if (controller.signal.aborted) {
         return;
@@ -1057,6 +1061,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     isMobile,
     hourWindowHours,
     endMs: filterWindowEndMs,
+    includeFinalHourBucket,
     preferredPeriod: preferredOverviewChartPeriod,
   });
 
@@ -1401,6 +1406,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                   isMobile={isMobile}
                   hourWindowHours={hourWindowHours}
                   endMs={filterWindowEndMs}
+                  includeFinalHourBucket={includeFinalHourBucket}
                   preferredPeriod={preferredOverviewChartPeriod}
                 />
 
@@ -1411,6 +1417,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                   isMobile={isMobile}
                   hourWindowHours={hourWindowHours}
                   endMs={filterWindowEndMs}
+                  includeFinalHourBucket={includeFinalHourBucket}
                   preferredPeriod={preferredOverviewChartPeriod}
                 />
               </>

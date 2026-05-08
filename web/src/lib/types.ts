@@ -158,16 +158,17 @@ export interface UsageSourceFilterOption {
 
 export interface UsageEventsResponse {
   events: UsageEvent[]
-  models: string[]
-  sources: UsageSourceFilterOption[]
   total_count: number
   page: number
   page_size: number
   total_pages: number
 }
 
-export interface UsageEventFilterOptionsResponse {
+export interface UsageEventModelFilterOptionsResponse {
   models: string[]
+}
+
+export interface UsageEventSourceFilterOptionsResponse {
   sources: UsageSourceFilterOption[]
 }
 
