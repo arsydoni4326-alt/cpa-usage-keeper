@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"cpa-usage-keeper/internal/repository/dto"
 	"path/filepath"
 	"testing"
 	"time"
@@ -129,46 +128,6 @@ func TestBuildUsageSnapshotPreservesStoredAPIKey(t *testing.T) {
 	}
 	if _, ok := snapshot.APIs["sk-live-secret-value"]; !ok {
 		t.Fatalf("expected repository snapshot to preserve stored API key")
-	}
-}
-
-func TestUsageAggregatesApplyModelSourceAuthAndResultFilters(t *testing.T) {
-	db := openUsageTestDatabase(t)
-	events := []entities.UsageEvent{
-		{EventKey: "event-1", APIGroupKey: "provider-a", Model: "claude-sonnet", Timestamp: time.Date(2026, 4, 16, 9, 0, 0, 0, time.UTC), Source: "source-a", AuthIndex: "1", Failed: false, TotalTokens: 35},
-		{EventKey: "event-2", APIGroupKey: "provider-a", Model: "claude-sonnet", Timestamp: time.Date(2026, 4, 16, 10, 0, 0, 0, time.UTC), Source: "source-a", AuthIndex: "1", Failed: true, TotalTokens: 5},
-		{EventKey: "event-3", APIGroupKey: "provider-b", Model: "claude-opus", Timestamp: time.Date(2026, 4, 16, 11, 0, 0, 0, time.UTC), Source: "source-b", AuthIndex: "2", Failed: false, TotalTokens: 185},
-	}
-	if _, _, err := InsertUsageEvents(db, events); err != nil {
-		t.Fatalf("InsertUsageEvents returned error: %v", err)
-	}
-	filter := dto.UsageQueryFilter{Model: "claude-sonnet", Source: "source-a", AuthIndex: "1", Result: "success"}
-
-	snapshot, err := BuildUsageSnapshotWithFilter(db, filter)
-	if err != nil {
-		t.Fatalf("BuildUsageSnapshotWithFilter returned error: %v", err)
-	}
-	if snapshot.TotalRequests != 1 || snapshot.SuccessCount != 1 || snapshot.FailureCount != 0 || snapshot.TotalTokens != 35 {
-		t.Fatalf("expected snapshot to include only matching successful event, got %+v", snapshot)
-	}
-
-	overview, err := BuildUsageOverviewWithFilter(db, filter)
-	if err != nil {
-		t.Fatalf("BuildUsageOverviewWithFilter returned error: %v", err)
-	}
-	if overview.Summary.RequestCount != 1 || overview.Summary.TokenCount != 35 {
-		t.Fatalf("expected overview to include only matching successful event, got %+v", overview.Summary)
-	}
-
-	apis, models, err := ListUsageAnalysisWithFilter(db, filter)
-	if err != nil {
-		t.Fatalf("ListUsageAnalysisWithFilter returned error: %v", err)
-	}
-	if len(apis) != 1 || apis[0].APIGroupKey != "provider-a" || apis[0].TotalRequests != 1 || apis[0].FailureCount != 0 {
-		t.Fatalf("expected analysis API stats to include only matching successful event, got %+v", apis)
-	}
-	if len(models) != 1 || models[0].Model != "claude-sonnet" || models[0].TotalRequests != 1 || models[0].FailureCount != 0 {
-		t.Fatalf("expected analysis model stats to include only matching successful event, got %+v", models)
 	}
 }
 

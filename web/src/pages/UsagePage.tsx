@@ -14,7 +14,7 @@ import {
   Legend,
   Filler
 } from 'chart.js';
-import { ApiError, fetchStatus, fetchUpdateCheck, fetchUsageAnalysis, fetchUsageEventFilterOptions, fetchUsageEvents, fetchUsageIdentities } from '@/lib/api';
+import { ApiError, fetchStatus, fetchUpdateCheck, fetchUsageAnalysis, fetchUsageEventModelFilterOptions, fetchUsageEventSourceFilterOptions, fetchUsageEvents, fetchUsageIdentities } from '@/lib/api';
 import type { StatusResponse, UsageAnalysisResponse, UsageEvent, UsageIdentity, UsageSourceFilterOption } from '@/lib/types';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Select } from '@/components/ui/Select';
@@ -724,12 +724,15 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     eventsFilterOptionsRequestControllerRef.current = controller;
 
     try {
-      const response = await fetchUsageEventFilterOptions(controller.signal);
+      const [modelResponse, sourceResponse] = await Promise.all([
+        fetchUsageEventModelFilterOptions(controller.signal),
+        fetchUsageEventSourceFilterOptions(controller.signal),
+      ]);
       if (eventsFilterOptionsRequestControllerRef.current !== controller) {
         return;
       }
-      setEventsModelOptions(response.models ?? []);
-      setEventsSourceOptions(response.sources ?? []);
+      setEventsModelOptions(modelResponse.models ?? []);
+      setEventsSourceOptions(sourceResponse.sources ?? []);
     } catch (error) {
       if (controller.signal.aborted) {
         return;
