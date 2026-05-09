@@ -22,6 +22,7 @@ type UsageIdentity struct {
 	LookupKey    string
 	Prefix       string
 	AccountID    *string
+	ProjectID    *string
 
 	ActiveStart *time.Time
 	ActiveUntil *time.Time

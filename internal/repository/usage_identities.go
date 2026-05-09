@@ -98,6 +98,19 @@ func ListActiveUsageIdentities(ctx context.Context, db *gorm.DB) ([]entities.Usa
 	return identities, nil
 }
 
+func GetActiveAuthFileUsageIdentityByAuthIndex(ctx context.Context, db *gorm.DB, authIndex string) (entities.UsageIdentity, error) {
+	var identity entities.UsageIdentity
+	if db == nil {
+		return identity, fmt.Errorf("database is nil")
+	}
+	if err := db.WithContext(ctx).
+		Where("auth_type = ? AND identity = ? AND is_deleted = ?", entities.UsageIdentityAuthTypeAuthFile, strings.TrimSpace(authIndex), false).
+		First(&identity).Error; err != nil {
+		return identity, fmt.Errorf("get active auth file usage identity by auth index: %w", err)
+	}
+	return identity, nil
+}
+
 func AggregateUsageIdentityStats(ctx context.Context, db *gorm.DB, now time.Time) error {
 	if db == nil {
 		return fmt.Errorf("database is nil")
@@ -242,6 +255,7 @@ func normalizeUsageIdentities(identities []entities.UsageIdentity, authType enti
 		identity.LookupKey = strings.TrimSpace(identity.LookupKey)
 		identity.Prefix = strings.TrimSpace(identity.Prefix)
 		identity.AccountID = trimOptionalString(identity.AccountID)
+		identity.ProjectID = trimOptionalString(identity.ProjectID)
 		identity.PlanType = trimOptionalString(identity.PlanType)
 		identity.IsDeleted = false
 		identity.DeletedAt = nil
@@ -332,6 +346,7 @@ func upsertUsageIdentities(tx *gorm.DB, identities []entities.UsageIdentity) err
 			"lookup_key":     gorm.Expr("excluded.lookup_key"),
 			"prefix":         gorm.Expr("excluded.prefix"),
 			"account_id":     gorm.Expr("excluded.account_id"),
+			"project_id":     gorm.Expr("excluded.project_id"),
 			"active_start":   gorm.Expr("excluded.active_start"),
 			"active_until":   gorm.Expr("excluded.active_until"),
 			"plan_type":      gorm.Expr("excluded.plan_type"),
