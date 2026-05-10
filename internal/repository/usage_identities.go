@@ -376,7 +376,7 @@ func upsertUsageIdentities(tx *gorm.DB, identities []entities.UsageIdentity) err
 		return nil
 	}
 
-	// 冲突时只刷新 CPA 当前能提供的元数据，并恢复 deleted row；统计字段和预留的窗口/限额字段不在这里覆盖。
+	// 冲突时只刷新 CPA 当前能提供的元数据，并恢复 deleted row；统计字段由聚合流程维护，不在这里覆盖。
 	if err := tx.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "auth_type"}, {Name: "identity"}},
 		DoUpdates: clause.Assignments(map[string]any{

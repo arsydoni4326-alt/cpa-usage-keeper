@@ -322,25 +322,22 @@ func TestUsageIdentityReplaceForProviderTypesMarksOnlyScopedProviderTypesDeleted
 	}
 }
 
-func TestUsageIdentityReplaceForProviderTypesRefreshesSourceMetadataAndPreservesReservedFields(t *testing.T) {
+func TestUsageIdentityReplaceForProviderTypesRefreshesSourceMetadataAndPreservesStats(t *testing.T) {
 	db := openTestDatabase(t)
 	ctx := context.Background()
 	now := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
-	limitReached := true
-	primaryUsed := 80
-	primaryResetAt := now.Add(time.Hour)
 	seed := entities.UsageIdentity{
-		Name:                     "Old Provider",
-		AuthType:                 entities.UsageIdentityAuthTypeAIProvider,
-		AuthTypeName:             "apikey",
-		Identity:                 "provider-auth-index",
-		Type:                     "claude",
-		Provider:                 "Old Provider",
-		LookupKey:                "old-key",
-		Prefix:                   "old-prefix",
-		LimitReached:             &limitReached,
-		PrimaryWindowUsedPercent: &primaryUsed,
-		PrimaryWindowResetAt:     &primaryResetAt,
+		Name:          "Old Provider",
+		AuthType:      entities.UsageIdentityAuthTypeAIProvider,
+		AuthTypeName:  "apikey",
+		Identity:      "provider-auth-index",
+		Type:          "claude",
+		Provider:      "Old Provider",
+		LookupKey:     "old-key",
+		Prefix:        "old-prefix",
+		TotalRequests: 12,
+		SuccessCount:  10,
+		FailureCount:  2,
 	}
 	if err := db.Create(&seed).Error; err != nil {
 		t.Fatalf("seed provider identity: %v", err)
@@ -369,8 +366,8 @@ func TestUsageIdentityReplaceForProviderTypesRefreshesSourceMetadataAndPreserves
 	if updated.Prefix != "new-prefix" || updated.LookupKey != "new-key" || updated.Provider != "New Provider" {
 		t.Fatalf("expected source metadata refreshed, got %+v", updated)
 	}
-	if updated.LimitReached == nil || !*updated.LimitReached || updated.PrimaryWindowUsedPercent == nil || *updated.PrimaryWindowUsedPercent != 80 || updated.PrimaryWindowResetAt == nil || !updated.PrimaryWindowResetAt.Equal(primaryResetAt) {
-		t.Fatalf("expected reserved fields preserved, got %+v", updated)
+	if updated.TotalRequests != 12 || updated.SuccessCount != 10 || updated.FailureCount != 2 {
+		t.Fatalf("expected stats preserved, got %+v", updated)
 	}
 }
 
