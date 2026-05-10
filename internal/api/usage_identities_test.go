@@ -9,12 +9,16 @@ import (
 
 	"cpa-usage-keeper/internal/entities"
 	"cpa-usage-keeper/internal/redact"
+	"cpa-usage-keeper/internal/service"
 )
 
 type usageIdentitiesStub struct {
-	items       []entities.UsageIdentity
-	activeItems []entities.UsageIdentity
-	err         error
+	items            []entities.UsageIdentity
+	activeItems      []entities.UsageIdentity
+	pagedActiveItems []entities.UsageIdentity
+	pagedActiveTotal int64
+	pagedActiveReq   *service.ListUsageIdentitiesRequest
+	err              error
 }
 
 func (s usageIdentitiesStub) ListUsageIdentities(context.Context) ([]entities.UsageIdentity, error) {
@@ -26,6 +30,16 @@ func (s usageIdentitiesStub) ListActiveUsageIdentities(context.Context) ([]entit
 		return s.activeItems, s.err
 	}
 	return s.items, s.err
+}
+
+func (s usageIdentitiesStub) ListActiveUsageIdentitiesPage(_ context.Context, request service.ListUsageIdentitiesRequest) (service.ListUsageIdentitiesResponse, error) {
+	if s.pagedActiveReq != nil {
+		*s.pagedActiveReq = request
+	}
+	if s.pagedActiveItems != nil || s.pagedActiveTotal != 0 {
+		return service.ListUsageIdentitiesResponse{Items: s.pagedActiveItems, Total: s.pagedActiveTotal}, s.err
+	}
+	return service.ListUsageIdentitiesResponse{Items: s.items, Total: int64(len(s.items))}, s.err
 }
 
 func TestUsageIdentitiesRouteReturnsMetadataStatsAndActiveRows(t *testing.T) {
@@ -163,12 +177,18 @@ func TestUsageIdentitiesRouteDoesNotReturnUnpublishedMetadataFields(t *testing.T
 	if resp.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d: %s", resp.Code, body)
 	}
+	for _, expected := range []string{
+		`"plan_type":"team"`,
+		`"active_start":"2026-05-01T00:00:00Z"`,
+		`"active_until":"2026-06-01T00:00:00Z"`,
+	} {
+		if !contains(body, expected) {
+			t.Fatalf("expected API response to include %s, got %s", expected, body)
+		}
+	}
 	for _, forbidden := range []string{
 		`"prefix"`,
 		`"account_id"`,
-		`"active_start"`,
-		`"active_until"`,
-		`"plan_type"`,
 		`"limit_reached"`,
 		`"primary_window_used_percent"`,
 		`"primary_window_limit_seconds"`,
@@ -181,6 +201,40 @@ func TestUsageIdentitiesRouteDoesNotReturnUnpublishedMetadataFields(t *testing.T
 	} {
 		if contains(body, forbidden) {
 			t.Fatalf("expected API response not to include %s, got %s", forbidden, body)
+		}
+	}
+}
+
+func TestUsageIdentitiesPageRouteFiltersByAuthTypeAndPaginates(t *testing.T) {
+	captured := service.ListUsageIdentitiesRequest{}
+	router := NewRouter(nil, nil, nil, nil, AuthConfig{}, nil, "", OptionalProviders{UsageIdentity: usageIdentitiesStub{
+		pagedActiveReq:   &captured,
+		pagedActiveTotal: 25,
+		pagedActiveItems: []entities.UsageIdentity{{
+			ID:           11,
+			Name:         "Codex Account",
+			AuthType:     entities.UsageIdentityAuthTypeAuthFile,
+			AuthTypeName: "oauth",
+			Identity:     "codex-auth",
+			Type:         "codex",
+			Provider:     "Codex",
+		}},
+	}})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/usage/identities/page?auth_type=1&page=2&page_size=10", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	body := resp.Body.String()
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", resp.Code, body)
+	}
+	if captured.AuthType == nil || *captured.AuthType != entities.UsageIdentityAuthTypeAuthFile || captured.Page != 2 || captured.PageSize != 10 {
+		t.Fatalf("expected auth_type/page/page_size request, got %+v", captured)
+	}
+	for _, expected := range []string{`"identities":[`, `"id":11`, `"total_count":25`, `"page":2`, `"page_size":10`, `"total_pages":3`} {
+		if !contains(body, expected) {
+			t.Fatalf("expected %s in response body: %s", expected, body)
 		}
 	}
 }

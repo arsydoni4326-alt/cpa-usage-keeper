@@ -72,6 +72,12 @@ func ReplaceUsageIdentitiesForProviderTypes(ctx context.Context, db *gorm.DB, id
 	})
 }
 
+type ListUsageIdentitiesPageRequest struct {
+	AuthType *entities.UsageIdentityAuthType
+	Page     int
+	PageSize int
+}
+
 func ListUsageIdentities(ctx context.Context, db *gorm.DB) ([]entities.UsageIdentity, error) {
 	if db == nil {
 		return nil, fmt.Errorf("database is nil")
@@ -92,10 +98,43 @@ func ListActiveUsageIdentities(ctx context.Context, db *gorm.DB) ([]entities.Usa
 
 	// 解析和筛选场景只需要活跃身份，直接在 SQL 层过滤 deleted rows，避免无效数据进入内存 resolver。
 	var identities []entities.UsageIdentity
-	if err := db.WithContext(ctx).Where("is_deleted = ?", false).Order("auth_type asc, name asc, id asc").Find(&identities).Error; err != nil {
+	if err := activeUsageIdentitiesQuery(db.WithContext(ctx), nil).Find(&identities).Error; err != nil {
 		return nil, fmt.Errorf("list active usage identities: %w", err)
 	}
 	return identities, nil
+}
+
+func ListActiveUsageIdentitiesPage(ctx context.Context, db *gorm.DB, request ListUsageIdentitiesPageRequest) ([]entities.UsageIdentity, int64, error) {
+	if db == nil {
+		return nil, 0, fmt.Errorf("database is nil")
+	}
+	page := request.Page
+	if page <= 0 {
+		page = 1
+	}
+	pageSize := request.PageSize
+	if pageSize <= 0 {
+		pageSize = 10
+	}
+
+	query := activeUsageIdentitiesQuery(db.WithContext(ctx), request.AuthType)
+	var total int64
+	if err := query.Model(&entities.UsageIdentity{}).Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count active usage identities page: %w", err)
+	}
+	var identities []entities.UsageIdentity
+	if err := query.Offset((page - 1) * pageSize).Limit(pageSize).Find(&identities).Error; err != nil {
+		return nil, 0, fmt.Errorf("list active usage identities page: %w", err)
+	}
+	return identities, total, nil
+}
+
+func activeUsageIdentitiesQuery(db *gorm.DB, authType *entities.UsageIdentityAuthType) *gorm.DB {
+	query := db.Where("is_deleted = ?", false)
+	if authType != nil {
+		query = query.Where("auth_type = ?", *authType)
+	}
+	return query.Order("auth_type asc, name asc, id asc")
 }
 
 func GetActiveAuthFileUsageIdentityByAuthIndex(ctx context.Context, db *gorm.DB, authIndex string) (entities.UsageIdentity, error) {
