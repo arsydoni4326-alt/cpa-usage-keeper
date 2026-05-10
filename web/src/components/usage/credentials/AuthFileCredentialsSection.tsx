@@ -63,8 +63,6 @@ export function AuthFileCredentialsSection({ rows, total, page, totalPages, load
               </span>
             )}
             badges={null}
-            rowClassName={styles.credentialQuotaRow}
-            sideClassName={styles.credentialQuotaSidePanel}
             metrics={(
               <>
                 {row.totalRequests > 0 && <MetricPill label={t('usage_stats.total_requests')} value={<RequestMetric total={row.totalRequests} success={row.successCount} failure={row.failureCount} />} />}

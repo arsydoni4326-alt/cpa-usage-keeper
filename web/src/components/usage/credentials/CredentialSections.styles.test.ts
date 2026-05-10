@@ -2,25 +2,23 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const credentialStyles = readFileSync(new URL('./CredentialSections.module.scss', import.meta.url), 'utf8')
-const authFileSectionSource = readFileSync(new URL('./AuthFileCredentialsSection.tsx', import.meta.url), 'utf8')
-const aiProviderSectionSource = readFileSync(new URL('./AiProviderCredentialsSection.tsx', import.meta.url), 'utf8')
+const credentialShellSource = readFileSync(new URL('./CredentialSectionShell.tsx', import.meta.url), 'utf8')
 
 describe('Credential section styles', () => {
-  it('keeps Auth Files metric and quota columns at requested widths', () => {
-    expect(credentialStyles).toMatch(/\.credentialMetricGroup\s*\{[\s\S]*?grid-template-columns:\s*120px repeat\(3, 95px\);/)
-    expect(credentialStyles).toMatch(/\.credentialRow\s*\{[\s\S]*?grid-template-columns:\s*minmax\(170px, 250px\) minmax\(405px, max-content\) minmax\(220px, 1fr\);/)
-    expect(credentialStyles).toMatch(/\.credentialQuotaRow\s*\{[\s\S]*?grid-template-columns:\s*minmax\(170px, 250px\) minmax\(405px, max-content\) 170px;/)
-    expect(credentialStyles).toMatch(/\.credentialQuotaSidePanel\s*\{[\s\S]*?max-width:\s*170px;/)
-    expect(credentialStyles).toMatch(/\.credentialQuotaSideWithAction\s*\{[\s\S]*?gap:\s*14px;/)
-    expect(credentialStyles).toMatch(/\.credentialQuotaBars\s*\{[\s\S]*?gap:\s*12px;/)
+  it('keeps Auth Files and AI Provider identity columns at the requested width', () => {
+    expect(credentialStyles).toMatch(/\.credentialRow\s*\{[\s\S]*?grid-template-columns:\s*minmax\(170px, 250px\) minmax\(394px, max-content\) minmax\(250px, 1fr\);/)
+    expect(credentialStyles).toMatch(/\.credentialIdentityBlock\s*\{[\s\S]*?max-width:\s*250px;/)
+    expect(credentialShellSource).toContain('<article className={styles.credentialRow}>')
   })
 
-  it('applies quota-only layout classes only to Auth Files rows', () => {
-    expect(authFileSectionSource).toContain('rowClassName={styles.credentialQuotaRow}')
-    expect(authFileSectionSource).toContain('sideClassName={styles.credentialQuotaSidePanel}')
-    expect(aiProviderSectionSource).not.toContain('credentialQuotaRow')
-    expect(aiProviderSectionSource).not.toContain('credentialQuotaSidePanel')
-    expect(aiProviderSectionSource).not.toContain('credentialQuotaSideWithAction')
+  it('balances the Auth Files quota spacing without fixing the quota bar width', () => {
+    expect(credentialStyles).toMatch(/\.credentialRow\s*\{[\s\S]*?column-gap:\s*18px;/)
+    expect(credentialStyles).toMatch(/\.credentialQuotaSideWithAction\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) 30px;/)
+    expect(credentialStyles).toMatch(/\.credentialQuotaSideWithAction\s*\{[\s\S]*?gap:\s*14px;/)
+    expect(credentialStyles).toMatch(/\.credentialQuotaBars\s*\{[\s\S]*?gap:\s*14px;/)
+    expect(credentialStyles).toMatch(/\.credentialQuotaBarBlock\s*\{[\s\S]*?min-width:\s*195px;/)
+    expect(credentialStyles).not.toContain('credentialQuotaSidePanel')
+    expect(credentialStyles).not.toContain('credentialQuotaRow')
   })
 
   it('keeps plan and remaining-day badges readable in dark mode', () => {
