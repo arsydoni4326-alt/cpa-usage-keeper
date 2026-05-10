@@ -787,6 +787,39 @@ func TestSyncMetadataWritesProviderMetadataToUsageIdentities(t *testing.T) {
 	assertTableNotExists(t, db, "provider_metadata")
 }
 
+// 多个 codex 上游 (CPA 不允许给 codex/claude/gemini 设 Name) 应当通过 base URL 区分，避免在 usage events 来源列里被合并成同一个 "codex"。
+func TestSyncMetadataUsesBaseURLAsDisplayNameWhenNameMissing(t *testing.T) {
+	db := openSyncTestDatabase(t)
+	service := NewSyncServiceWithOptions(db, SyncServiceOptions{
+		BaseURL: "https://cpa.example.com",
+		MetadataFetcher: stubMetadataFetcher{providerConfig: providerconfig.ProviderMetadataConfig{
+			CodexAPIKeys: []providerconfig.ProviderKeyConfig{
+				{APIKey: "codex-key-a", BaseURL: "https://api.openai.com/v1", AuthIndex: "codex-auth-a"},
+				{APIKey: "codex-key-b", BaseURL: "https://chatgpt.com/backend-api/codex/", AuthIndex: "codex-auth-b"},
+				{APIKey: "codex-key-c", AuthIndex: "codex-auth-c"},
+			},
+		}},
+	})
+
+	if err := service.SyncMetadata(context.Background()); err != nil {
+		t.Fatalf("SyncMetadata returned error: %v", err)
+	}
+	items, err := repository.ListUsageIdentities(context.Background(), db)
+	if err != nil {
+		t.Fatalf("list usage identities: %v", err)
+	}
+	byIdentity := usageIdentitiesByIdentity(items)
+	if got := byIdentity["codex-auth-a"].Name; got != "api.openai.com/v1" {
+		t.Fatalf("codex-auth-a Name = %q, want %q", got, "api.openai.com/v1")
+	}
+	if got := byIdentity["codex-auth-b"].Name; got != "chatgpt.com/backend-api/codex" {
+		t.Fatalf("codex-auth-b Name = %q, want %q", got, "chatgpt.com/backend-api/codex")
+	}
+	if got := byIdentity["codex-auth-c"].Name; got != "codex" {
+		t.Fatalf("codex-auth-c Name = %q, want %q", got, "codex")
+	}
+}
+
 func TestSyncMetadataKeepsProviderIdentityWhenPrefixEqualsAPIKey(t *testing.T) {
 	db := openSyncTestDatabase(t)
 	service := NewSyncServiceWithOptions(db, SyncServiceOptions{

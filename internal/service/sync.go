@@ -674,7 +674,7 @@ func flattenProviderMetadata(cfg providerconfig.ProviderMetadataConfig) []servic
 	}
 	appendProviderEntries := func(providerType string, configs []providerconfig.ProviderKeyConfig) {
 		for _, cfg := range configs {
-			displayName := firstNonEmpty(cfg.Name, providerType)
+			displayName := firstNonEmpty(cfg.Name, formatProviderBaseURLDisplay(cfg.BaseURL), providerType)
 			appendItem(cfg.APIKey, cfg.Prefix, providerType, displayName, cfg.AuthIndex)
 		}
 	}
@@ -702,6 +702,23 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// formatProviderBaseURLDisplay 把 base URL 转成给人看的短串：去掉协议前缀和结尾斜杠，
+// 当 codex/claude/gemini 这类 provider 没有 Name 字段时作为兜底展示，避免多上游被合并成同一个 "codex"。
+func formatProviderBaseURLDisplay(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	lower := strings.ToLower(trimmed)
+	for _, prefix := range []string{"https://", "http://"} {
+		if strings.HasPrefix(lower, prefix) {
+			trimmed = trimmed[len(prefix):]
+			break
+		}
+	}
+	return strings.TrimRight(trimmed, "/")
 }
 
 func joinErrors(errs ...error) error {

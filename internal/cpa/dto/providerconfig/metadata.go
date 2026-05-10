@@ -19,6 +19,7 @@ type ProviderKeyConfig struct {
 	APIKey    string
 	Prefix    string
 	Name      string
+	BaseURL   string
 	AuthIndex string
 }
 
@@ -30,6 +31,7 @@ func (p *ProviderKeyConfig) UnmarshalJSON(data []byte) error {
 	p.APIKey = firstString(raw, "apiKey", "api-key", "key")
 	p.Prefix = firstString(raw, "prefix")
 	p.Name = firstString(raw, "name")
+	p.BaseURL = firstString(raw, "base-url", "base_url", "baseURL")
 	p.AuthIndex = firstString(raw, "auth-index", "auth_index", "authIndex")
 	return nil
 }
