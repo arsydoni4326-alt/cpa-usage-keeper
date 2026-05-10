@@ -5,6 +5,7 @@ const usagePageStyles = readFileSync(new URL('./UsagePage.module.scss', import.m
 const usagePageSource = readFileSync(new URL('./UsagePage.tsx', import.meta.url), 'utf8')
 const requestEventsSource = readFileSync(new URL('../components/usage/RequestEventsDetailsCard.tsx', import.meta.url), 'utf8')
 const priceSettingsSource = readFileSync(new URL('../components/usage/PriceSettingsCard.tsx', import.meta.url), 'utf8')
+const chartLineSelectorSource = readFileSync(new URL('../components/usage/ChartLineSelector.tsx', import.meta.url), 'utf8')
 
 describe('UsagePage toolbar styles', () => {
   it('keeps visible range controls content-sized in narrow layouts', () => {
@@ -15,6 +16,10 @@ describe('UsagePage toolbar styles', () => {
   it('only renders custom range inputs when the custom range is selected', () => {
     expect(usagePageSource).toContain('{isCustomRange && (')
     expect(usagePageSource).not.toContain('aria-hidden={!isCustomRange}')
+  })
+
+  it('keeps chart line selects aligned with reusable pill controls', () => {
+    expect(chartLineSelectorSource).toContain('className={styles.usagePillControl}')
   })
 
   it('provides reusable pill controls for usage subpages', () => {
