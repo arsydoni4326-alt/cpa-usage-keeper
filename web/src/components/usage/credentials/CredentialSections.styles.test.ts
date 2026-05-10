@@ -21,6 +21,13 @@ describe('Credential section styles', () => {
     expect(credentialStyles).not.toContain('credentialQuotaRow')
   })
 
+  it('keeps Total Requests success and failure counts horizontally aligned', () => {
+    expect(credentialStyles).toMatch(/\.credentialRequestMetric\s*\{[\s\S]*?align-items:\s*center;/)
+    expect(credentialStyles).toMatch(/\.credentialRequestBreakdown\s*\{[\s\S]*?display:\s*inline-flex;/)
+    expect(credentialStyles).toMatch(/\.credentialRequestBreakdown\s*\{[\s\S]*?align-items:\s*center;/)
+    expect(credentialStyles).toMatch(/\.credentialRequestBreakdown\s*\{[\s\S]*?line-height:\s*1;/)
+  })
+
   it('keeps plan and remaining-day badges readable in dark mode', () => {
     expect(credentialStyles).toMatch(/\[data-theme='dark'\][\s\S]*\.credentialPlanBadgeTeam[\s\S]*?color:\s*#bbf7d0;/)
     expect(credentialStyles).toMatch(/\[data-theme='dark'\][\s\S]*\.credentialPlanBadgePlus[\s\S]*?color:\s*#bfdbfe;/)
