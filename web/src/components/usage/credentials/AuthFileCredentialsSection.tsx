@@ -29,16 +29,20 @@ export function AuthFileCredentialsSection({ rows, total, page, totalPages, load
       subtitle={t('usage_stats.credentials_auth_files_subtitle')}
       countLabel={t('usage_stats.credentials_count', { count: total })}
       actions={(
-        <button
-          type="button"
-          className={`${styles.credentialRefreshButton} ${quotaRefreshing ? styles.credentialRefreshButtonLoading : ''}`.trim()}
-          onClick={() => void onRefreshQuota()}
-          disabled={!canRefresh}
-          aria-busy={quotaRefreshing}
-        >
-          {quotaRefreshing ? <LoadingSpinner size={14} /> : <IconRefreshCw size={14} />}
-          <span>{quotaRefreshing ? t('usage_stats.credentials_quota_refreshing') : t('usage_stats.credentials_quota_refresh_current_page')}</span>
-        </button>
+        <div className={styles.credentialRefreshSwitcher}>
+          <button
+            type="button"
+            className={`${styles.credentialRefreshButton} ${styles.credentialRefreshButtonActive} ${quotaRefreshing ? styles.credentialRefreshButtonLoading : ''}`.trim()}
+            onClick={() => void onRefreshQuota()}
+            disabled={!canRefresh}
+            aria-busy={quotaRefreshing}
+          >
+            <span className={styles.credentialRefreshButtonInner}>
+              {quotaRefreshing ? <LoadingSpinner size={12} className={styles.credentialRefreshSpinner} /> : <IconRefreshCw size={12} />}
+              <span>{quotaRefreshing ? t('usage_stats.credentials_quota_refreshing') : t('usage_stats.credentials_quota_refresh_current_page')}</span>
+            </span>
+          </button>
+        </div>
       )}
     >
       {/* 批量刷新失败显示在区块顶部，单行任务失败显示在对应限额位置。 */}
