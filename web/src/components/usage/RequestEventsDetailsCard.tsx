@@ -8,6 +8,7 @@ import type { UsageEvent, UsageSourceFilterOption } from '@/lib/types';
 import {
   formatDurationMs,
   formatUsd,
+  isAnthropicStyleProvider,
   LATENCY_SOURCE_FIELD,
   normalizeAuthIndex,
   type ModelPrice,
@@ -143,7 +144,9 @@ export function RequestEventsDetailsCard({
       const totalTokens = Math.max(toNumber(event.tokens?.total_tokens), 0);
       const latencyMs = Number.isFinite(event.latency_ms) ? event.latency_ms : null;
       const pricing = modelPrices[model];
-      const promptTokens = Math.max(inputTokens - cachedTokens, 0);
+      const promptTokens = isAnthropicStyleProvider(sourceType)
+        ? inputTokens
+        : Math.max(inputTokens - cachedTokens, 0);
       const cost = pricing
         ? (promptTokens / 1_000_000) * pricing.prompt +
           (outputTokens / 1_000_000) * pricing.completion +
