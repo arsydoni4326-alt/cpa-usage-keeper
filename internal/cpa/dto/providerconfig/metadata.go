@@ -40,6 +40,7 @@ func (p *ProviderKeyConfig) UnmarshalJSON(data []byte) error {
 type OpenAICompatibilityConfig struct {
 	Name          string
 	Prefix        string
+	BaseURL       string
 	APIKeyEntries []OpenAIApiKeyEntry
 }
 
@@ -50,6 +51,7 @@ func (c *OpenAICompatibilityConfig) UnmarshalJSON(data []byte) error {
 	}
 	c.Name = firstString(raw, "name", "id")
 	c.Prefix = firstString(raw, "prefix")
+	c.BaseURL = firstString(raw, "base-url", "base_url", "baseURL")
 	c.APIKeyEntries = nil
 	for _, key := range []string{"apiKeyEntries", "api-key-entries", "api-keys"} {
 		value, ok := raw[key]
