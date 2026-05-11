@@ -233,4 +233,3 @@ function QuotaBar({ quota, rotationPhase }: { quota: DisplayQuota; rotationPhase
     </div>
   )
 }
-
