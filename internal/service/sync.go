@@ -688,7 +688,7 @@ func flattenProviderMetadata(cfg providerconfig.ProviderMetadataConfig) []servic
 	for _, provider := range cfg.OpenAICompatibility {
 		displayName := firstNonEmpty(provider.Name, "openai")
 		for _, entry := range provider.APIKeyEntries {
-			appendItem(entry.APIKey, provider.Prefix, "openai", displayName, entry.AuthIndex, "")
+			appendItem(entry.APIKey, provider.Prefix, "openai", displayName, entry.AuthIndex, provider.BaseURL)
 		}
 	}
 
