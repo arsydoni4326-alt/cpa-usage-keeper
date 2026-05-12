@@ -142,7 +142,6 @@ export function RequestEventsDetailsCard({
     return events.map((event, index) => {
       const timestamp = event.timestamp;
       const timestampMs = Date.parse(timestamp);
-      const date = Number.isNaN(timestampMs) ? null : new Date(timestampMs);
       const sourceRaw = String(event.source_raw ?? '').trim() || String(event.source ?? '').trim();
       const authIndexRaw = event.auth_index as unknown;
       const authIndex =
