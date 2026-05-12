@@ -17,6 +17,7 @@ import (
 	"cpa-usage-keeper/internal/poller"
 	"cpa-usage-keeper/internal/quota"
 	"cpa-usage-keeper/internal/service"
+	"cpa-usage-keeper/internal/timeutil"
 	"cpa-usage-keeper/internal/updatecheck"
 	"cpa-usage-keeper/internal/version"
 	"github.com/gin-gonic/gin"
@@ -310,7 +311,7 @@ func buildStatusResponse(status poller.Status) statusResponse {
 		LastStatus:         status.LastStatus,
 	}
 	if !status.LastRunAt.IsZero() {
-		lastRunAt := status.LastRunAt.UTC()
+		lastRunAt := timeutil.NormalizeStorageTime(status.LastRunAt)
 		response.LastRunAt = &lastRunAt
 	}
 	return response
