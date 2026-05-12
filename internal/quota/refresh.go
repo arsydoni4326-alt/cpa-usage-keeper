@@ -10,6 +10,7 @@ import (
 
 	"cpa-usage-keeper/internal/entities"
 	"cpa-usage-keeper/internal/repository"
+	"cpa-usage-keeper/internal/timeutil"
 
 	"gorm.io/gorm"
 )
@@ -214,7 +215,7 @@ func (s *Service) validateRefreshAuthIndex(ctx context.Context, authIndex string
 
 func (s *Service) ensureRefreshTask(authIndex string, source RefreshSource) (*RefreshTaskRecord, bool) {
 	// 同一个 auth_index 已经 queued/running 时复用现有任务，避免重复打到上游接口。
-	now := time.Now().UTC()
+	now := timeutil.NormalizeStorageTime(time.Now())
 	s.refreshMu.Lock()
 	defer s.refreshMu.Unlock()
 	if taskID, ok := s.refreshTaskIDsByAuth[authIndex]; ok {
@@ -268,7 +269,7 @@ func refreshTaskErrorMessage(err error) string {
 }
 
 func (s *Service) markRefreshTaskRunning(taskID string) (string, bool) {
-	now := time.Now().UTC()
+	now := timeutil.NormalizeStorageTime(time.Now())
 	s.refreshMu.Lock()
 	defer s.refreshMu.Unlock()
 	task, ok := s.refreshTasks[taskID]
@@ -281,7 +282,7 @@ func (s *Service) markRefreshTaskRunning(taskID string) (string, bool) {
 }
 
 func (s *Service) markRefreshTaskCompleted(taskID string, response CheckResponse) {
-	now := time.Now().UTC()
+	now := timeutil.NormalizeStorageTime(time.Now())
 	s.refreshMu.Lock()
 	defer s.refreshMu.Unlock()
 	task, ok := s.refreshTasks[taskID]
@@ -296,7 +297,7 @@ func (s *Service) markRefreshTaskCompleted(taskID string, response CheckResponse
 }
 
 func (s *Service) markRefreshTaskFailed(taskID string, message string) {
-	now := time.Now().UTC()
+	now := timeutil.NormalizeStorageTime(time.Now())
 	s.refreshMu.Lock()
 	defer s.refreshMu.Unlock()
 	task, ok := s.refreshTasks[taskID]
