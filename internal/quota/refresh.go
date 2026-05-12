@@ -34,7 +34,6 @@ const (
 
 type CacheRequest struct {
 	AuthIndexes []string `json:"auth_indexes"`
-	Limit       int      `json:"limit"`
 }
 
 type CacheResponse struct {
@@ -43,7 +42,6 @@ type CacheResponse struct {
 
 type RefreshRequest struct {
 	AuthIndexes []string      `json:"auth_indexes"`
-	Limit       int           `json:"limit"`
 	Source      RefreshSource `json:"source"`
 }
 
@@ -92,20 +90,16 @@ type RefreshTaskRecord struct {
 func (s *Service) GetCachedQuota(ctx context.Context, request CacheRequest) (CacheResponse, error) {
 	_ = ctx
 	// 缓存读取只返回已完成任务的结果，不触发新的 provider 请求。
-	limit := request.Limit
-	if limit <= 0 {
-		return CacheResponse{}, fmt.Errorf("%w: limit is required", ErrValidation)
+	if len(request.AuthIndexes) == 0 {
+		return CacheResponse{}, fmt.Errorf("%w: auth_indexes are required", ErrValidation)
 	}
-	response := CacheResponse{Items: make([]CheckResponse, 0, min(limit, len(request.AuthIndexes)))}
+	response := CacheResponse{Items: make([]CheckResponse, 0, len(request.AuthIndexes))}
 	s.cleanupExpiredRefreshTasks(time.Now())
 	s.refreshMu.Lock()
 	defer s.refreshMu.Unlock()
 	// 按请求顺序去重并读取每个 auth_index 最近一次完成的任务缓存。
 	seen := make(map[string]struct{}, len(request.AuthIndexes))
 	for _, rawAuthIndex := range request.AuthIndexes {
-		if len(response.Items) >= limit {
-			break
-		}
 		authIndex := strings.TrimSpace(rawAuthIndex)
 		if authIndex == "" {
 			continue
@@ -130,9 +124,9 @@ func (s *Service) GetCachedQuota(ctx context.Context, request CacheRequest) (Cac
 
 func (s *Service) Refresh(ctx context.Context, request RefreshRequest) (RefreshResponse, error) {
 	// 刷新入口只负责校验、去重、建任务；实际 provider 调用交给后台 worker。
-	limit := request.Limit
+	limit := len(request.AuthIndexes)
 	if limit <= 0 {
-		return RefreshResponse{}, fmt.Errorf("%w: limit is required", ErrValidation)
+		return RefreshResponse{}, fmt.Errorf("%w: auth_indexes are required", ErrValidation)
 	}
 	response := RefreshResponse{Limit: limit}
 	seen := make(map[string]struct{}, len(request.AuthIndexes))
