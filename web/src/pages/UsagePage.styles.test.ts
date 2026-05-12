@@ -18,6 +18,16 @@ describe('UsagePage toolbar styles', () => {
     expect(usagePageSource).not.toContain('aria-hidden={!isCustomRange}')
   })
 
+  it('keeps custom date inputs selectable through the native picker without pointer interception', () => {
+    expect(usagePageStyles).toMatch(/\.customRangeInput\s*\{[\s\S]*?user-select:\s*none;/)
+    expect(usagePageStyles).toMatch(/\.customRangeInput\s*\{[\s\S]*?-webkit-user-select:\s*none;/)
+    expect(usagePageSource).not.toContain('readOnly')
+    expect(usagePageSource).not.toContain('onPointerDown={handleCustomDateInputPointerDown}')
+    expect(usagePageSource).toContain('onClick={handleCustomDateInputActivate}')
+    expect(usagePageSource).toContain('onFocus={handleCustomDateInputActivate}')
+    expect(usagePageSource).toContain('onKeyDown={handleCustomDateInputKeyDown}')
+  })
+
   it('keeps chart line selects aligned with reusable pill controls', () => {
     expect(chartLineSelectorSource).toContain('className={styles.usagePillControl}')
   })
