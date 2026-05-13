@@ -63,6 +63,17 @@ func TestRefreshCreatesTaskPerAuthIndexAndCachesCompletedQuota(t *testing.T) {
 	if task.AuthIndex != "auth-1" || task.Quota == nil || task.Quota.ID != "auth-1" || len(task.Quota.Quota) != 1 {
 		t.Fatalf("expected completed task to expose cached quota, got %+v", task)
 	}
+	if task.ExpiresAt != nil {
+		t.Fatalf("expected completed quota cache to have no expiry, got %v", task.ExpiresAt)
+	}
+	service.cleanupExpiredRefreshTasks(time.Now().Add(defaultRefreshTaskTTL * 2))
+	cache, err := service.GetCachedQuota(context.Background(), CacheRequest{AuthIndexes: []string{"auth-1"}})
+	if err != nil {
+		t.Fatalf("GetCachedQuota returned error: %v", err)
+	}
+	if len(cache.Items) != 1 || cache.Items[0].ID != "auth-1" {
+		t.Fatalf("expected completed quota cache to survive cleanup, got %+v", cache)
+	}
 	if handler.callCount() != 1 {
 		t.Fatalf("expected one provider call, got %d", handler.callCount())
 	}

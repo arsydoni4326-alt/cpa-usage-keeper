@@ -286,7 +286,6 @@ func (s *Service) markRefreshTaskCompleted(taskID string, response CheckResponse
 	task.Status = RefreshTaskStatusCompleted
 	task.FinishedAt = now
 	task.CachedAt = now
-	task.ExpiresAt = now.Add(s.refreshTaskTTL)
 	task.Quota = &response
 }
 

@@ -171,9 +171,10 @@ export function formatQuotaResetLabel(resetAt: string): string {
 
 function QuotaBar({ quota }: { quota: DisplayQuota }) {
   // 条宽使用剩余额度百分比，颜色跟随剩余风险状态从绿到黄到红。
+  const { t } = useTranslation()
   const percent = quota.barPercent ?? 0
   const width = `${Math.max(0, Math.min(100, percent))}%`
-  const percentLabel = quota.barPercent === null ? '' : `${Math.round(quota.barPercent)}%`
+  const percentLabel = quota.barPercent === null ? '' : t('usage_stats.credentials_quota_percent_remaining', { percent: `${Math.round(quota.barPercent)}%` })
   const resetLabel = quota.resetText ? formatQuotaResetLabel(quota.resetText) : ''
 
   return (
