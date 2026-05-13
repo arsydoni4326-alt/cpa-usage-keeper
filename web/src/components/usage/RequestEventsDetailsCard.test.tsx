@@ -87,6 +87,19 @@ describe('RequestEventsDetailsCard pagination', () => {
     expect(html).toContain('<td>25</td><td>25.00%</td><td>200</td>');
   });
 
+  it('uses Claude token semantics for cache rate', () => {
+    const html = renderCard({
+      events: [{
+        ...events[0],
+        source_type: 'claude',
+        tokens: { ...events[0].tokens, input_tokens: 400, cached_tokens: 600, total_tokens: 500 },
+      }],
+    });
+
+    expect(html).toContain('<td>600</td><td>60.00%</td><td>500</td>');
+    expect(html).not.toContain('150.00%');
+  });
+
   it('shows a dash for cache rate when input tokens are zero', () => {
     const html = renderCard({
       events: [{ ...events[0], tokens: { ...events[0].tokens, input_tokens: 0, cached_tokens: 25 } }],

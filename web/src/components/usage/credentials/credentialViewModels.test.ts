@@ -145,7 +145,7 @@ describe('credentialViewModels', () => {
       ]],
     ])
 
-    const rows = buildAuthFileCredentialRows([identity({ identity: 'auth-1', displayName: 'Claude Auth', total_requests: 10, success_count: 9, input_tokens: 1000, cached_tokens: 250, total_tokens: 1500 })], quotas)
+    const rows = buildAuthFileCredentialRows([identity({ identity: 'auth-1', displayName: 'Claude Auth', total_requests: 10, success_count: 9, input_tokens: 750, cached_tokens: 250, total_tokens: 1500 })], quotas)
 
     expect(rows[0].displayName).toBe('Claude Auth')
     expect(rows[0].typeLabel).toBe('claude')
@@ -164,6 +164,14 @@ describe('credentialViewModels', () => {
     expect(rows[0].secondaryQuota?.percentKind).toBe('used')
     expect(rows[0].secondaryQuota?.barPercent).toBe(60)
     expect(rows[0].extraQuota.map((quota) => quota.label)).toEqual(['Code Assist Credit'])
+  })
+
+  it('uses Claude token semantics for auth file cache rate', () => {
+    const rows = buildAuthFileCredentialRows([
+      identity({ identity: 'auth-claude', type: 'claude', input_tokens: 400, cached_tokens: 600 }),
+    ])
+
+    expect(rows[0].cacheRate).toBe(60)
   })
 
   it('classifies quota bar colors at 50 and 20 percent remaining thresholds', () => {
