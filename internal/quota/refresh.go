@@ -216,6 +216,7 @@ func (s *Service) ensureRefreshTask(authIndex string, source RefreshSource) (*Re
 		if task, ok := s.refreshTasks[taskID]; ok && task.isActive() {
 			return task, false
 		}
+		delete(s.refreshTasks, taskID)
 	}
 	task := &RefreshTaskRecord{
 		TaskID:    fmt.Sprintf("quota-refresh-%d", atomic.AddUint64(&s.refreshTaskSeq, 1)),
