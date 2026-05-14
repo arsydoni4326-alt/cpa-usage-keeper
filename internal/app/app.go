@@ -80,11 +80,13 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 		return nil, err
 	}
 	// migrations 完成后、后台 runner 启动前先追平 Overview 增量表，避免首个页面请求触发大批量聚合。
+	logrus.Info("starting usage overview aggregation catch-up")
 	if err := repository.AggregateUsageOverviewStats(context.Background(), db, time.Now()); err != nil {
 		_ = closeGormDB(db)
 		_ = logCloser.Close()
 		return nil, err
 	}
+	logrus.Info("completed usage overview aggregation catch-up")
 
 	syncService := service.NewSyncService(db, cfg)
 	backgroundPoller := poller.NewRedisDrain(syncService, poller.RedisDrainConfig{

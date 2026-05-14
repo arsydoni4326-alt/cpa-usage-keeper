@@ -3,7 +3,9 @@ package app
 import (
 	"bytes"
 	"context"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -82,8 +84,12 @@ func TestNewWithConfigAggregatesExistingOverviewStatsBeforeRunnersStart(t *testi
 		t.Fatalf("close seed db: %v", err)
 	}
 
+	logDir := t.TempDir()
+
 	cfg := testAppConfig(t)
 	cfg.SQLitePath = dbPath
+	cfg.LogFileEnabled = true
+	cfg.LogDir = logDir
 	app, err := NewWithConfig(cfg)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
@@ -96,6 +102,13 @@ func TestNewWithConfigAggregatesExistingOverviewStatsBeforeRunnersStart(t *testi
 	}
 	if checkpoint.LastAggregatedUsageEventID == 0 {
 		t.Fatalf("expected startup catch-up to aggregate legacy usage events, got checkpoint %+v", checkpoint)
+	}
+	logContent := readAppLogFile(t, logDir)
+	if !strings.Contains(logContent, "starting usage overview aggregation catch-up") {
+		t.Fatalf("expected startup catch-up start log, got %s", logContent)
+	}
+	if !strings.Contains(logContent, "completed usage overview aggregation catch-up") {
+		t.Fatalf("expected startup catch-up completion log, got %s", logContent)
 	}
 }
 
@@ -287,6 +300,16 @@ func captureAppInfoLogs(t *testing.T) *bytes.Buffer {
 		logrus.SetLevel(previousLevel)
 	})
 	return &logs
+}
+
+func readAppLogFile(t *testing.T, logDir string) string {
+	t.Helper()
+	path := filepath.Join(logDir, "cpa-usage-keeper-"+time.Now().Format("2006-01-02")+".log")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read app log file: %v", err)
+	}
+	return string(content)
 }
 
 func testAppConfig(t *testing.T) config.Config {
