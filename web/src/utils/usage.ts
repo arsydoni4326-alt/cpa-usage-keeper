@@ -367,8 +367,6 @@ export function resolveUsageFilterWindow(
     customEnd?: string | number;
   } = {}
 ): UsageFilterWindow {
-  const details = collectUsageDetails(usage);
-  const bounds = getDetailTimestampBounds(details);
   const fallbackNow = toValidTimestamp(options.nowMs) ?? Date.now();
 
   if (range === 'custom') {
