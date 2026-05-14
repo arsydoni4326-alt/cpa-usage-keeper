@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"sync"
+	"time"
 
 	"cpa-usage-keeper/internal/api"
 	"cpa-usage-keeper/internal/auth"
@@ -23,8 +24,13 @@ import (
 	"gorm.io/gorm"
 )
 
+// Runner 是 App 后台任务的最小接口，具体语义由字段名和实现方法表达。
 type Runner interface {
 	Run(ctx context.Context) error
+}
+
+// StatusProvider 只提供前端状态和手动同步入口，不作为后台 runner 启动。
+type StatusProvider interface {
 	Status() poller.Status
 	SyncNow(ctx context.Context) error
 }
@@ -37,7 +43,9 @@ type App struct {
 	Config            *config.Config
 	DB                *gorm.DB
 	Router            *gin.Engine
-	Poller            Runner
+	Poller            StatusProvider
+	RedisPull         Runner
+	RedisProcess      Runner
 	Maintenance       *StorageCleanupRunner
 	MetadataSync      *MetadataSyncRunner
 	BackupMaintenance *DatabaseBackupRunner
@@ -68,6 +76,12 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 
 	db, err := repository.OpenDatabase(cfg)
 	if err != nil {
+		_ = logCloser.Close()
+		return nil, err
+	}
+	// migrations 完成后、后台 runner 启动前先追平 Overview 增量表，避免首个页面请求触发大批量聚合。
+	if err := repository.AggregateUsageOverviewStats(context.Background(), db, time.Now()); err != nil {
+		_ = closeGormDB(db)
 		_ = logCloser.Close()
 		return nil, err
 	}
@@ -107,9 +121,12 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 	}, sessionManager)
 
 	return &App{
-		Config:            &cfg,
-		DB:                db,
-		Poller:            backgroundPoller,
+		Config: &cfg,
+		DB:     db,
+		Poller: backgroundPoller,
+		// Redis pull/process 分成两个后台 runner，避免远端拉取和本地 SQLite 处理互相等待。
+		RedisPull:         poller.NewRedisPullRunner(backgroundPoller),
+		RedisProcess:      poller.NewRedisProcessRunner(backgroundPoller),
 		Maintenance:       NewStorageCleanupRunner(syncService),
 		MetadataSync:      NewMetadataSyncRunner(syncService, cfg.MetadataSyncInterval),
 		BackupMaintenance: backupMaintenance,
@@ -169,10 +186,17 @@ func (a *App) Run() error {
 
 	ctx := a.startBackgroundContext()
 	defer a.stopBackgroundTasks()
-	if a.Poller != nil {
+	if a.RedisPull != nil {
 		a.startBackgroundTask(func() {
-			if err := a.Poller.Run(ctx); err != nil {
-				logrus.Errorf("poller stopped: %v", err)
+			if err := a.RedisPull.Run(ctx); err != nil {
+				logrus.Errorf("redis pull stopped: %v", err)
+			}
+		})
+	}
+	if a.RedisProcess != nil {
+		a.startBackgroundTask(func() {
+			if err := a.RedisProcess.Run(ctx); err != nil {
+				logrus.Errorf("redis process stopped: %v", err)
 			}
 		})
 	}
