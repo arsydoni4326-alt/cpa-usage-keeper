@@ -414,10 +414,10 @@ export const getTimeRangeOptions = (translate: Translate) =>
   }));
 
 const isTodayTimeRange = (value: UsageTimeRange): value is 'today' => value === 'today';
-const isFullDayHourlyTimeRange = (value: UsageTimeRange): value is 'today' | 'yesterday' => value === 'today' || value === 'yesterday';
+const isYesterdayTimeRange = (value: UsageTimeRange): value is 'yesterday' => value === 'yesterday';
 
 export const getOverviewHourWindowHours = ({ timeRange, filterWindow }: { timeRange: UsageTimeRange; filterWindow: UsageFilterWindow }) => {
-  if (isFullDayHourlyTimeRange(timeRange)) return 24;
+  if (isTodayTimeRange(timeRange) || isYesterdayTimeRange(timeRange)) return 24;
   if (timeRange !== 'custom') return Math.min(HOUR_WINDOW_BY_TIME_RANGE[timeRange], 24);
   if (filterWindow.windowMinutes === undefined) return 24;
   return Math.min(Math.max(Math.ceil(filterWindow.windowMinutes / 60), 1), 24);
@@ -436,6 +436,9 @@ const toTimestampMs = (value: string | undefined): number | undefined => {
 export const getOverviewChartEndMs = ({ timeRange, filterWindow, fallbackEndMs, resolvedRangeEndMs }: { timeRange: UsageTimeRange; filterWindow: UsageFilterWindow; fallbackEndMs: number; resolvedRangeEndMs?: number }) => {
   if (isTodayTimeRange(timeRange) && filterWindow.startMs !== undefined) {
     return filterWindow.startMs + 24 * 60 * 60 * 1000;
+  }
+  if (isYesterdayTimeRange(timeRange) && resolvedRangeEndMs !== undefined) {
+    return Math.ceil((resolvedRangeEndMs + 1) / (60 * 60 * 1000)) * 60 * 60 * 1000;
   }
   if (resolvedRangeEndMs !== undefined) return resolvedRangeEndMs;
   return filterWindow.endMs ?? fallbackEndMs;
@@ -723,7 +726,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     fallbackEndMs: lastRefreshedAt?.getTime() ?? Date.now(),
     resolvedRangeEndMs,
   });
-  const includeFinalHourBucket = isTodayTimeRange(timeRange);
+  const includeFinalHourBucket = isTodayTimeRange(timeRange) || isYesterdayTimeRange(timeRange);
   const preferredOverviewChartPeriod = getPreferredOverviewChartPeriod({
     windowMinutes: filterWindow.windowMinutes,
   });
@@ -1165,9 +1168,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
 
   const {
     requestsPeriod,
-    setRequestsPeriod,
     tokensPeriod,
-    setTokensPeriod,
     requestsChartData,
     tokensChartData,
     requestsChartOptions,
@@ -1452,36 +1453,6 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
 
                 <ServiceHealthCard usage={usage} loading={overviewDisplayLoading} />
 
-                <ChartLineSelector
-                  chartLines={chartLines}
-                  modelNames={overviewModelNames}
-                  maxLines={MAX_CHART_LINES}
-                  onChange={handleChartLinesChange}
-                />
-
-                <div className={styles.chartsGrid}>
-                  <UsageChart
-                    title={t('usage_stats.requests_trend')}
-                    period={requestsPeriod}
-                    onPeriodChange={setRequestsPeriod}
-                    chartData={requestsChartData}
-                    chartOptions={requestsChartOptions}
-                    loading={overviewDisplayLoading}
-                    isMobile={isMobile}
-                    emptyText={t('usage_stats.no_data')}
-                  />
-                  <UsageChart
-                    title={t('usage_stats.tokens_trend')}
-                    period={tokensPeriod}
-                    onPeriodChange={setTokensPeriod}
-                    chartData={tokensChartData}
-                    chartOptions={tokensChartOptions}
-                    loading={overviewDisplayLoading}
-                    isMobile={isMobile}
-                    emptyText={t('usage_stats.no_data')}
-                  />
-                </div>
-
                 <TokenBreakdownChart
                   usage={usage}
                   loading={overviewDisplayLoading}
@@ -1503,6 +1474,34 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                   includeFinalHourBucket={includeFinalHourBucket}
                   preferredPeriod={preferredOverviewChartPeriod}
                 />
+
+                <ChartLineSelector
+                  chartLines={chartLines}
+                  modelNames={overviewModelNames}
+                  maxLines={MAX_CHART_LINES}
+                  onChange={handleChartLinesChange}
+                />
+
+                <div className={styles.chartsGrid}>
+                  <UsageChart
+                    title={t('usage_stats.requests_trend')}
+                    period={requestsPeriod}
+                    chartData={requestsChartData}
+                    chartOptions={requestsChartOptions}
+                    loading={overviewDisplayLoading}
+                    isMobile={isMobile}
+                    emptyText={t('usage_stats.no_data')}
+                  />
+                  <UsageChart
+                    title={t('usage_stats.tokens_trend')}
+                    period={tokensPeriod}
+                    chartData={tokensChartData}
+                    chartOptions={tokensChartOptions}
+                    loading={overviewDisplayLoading}
+                    isMobile={isMobile}
+                    emptyText={t('usage_stats.no_data')}
+                  />
+                </div>
               </>
             )}
 

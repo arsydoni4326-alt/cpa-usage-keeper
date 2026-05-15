@@ -12,6 +12,9 @@ const apiClientSource = readFileSync(new URL('../lib/api.ts', import.meta.url), 
 const i18nSource = readFileSync(new URL('../i18n/index.ts', import.meta.url), 'utf8')
 const analysisPanelSource = readFileSync(new URL('../components/usage/analysis/AnalysisPanel.tsx', import.meta.url), 'utf8')
 const analysisPanelStyles = readFileSync(new URL('../components/usage/analysis/AnalysisPanel.module.scss', import.meta.url), 'utf8')
+const usageChartSource = readFileSync(new URL('../components/usage/UsageChart.tsx', import.meta.url), 'utf8')
+const tokenBreakdownChartSource = readFileSync(new URL('../components/usage/TokenBreakdownChart.tsx', import.meta.url), 'utf8')
+const costTrendChartSource = readFileSync(new URL('../components/usage/CostTrendChart.tsx', import.meta.url), 'utf8')
 
 describe('UsagePage toolbar styles', () => {
   it('keeps visible range controls content-sized in narrow layouts', () => {
@@ -237,8 +240,29 @@ describe('UsagePage toolbar styles', () => {
     expect(usagePageSource).toContain('onKeyDown={handleCustomDateInputKeyDown}')
   })
 
-  it('keeps chart line selects aligned with reusable pill controls', () => {
+  it('keeps Overview chart period controls hidden because period selection is automatic', () => {
+    expect(usageChartSource).not.toContain('className={styles.periodButtons}')
+    expect(tokenBreakdownChartSource).not.toContain('className={styles.periodButtons}')
+    expect(costTrendChartSource).not.toContain('className={styles.periodButtons}')
+  })
+
+  it('places Chart Line Selection and trend cards below Cost Trend on Overview', () => {
+    const serviceHealthIndex = usagePageSource.indexOf('<ServiceHealthCard')
+    const tokenBreakdownIndex = usagePageSource.indexOf('<TokenBreakdownChart')
+    const costTrendIndex = usagePageSource.indexOf('<CostTrendChart')
+    const chartLineSelectorIndex = usagePageSource.indexOf('<ChartLineSelector')
+    const chartsGridIndex = usagePageSource.indexOf('<div className={styles.chartsGrid}>')
+
+    expect(serviceHealthIndex).toBeGreaterThan(-1)
+    expect(tokenBreakdownIndex).toBeGreaterThan(serviceHealthIndex)
+    expect(costTrendIndex).toBeGreaterThan(tokenBreakdownIndex)
+    expect(chartLineSelectorIndex).toBeGreaterThan(costTrendIndex)
+    expect(chartsGridIndex).toBeGreaterThan(chartLineSelectorIndex)
+  })
+
+  it('keeps chart line controls aligned with reusable pill controls', () => {
     expect(chartLineSelectorSource).toContain('className={styles.usagePillControl}')
+    expect(chartLineSelectorSource).toContain('className={styles.usagePillAction}')
   })
 
   it('aligns Request Event Log pagination with credential pagination height', () => {

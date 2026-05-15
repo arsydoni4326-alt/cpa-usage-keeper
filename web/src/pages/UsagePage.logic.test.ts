@@ -404,7 +404,7 @@ describe('UsagePage Overview chart window', () => {
     })).toBe(Date.parse('2026-04-24T00:00:00.000Z'));
   });
 
-  it('uses Yesterday hourly chart buckets through the resolved range end', () => {
+  it('uses Yesterday hourly chart buckets through the next day boundary', () => {
     const filterWindow: UsageFilterWindow = {
       startMs: Date.parse('2026-04-23T00:00:00.000Z'),
       endMs: Date.parse('2026-04-23T23:59:59.999Z'),
@@ -418,7 +418,7 @@ describe('UsagePage Overview chart window', () => {
       filterWindow,
       fallbackEndMs: Date.parse('2026-04-24T12:34:56.000Z'),
       resolvedRangeEndMs,
-    })).toBe(resolvedRangeEndMs);
+    })).toBe(Date.parse('2026-04-24T00:00:00.000Z'));
   });
 });
 
