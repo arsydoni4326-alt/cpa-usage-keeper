@@ -55,6 +55,23 @@ describe('UsagePage toolbar styles', () => {
     expect(usagePageSource).toContain("const USAGE_TAB_OPTIONS = ['overview', 'analysis', 'events', 'credentials', 'settings'] as const")
   })
 
+  it('keeps mobile tab labels on one line without changing desktop tab sizing', () => {
+    const desktopTabPillBlock = usagePageStyles.slice(
+      usagePageStyles.indexOf('.tabPill {'),
+      usagePageStyles.indexOf('.tabPillActive')
+    )
+
+    expect(usagePageStyles).toContain('@include mobile {\n  .tabPill {\n    white-space: nowrap;\n  }\n')
+    expect(desktopTabPillBlock).not.toContain('white-space: nowrap;')
+  })
+
+  it('lets mobile API Key Settings content scroll inside the card instead of being clipped', () => {
+    expect(usagePageStyles).toMatch(/@include mobile\s*\{[\s\S]*?\.apiKeySettingsCard:global\(\.card\)\s*\{[\s\S]*?height:\s*auto;/)
+    expect(usagePageStyles).toMatch(/@include mobile\s*\{[\s\S]*?\.apiKeySettingsBody\s*\{[\s\S]*?height:\s*480px;/)
+    expect(usagePageStyles).toMatch(/@include mobile\s*\{[\s\S]*?\.apiKeySettingsBody\s*\{[\s\S]*?overflow-y:\s*auto;/)
+    expect(usagePageStyles).toMatch(/@include mobile\s*\{[\s\S]*?\.apiKeySettingsList\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\);/)
+  })
+
   it('keeps the Analysis chart presentation aligned with the reference design', () => {
     expect(analysisPanelSource).toContain("t('usage_stats.analysis_token_usage_title')")
     expect(analysisPanelSource).toContain("t('usage_stats.analysis_token_usage_subtitle')")

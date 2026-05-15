@@ -787,6 +787,10 @@
 }
 
 @include mobile {
+  .tabPill {
+    white-space: nowrap;
+  }
+
   .toolbarRow {
     gap: 10px;
   }
@@ -1742,6 +1746,24 @@
 }
 
 @include mobile {
+  .apiKeySettingsCard:global(.card) {
+    height: auto;
+    overflow: visible;
+  }
+
+  .apiKeySettingsBody {
+    height: 480px;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  .apiKeySettingsList {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .apiKeySettingsItem {
     padding: 12px;
     gap: 12px;
