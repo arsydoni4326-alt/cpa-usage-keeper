@@ -11,25 +11,11 @@ type Request struct {
 }
 
 func (r Request) MarshalJSON() ([]byte, error) {
-	type alias struct {
-		AuthIndex string            `json:"authIndex"`
-		Method    string            `json:"method"`
-		URL       string            `json:"url"`
-		Header    map[string]string `json:"header,omitempty"`
-		Data      any               `json:"data,omitempty"`
-	}
-	encoded := alias{
-		AuthIndex: r.AuthIndex,
-		Method:    r.Method,
-		URL:       r.URL,
-		Header:    r.Header,
-	}
+	type alias Request
+	encoded := alias(r)
 	if r.Data != nil {
-		switch data := r.Data.(type) {
-		case string:
-			encoded.Data = data
-		default:
-			dataBytes, err := json.Marshal(data)
+		if _, ok := r.Data.(string); !ok {
+			dataBytes, err := json.Marshal(r.Data)
 			if err != nil {
 				return nil, err
 			}
