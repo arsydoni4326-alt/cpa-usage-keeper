@@ -10,6 +10,35 @@ type Request struct {
 	Data      any               `json:"data,omitempty"`
 }
 
+func (r Request) MarshalJSON() ([]byte, error) {
+	type alias struct {
+		AuthIndex string            `json:"authIndex"`
+		Method    string            `json:"method"`
+		URL       string            `json:"url"`
+		Header    map[string]string `json:"header,omitempty"`
+		Data      any               `json:"data,omitempty"`
+	}
+	encoded := alias{
+		AuthIndex: r.AuthIndex,
+		Method:    r.Method,
+		URL:       r.URL,
+		Header:    r.Header,
+	}
+	if r.Data != nil {
+		switch data := r.Data.(type) {
+		case string:
+			encoded.Data = data
+		default:
+			dataBytes, err := json.Marshal(data)
+			if err != nil {
+				return nil, err
+			}
+			encoded.Data = string(dataBytes)
+		}
+	}
+	return json.Marshal(encoded)
+}
+
 type Response struct {
 	StatusCode int             `json:"statusCode"`
 	BodyText   string          `json:"bodyText"`
