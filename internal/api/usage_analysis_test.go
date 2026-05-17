@@ -30,6 +30,14 @@ func (s usageAnalysisAPIKeyStub) ListCPAAPIKeys(context.Context) ([]entities.CPA
 	return s.rows, s.err
 }
 
+func (s usageAnalysisAPIKeyStub) FindActiveCPAAPIKeyByValue(context.Context, string) (entities.CPAAPIKey, error) {
+	return entities.CPAAPIKey{}, service.ErrInvalidID
+}
+
+func (s usageAnalysisAPIKeyStub) FindActiveCPAAPIKeyByID(context.Context, int64) (entities.CPAAPIKey, error) {
+	return entities.CPAAPIKey{}, service.ErrInvalidID
+}
+
 func (s usageAnalysisAPIKeyStub) UpdateCPAAPIKeyAlias(context.Context, int64, string) (entities.CPAAPIKey, error) {
 	return entities.CPAAPIKey{}, service.ErrInvalidID
 }

@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
+	"strings"
 
 	"cpa-usage-keeper/internal/entities"
 	"cpa-usage-keeper/internal/repository"
@@ -14,6 +16,8 @@ var ErrInvalidID = errors.New("invalid id")
 
 type CPAAPIKeyProvider interface {
 	ListCPAAPIKeys(ctx context.Context) ([]entities.CPAAPIKey, error)
+	FindActiveCPAAPIKeyByValue(ctx context.Context, apiKey string) (entities.CPAAPIKey, error)
+	FindActiveCPAAPIKeyByID(ctx context.Context, id int64) (entities.CPAAPIKey, error)
 	UpdateCPAAPIKeyAlias(ctx context.Context, id int64, keyAlias string) (entities.CPAAPIKey, error)
 }
 
@@ -27,6 +31,30 @@ func NewCPAAPIKeyService(db *gorm.DB) CPAAPIKeyProvider {
 
 func (s *cpaAPIKeyService) ListCPAAPIKeys(context.Context) ([]entities.CPAAPIKey, error) {
 	return repository.ListActiveCPAAPIKeys(s.db)
+}
+
+func (s *cpaAPIKeyService) FindActiveCPAAPIKeyByValue(_ context.Context, apiKey string) (entities.CPAAPIKey, error) {
+	trimmed := strings.TrimSpace(apiKey)
+	if trimmed == "" {
+		return entities.CPAAPIKey{}, gorm.ErrRecordNotFound
+	}
+	rows, err := repository.ListActiveCPAAPIKeys(s.db)
+	if err != nil {
+		return entities.CPAAPIKey{}, err
+	}
+	for _, row := range rows {
+		if subtle.ConstantTimeCompare([]byte(row.APIKey), []byte(trimmed)) == 1 {
+			return row, nil
+		}
+	}
+	return entities.CPAAPIKey{}, gorm.ErrRecordNotFound
+}
+
+func (s *cpaAPIKeyService) FindActiveCPAAPIKeyByID(_ context.Context, id int64) (entities.CPAAPIKey, error) {
+	if id <= 0 {
+		return entities.CPAAPIKey{}, gorm.ErrRecordNotFound
+	}
+	return repository.FindActiveCPAAPIKeyByID(s.db, id)
 }
 
 func (s *cpaAPIKeyService) UpdateCPAAPIKeyAlias(_ context.Context, id int64, keyAlias string) (entities.CPAAPIKey, error) {
