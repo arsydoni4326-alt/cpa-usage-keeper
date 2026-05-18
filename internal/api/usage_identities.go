@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"cpa-usage-keeper/internal/entities"
+	"cpa-usage-keeper/internal/helper"
 	"cpa-usage-keeper/internal/redact"
 	"cpa-usage-keeper/internal/service"
 	"github.com/gin-gonic/gin"
@@ -164,7 +165,7 @@ func mapUsageIdentityResponse(item entities.UsageIdentity) usageIdentityResponse
 	return usageIdentityResponse{
 		ID:                         strconv.FormatInt(item.ID, 10),
 		Name:                       item.Name,
-		DisplayName:                usageIdentityDisplayName(item),
+		DisplayName:                helper.UsageIdentityDisplayName(item),
 		AuthType:                   item.AuthType,
 		AuthTypeName:               item.AuthTypeName,
 		Identity:                   identity,
