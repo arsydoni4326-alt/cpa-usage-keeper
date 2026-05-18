@@ -503,8 +503,12 @@ function Heatmap({ cells, apiKeys, models, loading }: { cells: AnalysisHeatmapCe
                             requests: formatCompactNumber(heatmapRequests),
                           })}
                         >
-                          <span className={styles.heatmapCellTokenValue}>T: {formatCompactNumber(heatmapTokens)}</span>
-                          <span className={styles.heatmapCellRequestValue}>R: {formatCompactNumber(heatmapRequests)}</span>
+                          <span className={styles.heatmapCellTokenValue}>
+                            {t('usage_stats.analysis_heatmap_tokens_prefix')}: {formatCompactNumber(heatmapTokens)}
+                          </span>
+                          <span className={styles.heatmapCellRequestValue}>
+                            {t('usage_stats.analysis_heatmap_requests_prefix')}: {formatCompactNumber(heatmapRequests)}
+                          </span>
                         </div>
                       );
                     })}
