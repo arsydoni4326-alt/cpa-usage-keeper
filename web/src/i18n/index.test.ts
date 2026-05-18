@@ -33,6 +33,12 @@ describe('i18n resources', () => {
     expect(i18n.getResource('zh-TW', 'translation', 'usage_stats.api_key_filter_all')).toBe('全部');
   });
 
+  it('keeps Analysis heatmap cell tooltips focused on model totals', () => {
+    expect(i18n.getResource('en', 'translation', 'usage_stats.analysis_heatmap_cell_title')).toBe('{{model}}: {{tokens}} Tokens, {{requests}} Requests');
+    expect(i18n.getResource('zh', 'translation', 'usage_stats.analysis_heatmap_cell_title')).toBe('{{model}}：{{tokens}} Token，{{requests}} 次请求');
+    expect(i18n.getResource('zh-TW', 'translation', 'usage_stats.analysis_heatmap_cell_title')).toBe('{{model}}：{{tokens}} Token，{{requests}} 次請求');
+  });
+
   it('uses natural Chinese and Traditional Chinese copy for API Key viewer text', () => {
     const zh = i18n.getResourceBundle('zh', 'translation');
     const zhTW = i18n.getResourceBundle('zh-TW', 'translation');

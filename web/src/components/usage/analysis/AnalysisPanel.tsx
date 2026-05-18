@@ -125,6 +125,19 @@ const getHeatmapCellGradient = (intensity: number) => {
   return `linear-gradient(180deg, rgb(${top.join(', ')}) 0%, rgb(${bottom.join(', ')}) 100%)`;
 };
 
+const getHeatmapCellTextColor = (intensity: number) => {
+  const clampedIntensity = Math.max(0, Math.min(1, intensity));
+  const color = interpolateColor([107, 71, 35], [48, 24, 16], clampedIntensity);
+  const opacity = 0.58 + clampedIntensity * 0.28;
+  return `rgba(${color.join(', ')}, ${opacity})`;
+};
+
+const getHeatmapVisualIntensity = (value: number, maxValue: number) => {
+  if (value <= 0 || maxValue <= 0) return 0;
+  const rawIntensity = value / maxValue;
+  return 0.05 + 0.95 * Math.pow(rawIntensity, 0.65);
+};
+
 const formatBucketLabel = (bucket: string, granularity: AnalysisResponse['granularity']) => {
   const date = new Date(bucket);
   if (Number.isNaN(date.getTime())) return bucket;
@@ -445,6 +458,7 @@ function CompositionDonutChart({ title, items, loading, isDark }: { title: strin
 function Heatmap({ cells, apiKeys, models, loading }: { cells: AnalysisHeatmapCell[]; apiKeys: string[]; models: string[]; loading: boolean }) {
   const { t } = useTranslation();
   const cellMap = useMemo(() => new Map(cells.map((cell) => [`${cell.api_key}\0${cell.model}`, cell])), [cells]);
+  const maxHeatmapTokens = useMemo(() => Math.max(0, ...cells.map((cell) => toNumber(cell.total_tokens))), [cells]);
   return (
     <section className={`${styles.analysisCard} ${styles.heatmapCard}`}>
       <div className={styles.cardHeader}>
@@ -475,19 +489,23 @@ function Heatmap({ cells, apiKeys, models, loading }: { cells: AnalysisHeatmapCe
                     </div>
                     {models.map((model) => {
                       const cell = cellMap.get(`${apiKey}\0${model}`);
-                      const intensity = Math.max(0, Math.min(1, toNumber(cell?.intensity)));
+                      const heatmapTokens = toNumber(cell?.total_tokens);
+                      const heatmapRequests = toNumber(cell?.requests);
+                      const intensity = getHeatmapVisualIntensity(heatmapTokens, maxHeatmapTokens);
                       return (
                         <div
                           key={`${apiKey}-${model}`}
                           className={styles.heatmapCell}
-                          style={{ background: getHeatmapCellGradient(intensity) } as CSSProperties}
+                          style={{ background: getHeatmapCellGradient(intensity), color: getHeatmapCellTextColor(intensity) } as CSSProperties}
                           title={t('usage_stats.analysis_heatmap_cell_title', {
-                            apiKey,
                             model,
-                            tokens: formatCompactNumber(toNumber(cell?.total_tokens)),
-                            requests: formatCompactNumber(toNumber(cell?.requests)),
+                            tokens: formatCompactNumber(heatmapTokens),
+                            requests: formatCompactNumber(heatmapRequests),
                           })}
-                        />
+                        >
+                          <span className={styles.heatmapCellTokenValue}>T: {formatCompactNumber(heatmapTokens)}</span>
+                          <span className={styles.heatmapCellRequestValue}>R: {formatCompactNumber(heatmapRequests)}</span>
+                        </div>
                       );
                     })}
                   </div>
