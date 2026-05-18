@@ -33,8 +33,8 @@ describe('i18n resources', () => {
 
     expect(zh.usage_stats.tab_analysis).toBe('分析');
     expect(zhTW.usage_stats.tab_analysis).toBe('分析');
-    expect(JSON.stringify(zh)).not.toMatch(/该 key|当前 key|完整 key|打开 Key 概览|API-Key/);
-    expect(JSON.stringify(zhTW)).not.toMatch(/該 key|目前 key|完整 key|開啟 Key 總覽|API-Key/);
+    expect(JSON.stringify(zh)).not.toMatch(/该 key|当前 key|完整 key|打开 Key 概览|API-Key|凭证的只读|当前凭证/);
+    expect(JSON.stringify(zhTW)).not.toMatch(/該 key|目前 key|完整 key|開啟 Key 總覽|API-Key|金鑰的唯讀|目前金鑰/);
   });
 
   it('keeps the login product title aligned across languages', () => {
