@@ -72,10 +72,14 @@ describe('UsagePage toolbar styles', () => {
     expect(desktopTabPillBlock).not.toContain('white-space: nowrap;')
   })
 
-  it('lets mobile API Key Settings content scroll inside the card instead of being clipped', () => {
+  it('lets API Key Settings content scroll inside the card instead of being clipped', () => {
+    expect(usagePageStyles).toMatch(/\.apiKeySettingsCard:global\(\.card\)\s*\{[\s\S]*?min-height:\s*auto;/)
+    expect(usagePageStyles).toMatch(/\.apiKeySettingsBody\s*\{[\s\S]*?flex:\s*1 1 auto;/)
+    expect(usagePageStyles).toMatch(/\.apiKeySettingsBody\s*\{[\s\S]*?min-height:\s*0;/)
+    expect(usagePageStyles).toMatch(/\.apiKeySettingsBody\s*\{[\s\S]*?overflow-y:\s*auto;/)
+    expect(usagePageStyles).toMatch(/\.apiKeySettingsBody\s*\{[\s\S]*?padding-right:\s*4px;/)
     expect(usagePageStyles).toMatch(/@include mobile\s*\{[\s\S]*?\.apiKeySettingsCard:global\(\.card\)\s*\{[\s\S]*?height:\s*auto;/)
     expect(usagePageStyles).toMatch(/@include mobile\s*\{[\s\S]*?\.apiKeySettingsBody\s*\{[\s\S]*?height:\s*480px;/)
-    expect(usagePageStyles).toMatch(/@include mobile\s*\{[\s\S]*?\.apiKeySettingsBody\s*\{[\s\S]*?overflow-y:\s*auto;/)
     expect(usagePageStyles).toMatch(/@include mobile\s*\{[\s\S]*?\.apiKeySettingsList\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\);/)
   })
 
@@ -152,7 +156,7 @@ describe('UsagePage toolbar styles', () => {
     expect(analysisPanelSource).not.toContain("'#b28b67'")
     expect(analysisPanelSource).not.toContain("'#7f756b'")
     expect(analysisPanelSource).toContain("import { Bar, Doughnut } from 'react-chartjs-2'")
-    expect(analysisPanelSource).toContain("import type { ChartData, ChartOptions, Plugin } from 'chart.js'")
+    expect(analysisPanelSource).toContain("import type { ChartData, ChartOptions, ExternalTooltipHandler, Plugin } from 'chart.js'")
     expect(analysisPanelSource).not.toContain("from 'recharts'")
     expect(analysisPanelSource).toContain('buildAnalysisTokenChartOptions')
     expect(analysisPanelSource).toContain('buildTokenLegendItems')
@@ -170,6 +174,12 @@ describe('UsagePage toolbar styles', () => {
     expect(analysisPanelSource).toMatch(/reasoning:\s*\{ base:\s*'#8b5cf6',\s*light:\s*'#d8b4fe' \}/)
     expect(analysisPanelSource).toContain('backgroundColor: (context) => toGradientFill(context, tokenColors.input)')
     expect(analysisPanelSource).toContain('backgroundColor: (context) => toGradientFill(context, CHART_COLORS[context.dataIndex % CHART_COLORS.length])')
+    expect(analysisPanelSource).toContain('const COMPOSITION_TOOLTIP_MAX_WIDTH = 400')
+    expect(analysisPanelSource).toContain('function createCompositionTooltipHandler(chartTheme: ChartTheme)')
+    expect(analysisPanelSource).toContain('external: createCompositionTooltipHandler(chartTheme)')
+    expect(analysisPanelSource).toContain('Math.min(COMPOSITION_TOOLTIP_MAX_WIDTH, viewportWidth - COMPOSITION_TOOLTIP_VIEWPORT_PADDING * 2)')
+    expect(analysisPanelSource).toContain('Math.max(COMPOSITION_TOOLTIP_VIEWPORT_PADDING, Math.min(rawLeft, viewportWidth - tooltipWidth - COMPOSITION_TOOLTIP_VIEWPORT_PADDING))')
+    expect(analysisPanelSource).toContain('overflowWrap = \'anywhere\'')
     expect(analysisPanelSource).toContain('<Bar data={chartData} options={chartOptions} plugins={[drawRequestsLineOnTopPlugin]} />')
     expect(analysisPanelSource).toContain('const drawRequestsLineOnTopPlugin')
     expect(analysisPanelSource).toContain('meta.type === \'line\'')
