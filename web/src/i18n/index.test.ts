@@ -27,6 +27,12 @@ describe('i18n resources', () => {
     expect(i18n.getResource('zh-TW', 'translation', 'usage_stats.analysis_ai_provider_composition_title')).toBe('AI 供應商組成');
   });
 
+  it('keeps the all option in the API Key filter generic across languages', () => {
+    expect(i18n.getResource('en', 'translation', 'usage_stats.api_key_filter_all')).toBe('All');
+    expect(i18n.getResource('zh', 'translation', 'usage_stats.api_key_filter_all')).toBe('全部');
+    expect(i18n.getResource('zh-TW', 'translation', 'usage_stats.api_key_filter_all')).toBe('全部');
+  });
+
   it('uses natural Chinese and Traditional Chinese copy for API Key viewer text', () => {
     const zh = i18n.getResourceBundle('zh', 'translation');
     const zhTW = i18n.getResourceBundle('zh-TW', 'translation');
