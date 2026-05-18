@@ -21,9 +21,9 @@ describe('i18n resources', () => {
   it('localizes Analysis tab and composition titles in Chinese', () => {
     expect(i18n.getResource('zh', 'translation', 'usage_stats.tab_analysis')).toBe('分析');
     expect(i18n.getResource('zh', 'translation', 'usage_stats.analysis_auth_files_composition_title')).toBe('认证文件构成');
-    expect(i18n.getResource('zh', 'translation', 'usage_stats.analysis_ai_provider_composition_title')).toBe('AI 提供商构成');
+    expect(i18n.getResource('zh', 'translation', 'usage_stats.analysis_ai_provider_composition_title')).toBe('AI 供应商构成');
     expect(i18n.getResource('zh-TW', 'translation', 'usage_stats.tab_analysis')).toBe('分析');
-    expect(i18n.getResource('zh-TW', 'translation', 'usage_stats.analysis_auth_files_composition_title')).toBe('認證文件組成');
-    expect(i18n.getResource('zh-TW', 'translation', 'usage_stats.analysis_ai_provider_composition_title')).toBe('AI 提供商組成');
+    expect(i18n.getResource('zh-TW', 'translation', 'usage_stats.analysis_auth_files_composition_title')).toBe('認證檔案組成');
+    expect(i18n.getResource('zh-TW', 'translation', 'usage_stats.analysis_ai_provider_composition_title')).toBe('AI 供應商組成');
   });
 });
