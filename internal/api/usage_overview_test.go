@@ -138,7 +138,12 @@ func TestKeyOverviewClearsInactiveViewerSession(t *testing.T) {
 	provider := &usageFilterStub{overview: &servicedto.UsageOverviewSnapshot{}}
 	keyProvider := &authCPAAPIKeyStub{findErr: context.Canceled}
 	config := AuthConfig{Enabled: true, LoginPassword: "secret", SessionTTL: time.Hour, BasePath: "/cpa"}
-	router := NewRouter(nil, nil, provider, nil, config, NewAuthHandler(config, sessions), "/cpa", OptionalProviders{CPAAPIKeys: keyProvider})
+	handler := NewAuthHandler(config, sessions)
+	router := NewRouter(nil, nil, provider, nil, config, handler, "/cpa", OptionalProviders{CPAAPIKeys: keyProvider})
+
+	if !handler.allowKeyOverviewRequest(token) {
+		t.Fatal("expected initial key overview request to be allowed")
+	}
 
 	resp := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/cpa/api/v1/key-overview?range=24h", nil)
@@ -150,6 +155,9 @@ func TestKeyOverviewClearsInactiveViewerSession(t *testing.T) {
 	}
 	if sessions.Validate(token) {
 		t.Fatal("expected inactive viewer session to be deleted")
+	}
+	if _, ok := handler.keyOverviewRequests[token]; ok {
+		t.Fatal("expected inactive key overview cleanup to clear rate limit entry")
 	}
 	cookies := resp.Result().Cookies()
 	if len(cookies) == 0 || cookies[0].Path != "/cpa" || cookies[0].MaxAge >= 0 {

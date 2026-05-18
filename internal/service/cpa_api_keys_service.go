@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/subtle"
 	"errors"
 	"strings"
 
@@ -38,16 +37,7 @@ func (s *cpaAPIKeyService) FindActiveCPAAPIKeyByValue(_ context.Context, apiKey 
 	if trimmed == "" {
 		return entities.CPAAPIKey{}, gorm.ErrRecordNotFound
 	}
-	rows, err := repository.ListActiveCPAAPIKeys(s.db)
-	if err != nil {
-		return entities.CPAAPIKey{}, err
-	}
-	for _, row := range rows {
-		if subtle.ConstantTimeCompare([]byte(row.APIKey), []byte(trimmed)) == 1 {
-			return row, nil
-		}
-	}
-	return entities.CPAAPIKey{}, gorm.ErrRecordNotFound
+	return repository.FindActiveCPAAPIKeyByValue(s.db, trimmed)
 }
 
 func (s *cpaAPIKeyService) FindActiveCPAAPIKeyByID(_ context.Context, id int64) (entities.CPAAPIKey, error) {

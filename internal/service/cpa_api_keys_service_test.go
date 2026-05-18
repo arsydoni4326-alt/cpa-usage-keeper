@@ -13,7 +13,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestFindActiveCPAAPIKeyByValueTrimsInputAndMatchesConstantTimeCandidate(t *testing.T) {
+func TestFindActiveCPAAPIKeyByValueTrimsInputAndQueriesActiveRow(t *testing.T) {
 	db, err := repository.OpenDatabase(config.Config{SQLitePath: filepath.Join(t.TempDir(), "api-keys-service.db")})
 	if err != nil {
 		t.Fatalf("OpenDatabase returned error: %v", err)

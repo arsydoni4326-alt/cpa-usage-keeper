@@ -96,6 +96,7 @@ func (h *authHandler) roleMiddleware(allowedRoles ...auth.Role) gin.HandlerFunc 
 		token, err := c.Cookie(sessionCookieName)
 		session, ok := h.sessions.Get(token)
 		if err != nil || !ok {
+			h.deleteSession(token)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 			return
 		}
@@ -135,6 +136,7 @@ func (h *authHandler) getSession(c *gin.Context) {
 	}
 	session, ok := h.sessions.Get(token)
 	if !ok {
+		h.deleteSession(token)
 		c.JSON(http.StatusOK, sessionResponse{Authenticated: false})
 		return
 	}
