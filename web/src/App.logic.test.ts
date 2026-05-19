@@ -22,4 +22,10 @@ describe('App role route normalization', () => {
     expect(appSource).toMatch(/const clearUsageStats = useUsageStatsStore\(\(state\) => state\.clearUsageStats\);/);
     expect(appSource).toMatch(/const clearSession = useCallback\(\(\) => \{[\s\S]*?clearUsageStats\(\);[\s\S]*?setAuthState\('unauthenticated'\);/);
   });
+
+  it('mounts the shared footer from the app shell', () => {
+    expect(appSource).toContain("import './App.css';");
+    expect(appSource).toContain("import { AppFooter } from './components/AppFooter';");
+    expect(appSource).toMatch(/<div className="app-frame">[\s\S]*<main className="app-main">\{page\}<\/main>[\s\S]*<AppFooter \/>[\s\S]*<\/div>/);
+  });
 });
