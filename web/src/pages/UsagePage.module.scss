@@ -1566,13 +1566,15 @@
   gap: 18px;
 }
 
+.settingsSections {
+  --settings-list-scroll-height: 480px;
+}
+
 // Pricing Section (80%比例)
 .pricingFixedCard {
-  @include mobile {
-    height: auto;
-    min-height: 0;
-    overflow: visible;
-  }
+  height: auto;
+  min-height: 0;
+  overflow: visible;
 }
 
 .pricingSection {
@@ -1645,14 +1647,17 @@
 }
 
 .apiKeySettingsCard:global(.card) {
+  height: auto;
   min-height: auto;
+  overflow: visible;
 }
 
 .apiKeySettingsBody {
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   flex-direction: column;
   gap: 12px;
+  height: var(--settings-list-scroll-height);
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
@@ -1764,7 +1769,7 @@
   }
 
   .apiKeySettingsBody {
-    height: 480px;
+    height: var(--settings-list-scroll-height);
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
@@ -1777,12 +1782,28 @@
   }
 
   .apiKeySettingsItem {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
     padding: 12px;
     gap: 12px;
   }
 
   .apiKeySettingsForm {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .apiKeyAliasField {
+    width: 100%;
+
+    :global(.form-group) {
+      width: 100%;
+      min-width: 0;
+      margin-bottom: 0;
+    }
+  }
+
+  .apiKeyAliasInput {
+    max-width: 100%;
   }
 
   .apiKeySettingsActions,
@@ -1810,17 +1831,12 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
+  height: var(--settings-list-scroll-height);
   min-height: 0;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-
-  .pricingFixedCard & {
-    @include mobile {
-      overflow: visible;
-    }
-  }
 }
 
 .priceItem {
