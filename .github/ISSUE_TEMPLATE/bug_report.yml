@@ -41,7 +41,7 @@ body:
     attributes:
       label: Environment
       description: Version and deployment details.
-      placeholder: |
+      value: |
         CPA Usage Keeper version:
         CPA version:
         Deployment: Docker Compose / Docker / binary / systemd / source
