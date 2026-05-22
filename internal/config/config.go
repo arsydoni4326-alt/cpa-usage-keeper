@@ -17,6 +17,7 @@ import (
 const (
 	DefaultTimeZone               = "Asia/Shanghai"
 	RedisQueueKeyDefault          = cpa.ManagementUsageQueueKey
+	RedisQueueBatchSizeDefault    = 10000
 	RedisQueueErrorBackoffDefault = 10 * time.Second
 	MetadataSyncIntervalDefault   = 30 * time.Second
 )
@@ -119,7 +120,7 @@ func Load(options LoadOptions) (*Config, error) {
 		return nil, err
 	}
 
-	redisQueueBatchSize, err := getInt("REDIS_QUEUE_BATCH_SIZE", 1000)
+	redisQueueBatchSize, err := getInt("REDIS_QUEUE_BATCH_SIZE", RedisQueueBatchSizeDefault)
 	if err != nil {
 		return nil, err
 	}

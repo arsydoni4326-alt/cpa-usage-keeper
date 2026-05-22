@@ -141,8 +141,8 @@ func TestLoadFromEnvAppliesDefaults(t *testing.T) {
 	if cfg.RedisQueueKey != RedisQueueKeyDefault {
 		t.Fatalf("expected default redis queue key queue, got %s", cfg.RedisQueueKey)
 	}
-	if cfg.RedisQueueBatchSize != 1000 {
-		t.Fatalf("expected default redis queue batch size 1000, got %d", cfg.RedisQueueBatchSize)
+	if cfg.RedisQueueBatchSize != 10000 {
+		t.Fatalf("expected default redis queue batch size 10000, got %d", cfg.RedisQueueBatchSize)
 	}
 	if cfg.RedisQueueIdleInterval != time.Second {
 		t.Fatalf("expected default redis queue idle interval 1s, got %s", cfg.RedisQueueIdleInterval)
