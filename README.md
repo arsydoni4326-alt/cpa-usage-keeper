@@ -101,19 +101,30 @@ CPA 文件放在 `./cpa`，CPA Usage Keeper 数据放在 `./keeper`。
 
 ### Docker（CPA 已在宿主机运行）
 
+复制配置模板并编辑，至少设置 `CPA_BASE_URL`、`CPA_MANAGEMENT_KEY`、`REDIS_QUEUE_ADDR`、`AUTH_ENABLED` 和 `LOGIN_PASSWORD`：
+
 ```bash
-# TZ 设置容器时区，日志时间会按该时区显示。
+cp .env.example .env
+vim .env
+```
+
+宿主机运行 CPA 时，`.env` 中通常需要这样设置：
+
+```env
+CPA_BASE_URL=http://host.docker.internal:8317
+CPA_MANAGEMENT_KEY=replace-with-your-management-key
+REDIS_QUEUE_ADDR=host.docker.internal:8317
+AUTH_ENABLED=true
+LOGIN_PASSWORD=replace-with-your-login-password
+```
+
+```bash
 docker run -d \
   --name cpa-usage-keeper \
   --add-host=host.docker.internal:host-gateway \
   -p 8080:8080 \
   -v "$(pwd)/keeper/data:/data" \
-  -e TZ=Asia/Shanghai \
-  -e CPA_BASE_URL=http://host.docker.internal:8317 \
-  -e CPA_MANAGEMENT_KEY=replace-with-your-management-key \
-  -e REDIS_QUEUE_ADDR=host.docker.internal:8317 \
-  -e AUTH_ENABLED=true \
-  -e LOGIN_PASSWORD=replace-with-your-login-password \
+  --env-file .env \
   ghcr.io/willxup/cpa-usage-keeper:latest
 ```
 

@@ -101,19 +101,30 @@ CPA files are stored under `./cpa`, and CPA Usage Keeper data is stored under `.
 
 ### Docker (CPA Already Runs On The Host)
 
+Copy and edit the example config. At minimum, set `CPA_BASE_URL`, `CPA_MANAGEMENT_KEY`, `REDIS_QUEUE_ADDR`, `AUTH_ENABLED`, and `LOGIN_PASSWORD`:
+
 ```bash
-# TZ sets the container timezone; log timestamps are displayed in this timezone.
+cp .env.example .env
+vim .env
+```
+
+When CPA runs on the host, `.env` usually needs these values:
+
+```env
+CPA_BASE_URL=http://host.docker.internal:8317
+CPA_MANAGEMENT_KEY=replace-with-your-management-key
+REDIS_QUEUE_ADDR=host.docker.internal:8317
+AUTH_ENABLED=true
+LOGIN_PASSWORD=replace-with-your-login-password
+```
+
+```bash
 docker run -d \
   --name cpa-usage-keeper \
   --add-host=host.docker.internal:host-gateway \
   -p 8080:8080 \
   -v "$(pwd)/keeper/data:/data" \
-  -e TZ=Asia/Shanghai \
-  -e CPA_BASE_URL=http://host.docker.internal:8317 \
-  -e CPA_MANAGEMENT_KEY=replace-with-your-management-key \
-  -e REDIS_QUEUE_ADDR=host.docker.internal:8317 \
-  -e AUTH_ENABLED=true \
-  -e LOGIN_PASSWORD=replace-with-your-login-password \
+  --env-file .env \
   ghcr.io/willxup/cpa-usage-keeper:latest
 ```
 
