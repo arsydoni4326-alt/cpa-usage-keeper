@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"cpa-usage-keeper/internal/config"
+	"cpa-usage-keeper/internal/cpa"
 	"cpa-usage-keeper/internal/entities"
 	"cpa-usage-keeper/internal/poller"
 	"cpa-usage-keeper/internal/repository"
@@ -15,7 +16,7 @@ import (
 
 func TestRedisInboxWriterSkipsEmptyMessages(t *testing.T) {
 	db := openPollerTestDB(t)
-	writer := poller.NewRedisInboxWriter(db, "queue")
+	writer := poller.NewRedisInboxWriter(db, cpa.ManagementUsageQueueKey)
 
 	inserted, err := writer.Insert(context.Background(), poller.RedisIngestSourceSubscribe, nil, time.Now())
 	if err != nil {
@@ -37,7 +38,7 @@ func TestRedisInboxWriterSkipsEmptyMessages(t *testing.T) {
 func TestRedisInboxWriterPersistsMessagesWithSource(t *testing.T) {
 	db := openPollerTestDB(t)
 	receivedAt := time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC)
-	writer := poller.NewRedisInboxWriter(db, "queue")
+	writer := poller.NewRedisInboxWriter(db, cpa.ManagementUsageQueueKey)
 
 	inserted, err := writer.Insert(context.Background(), poller.RedisIngestSourceSubscribe, []string{`{"request_id":"one"}`}, receivedAt)
 	if err != nil {
@@ -54,8 +55,8 @@ func TestRedisInboxWriterPersistsMessagesWithSource(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("expected one redis inbox row, got %d", len(rows))
 	}
-	if rows[0].QueueKey != "queue" {
-		t.Fatalf("expected queue key %q, got %q", "queue", rows[0].QueueKey)
+	if rows[0].QueueKey != cpa.ManagementUsageQueueKey {
+		t.Fatalf("expected queue key %q, got %q", cpa.ManagementUsageQueueKey, rows[0].QueueKey)
 	}
 	if rows[0].RawMessage != `{"request_id":"one"}` {
 		t.Fatalf("unexpected raw message %q", rows[0].RawMessage)

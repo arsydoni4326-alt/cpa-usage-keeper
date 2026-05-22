@@ -24,11 +24,11 @@ import (
 func TestRedisQueueClientPopsBatch(t *testing.T) {
 	server := newRedisQueueTestServer(t, func(t *testing.T, conn net.Conn) {
 		reader := bufio.NewReader(conn)
-		if got := readRESPCommand(t, reader); strings.Join(got, " ") != cpaManagementRedisAuthCommand+" secret" {
+		if got := readRESPCommand(t, reader); strings.Join(got, " ") != ManagementRedisAuthCommand+" secret" {
 			t.Fatalf("unexpected auth command: %v", got)
 		}
 		fmt.Fprint(conn, "+OK\r\n")
-		if got := readRESPCommand(t, reader); strings.Join(got, " ") != cpaManagementRedisPopCommand+" "+ManagementUsageQueueKey+" 2" {
+		if got := readRESPCommand(t, reader); strings.Join(got, " ") != ManagementRedisPopCommand+" "+ManagementUsageQueueKey+" 2" {
 			t.Fatalf("unexpected pop command: %v", got)
 		}
 		fmt.Fprint(conn, "*2\r\n$7\r\n{\"a\":1}\r\n$7\r\n{\"b\":2}\r\n")

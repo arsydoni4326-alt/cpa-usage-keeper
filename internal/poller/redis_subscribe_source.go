@@ -119,7 +119,7 @@ func (s *RedisSubscribeSource) Subscribe(ctx context.Context) (UsageSubscription
 	// RESP 读取需要缓冲 reader，后续 subscription 也复用同一个 reader。
 	reader := bufio.NewReader(conn)
 	// Redis subscribe 连接必须先 AUTH，密码就是 CPA_MANAGEMENT_KEY。
-	if err := writeRedisIngestRESPCommand(conn, "AUTH", s.managementKey); err != nil {
+	if err := writeRedisIngestRESPCommand(conn, cpa.ManagementRedisAuthCommand, s.managementKey); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("write redis subscribe auth command: %w", err)
 	}
@@ -135,7 +135,7 @@ func (s *RedisSubscribeSource) Subscribe(ctx context.Context) (UsageSubscription
 		return nil, fmt.Errorf("%w: %s", cpa.ErrRedisQueueAuth, authResponse.err)
 	}
 	// AUTH 成功后订阅 usage channel。
-	if err := writeRedisIngestRESPCommand(conn, "SUBSCRIBE", redisSubscribeChannel); err != nil {
+	if err := writeRedisIngestRESPCommand(conn, cpa.ManagementRedisSubscribeCommand, cpa.ManagementUsageSubscribeChannel); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("write redis subscribe command: %w", err)
 	}
@@ -247,7 +247,7 @@ func redisIngestSubscribeAck(value redisIngestRESPValue) bool {
 	// 第 2 项必须是 usage channel。
 	channel := value.array[1].stringValue()
 	// 只验证我们关心的 channel，订阅数量不影响后续逻辑。
-	return kind == "subscribe" && channel == redisSubscribeChannel
+	return kind == "subscribe" && channel == cpa.ManagementUsageSubscribeChannel
 }
 
 func redisIngestSubscriptionMessage(value redisIngestRESPValue) (string, bool) {
@@ -259,7 +259,7 @@ func redisIngestSubscriptionMessage(value redisIngestRESPValue) (string, bool) {
 	kind := strings.ToLower(value.array[0].stringValue())
 	// 第 2 项必须是 usage channel。
 	channel := value.array[1].stringValue()
-	if kind != "message" || channel != redisSubscribeChannel {
+	if kind != "message" || channel != cpa.ManagementUsageSubscribeChannel {
 		// 其他 channel 或事件类型直接忽略。
 		return "", false
 	}

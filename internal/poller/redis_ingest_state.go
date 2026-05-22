@@ -1,6 +1,10 @@
 package poller
 
-import "time"
+import (
+	"time"
+
+	"cpa-usage-keeper/internal/cpa"
+)
 
 // RedisIngestSyncMode 表示启动探测后固定下来的长期远端拉取模式。
 type RedisIngestSyncMode string
@@ -38,15 +42,12 @@ const (
 
 const (
 	// RedisIngestSourceSubscribe 是订阅消息来源标签，只用于状态/测试，不写入 queue_key。
-	RedisIngestSourceSubscribe = "redis_subscribe:usage"
+	RedisIngestSourceSubscribe = "redis_subscribe:" + cpa.ManagementUsageSubscribeChannel
 	// RedisIngestSourceRedisPull 是旧 Redis queue 拉取来源标签，只用于状态/测试。
-	RedisIngestSourceRedisPull = "redis_pull:queue"
+	RedisIngestSourceRedisPull = "redis_pull:" + cpa.ManagementUsageQueueKey
 	// RedisIngestSourceHTTPPull 是 HTTP usage queue 拉取来源标签，只用于状态/测试。
 	RedisIngestSourceHTTPPull = "http_pull:usage_queue"
 )
-
-// redisSubscribeChannel 是新版 CPA 推送 usage 消息的固定 Redis channel。
-const redisSubscribeChannel = "usage"
 
 // redisIngestRecoveryRetryInterval 控制 subscribe/Redis 恢复探测间隔。
 const redisIngestRecoveryRetryInterval = 30 * time.Second

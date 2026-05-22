@@ -10,17 +10,18 @@ import (
 	"testing"
 	"time"
 
+	"cpa-usage-keeper/internal/cpa"
 	"cpa-usage-keeper/internal/poller"
 )
 
 func TestRedisSubscribeSourceRejectsSubscribeError(t *testing.T) {
 	server := newRESPServer(t, func(t *testing.T, conn net.Conn) {
 		reader := bufio.NewReader(conn)
-		if got := readRESPCommandForPollerTest(t, reader); strings.Join(got, " ") != "AUTH secret" {
+		if got := readRESPCommandForPollerTest(t, reader); strings.Join(got, " ") != cpa.ManagementRedisAuthCommand+" secret" {
 			t.Fatalf("unexpected auth command: %v", got)
 		}
 		fmt.Fprint(conn, "+OK\r\n")
-		if got := readRESPCommandForPollerTest(t, reader); strings.Join(got, " ") != "SUBSCRIBE usage" {
+		if got := readRESPCommandForPollerTest(t, reader); strings.Join(got, " ") != cpa.ManagementRedisSubscribeCommand+" "+cpa.ManagementUsageSubscribeChannel {
 			t.Fatalf("unexpected subscribe command: %v", got)
 		}
 		fmt.Fprint(conn, "-ERR subscribe disabled\r\n")
@@ -41,7 +42,7 @@ func TestRedisSubscriptionReceiveHonorsContextCancel(t *testing.T) {
 		readRESPCommandForPollerTest(t, reader)
 		fmt.Fprint(conn, "+OK\r\n")
 		readRESPCommandForPollerTest(t, reader)
-		fmt.Fprint(conn, "*3\r\n$9\r\nsubscribe\r\n$5\r\nusage\r\n:1\r\n")
+		fmt.Fprint(conn, redisSubscribeAckForPollerTest())
 		<-done
 	})
 
@@ -78,7 +79,7 @@ func TestRedisSubscriptionReceiveHonorsDeadlineContextCancel(t *testing.T) {
 		readRESPCommandForPollerTest(t, reader)
 		fmt.Fprint(conn, "+OK\r\n")
 		readRESPCommandForPollerTest(t, reader)
-		fmt.Fprint(conn, "*3\r\n$9\r\nsubscribe\r\n$5\r\nusage\r\n:1\r\n")
+		fmt.Fprint(conn, redisSubscribeAckForPollerTest())
 		<-done
 	})
 
@@ -115,8 +116,8 @@ func TestRedisSubscriptionReceiveHonorsContextDeadline(t *testing.T) {
 		readRESPCommandForPollerTest(t, reader)
 		fmt.Fprint(conn, "+OK\r\n")
 		readRESPCommandForPollerTest(t, reader)
-		fmt.Fprint(conn, "*3\r\n$9\r\nsubscribe\r\n$5\r\nusage\r\n:1\r\n")
-		fmt.Fprint(conn, "*3\r\n$7\r\nmessage\r\n$5\r\nusage\r\n$18\r\n{\"request_id\":\"x\"}\r\n")
+		fmt.Fprint(conn, redisSubscribeAckForPollerTest())
+		fmt.Fprint(conn, redisMessageForPollerTest(`{"request_id":"x"}`))
 		<-done
 	})
 
@@ -171,6 +172,16 @@ func newRESPServer(t *testing.T, handler func(*testing.T, net.Conn)) respTestSer
 	}()
 	t.Cleanup(func() { <-accepted })
 	return server
+}
+
+func redisSubscribeAckForPollerTest() string {
+	channel := cpa.ManagementUsageSubscribeChannel
+	return fmt.Sprintf("*3\r\n$9\r\nsubscribe\r\n$%d\r\n%s\r\n:1\r\n", len(channel), channel)
+}
+
+func redisMessageForPollerTest(payload string) string {
+	channel := cpa.ManagementUsageSubscribeChannel
+	return fmt.Sprintf("*3\r\n$7\r\nmessage\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n", len(channel), channel, len(payload), payload)
 }
 
 func readRESPCommandForPollerTest(t *testing.T, reader *bufio.Reader) []string {

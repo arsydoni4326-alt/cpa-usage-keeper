@@ -93,7 +93,7 @@ func (c *RedisQueueClient) popUsageOverRedis(ctx context.Context) ([]string, err
 	}
 	defer conn.Close()
 
-	if err := writeRESPCommand(conn, cpaManagementRedisPopCommand, c.queueKey, strconv.Itoa(c.batchSize)); err != nil {
+	if err := writeRESPCommand(conn, ManagementRedisPopCommand, c.queueKey, strconv.Itoa(c.batchSize)); err != nil {
 		return nil, fmt.Errorf("write redis queue pop command: %w", err)
 	}
 	popResponse, err := readRESPValueWithLimits(reader, c.batchSize)
@@ -126,7 +126,7 @@ func (c *RedisQueueClient) openAuthenticatedConnection(ctx context.Context) (net
 	}
 
 	reader := bufio.NewReader(conn)
-	if err := writeRESPCommand(conn, cpaManagementRedisAuthCommand, c.managementKey); err != nil {
+	if err := writeRESPCommand(conn, ManagementRedisAuthCommand, c.managementKey); err != nil {
 		conn.Close()
 		return nil, nil, fmt.Errorf("write redis queue auth command: %w", err)
 	}
