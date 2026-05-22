@@ -508,7 +508,7 @@ func TestLoadFromEnvRejectsNonPositiveRedisQueueIdleInterval(t *testing.T) {
 	}
 }
 
-func TestLoadFromEnvIgnoresRemovedRedisDrainEnvOverrides(t *testing.T) {
+func TestLoadFromEnvIgnoresRemovedRedisPollerEnvOverrides(t *testing.T) {
 	t.Setenv("CPA_BASE_URL", "http://127.0.0.1:"+cpa.ManagementRedisDefaultPort)
 	t.Setenv("CPA_MANAGEMENT_KEY", "secret")
 	t.Setenv("REDIS_QUEUE_ERROR_BACKOFF", "20s")
