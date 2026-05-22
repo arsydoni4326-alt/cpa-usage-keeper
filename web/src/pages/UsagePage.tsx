@@ -116,7 +116,9 @@ const REQUEST_EVENTS_DEFAULT_PAGE_SIZE = 100;
 const ALL_REQUEST_EVENTS_FILTER = '__all__';
 const OVERVIEW_AUTO_REFRESH_INTERVAL_MS = 10_000;
 const CPA_MANAGEMENT_PAGE = 'management.html';
-const ABSOLUTE_HTTP_URL_PATTERN = /^[a-z][a-z\d+.-]*:\/\//i;
+const ABSOLUTE_HTTP_URL_PATTERN = /^https?:\/\//i;
+const EXPLICIT_URL_SCHEME_PATTERN = /^[a-z][a-z\d+.-]*:/i;
+const BARE_HOST_WITH_PORT_PATTERN = /^[a-z0-9.-]+:\d+(?:[/?#]|$)/i;
 
 export const shouldShowRangeControls = (tab: UsageTab) => tab !== 'settings' && tab !== 'credentials';
 
@@ -139,6 +141,9 @@ const prepareCPAPublicURL = (rawURL: string, currentOrigin: string) => {
   if (!trimmed) return '';
   if (ABSOLUTE_HTTP_URL_PATTERN.test(trimmed) || trimmed.startsWith('//') || trimmed.startsWith('/')) {
     return trimmed;
+  }
+  if (EXPLICIT_URL_SCHEME_PATTERN.test(trimmed) && !BARE_HOST_WITH_PORT_PATTERN.test(trimmed)) {
+    return '';
   }
   return `${getProtocolForBareHost(currentOrigin)}//${trimmed}`;
 };
