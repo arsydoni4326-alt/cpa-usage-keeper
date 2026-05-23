@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import antigravityIcon from '@/assets/icons/antigravity.svg'
 import claudeIcon from '@/assets/icons/claude.svg'
@@ -24,7 +25,7 @@ const providerIconUrls: Partial<Record<CredentialProviderFilterKey, string>> = {
 
 export function CredentialProviderFilterBar({ rows, value, onChange }: CredentialProviderFilterBarProps) {
   const { t } = useTranslation()
-  const counts = buildCredentialProviderFilterCounts(rows)
+  const counts = useMemo(() => buildCredentialProviderFilterCounts(rows), [rows])
 
   return (
     <div className={styles.credentialProviderFilterBar} role="toolbar" aria-label={t('usage_stats.credentials_filter_aria_label')}>

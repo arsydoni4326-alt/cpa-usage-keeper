@@ -32,6 +32,13 @@ export function normalizeCredentialProviderToken(value: string | undefined): str
   return (value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
+const NORMALIZED_PROVIDER_ALIASES = (Object.entries(PROVIDER_ALIASES) as Array<[Exclude<CredentialProviderFilterKey, 'all'>, string[]]>).map(
+  ([key, aliases]) => ({
+    key,
+    normalizedAliases: aliases.map(normalizeCredentialProviderToken),
+  }),
+)
+
 export function resolveCredentialProviderKey(row: CredentialProviderRowLike): CredentialProviderFilterKey | null {
   const tokens = [
     row.identity.type,
@@ -40,8 +47,7 @@ export function resolveCredentialProviderKey(row: CredentialProviderRowLike): Cr
     row.identity.displayName,
   ].map(normalizeCredentialProviderToken).filter(Boolean)
 
-  for (const [key, aliases] of Object.entries(PROVIDER_ALIASES) as Array<[Exclude<CredentialProviderFilterKey, 'all'>, string[]]>) {
-    const normalizedAliases = aliases.map(normalizeCredentialProviderToken)
+  for (const { key, normalizedAliases } of NORMALIZED_PROVIDER_ALIASES) {
     if (tokens.some((token) => normalizedAliases.some((alias) => token === alias || token.includes(alias)))) {
       return key
     }
