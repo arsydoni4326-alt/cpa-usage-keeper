@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import antigravityIcon from '@/assets/icons/antigravity.svg'
 import claudeIcon from '@/assets/icons/claude.svg'
@@ -26,10 +26,24 @@ const providerIconUrls: Partial<Record<CredentialProviderFilterKey, string>> = {
 export function CredentialProviderFilterBar({ rows, value, onChange }: CredentialProviderFilterBarProps) {
   const { t } = useTranslation()
   const counts = useMemo(() => buildCredentialProviderFilterCounts(rows), [rows])
+  const visibleOptions = useMemo(
+    () => CREDENTIAL_PROVIDER_FILTER_OPTIONS.filter((option) => counts[option.key] > 0),
+    [counts],
+  )
+
+  useEffect(() => {
+    if (value !== 'all' && counts[value] === 0) {
+      onChange('all')
+    }
+  }, [counts, onChange, value])
+
+  if (visibleOptions.length === 0) {
+    return null
+  }
 
   return (
     <div className={styles.credentialProviderFilterBar} role="toolbar" aria-label={t('usage_stats.credentials_filter_aria_label')}>
-      {CREDENTIAL_PROVIDER_FILTER_OPTIONS.map((option) => {
+      {visibleOptions.map((option) => {
         const selected = value === option.key
         return (
           <button
