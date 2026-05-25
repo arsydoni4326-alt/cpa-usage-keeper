@@ -69,6 +69,8 @@ type Config struct {
 	MetadataSyncInterval time.Duration
 	// QuotaRefreshWorkerLimit 是 Auth Files 限额刷新队列的最大并发数。
 	QuotaRefreshWorkerLimit int
+	// QuotaAutoRefreshEnabled 控制是否启动 Auth Files 限额自动刷新后台任务。
+	QuotaAutoRefreshEnabled bool
 	// QuotaAutoRefreshInterval 是 Auth Files 限额自动刷新的固定调度间隔。
 	QuotaAutoRefreshInterval time.Duration
 	// WorkDir 是应用工作目录，数据库、日志和备份默认从这里派生。
@@ -156,6 +158,11 @@ func Load(options LoadOptions) (*Config, error) {
 	}
 	if quotaRefreshWorkerLimit > QuotaRefreshWorkerLimitMax {
 		return nil, fmt.Errorf("QUOTA_REFRESH_WORKER_LIMIT must be <= %d", QuotaRefreshWorkerLimitMax)
+	}
+
+	quotaAutoRefreshEnabled, err := getBool("QUOTA_AUTO_REFRESH_ENABLED", false)
+	if err != nil {
+		return nil, err
 	}
 
 	quotaAutoRefreshInterval, err := getDuration("QUOTA_AUTO_REFRESH_INTERVAL", QuotaAutoRefreshIntervalDefault)
@@ -255,6 +262,7 @@ func Load(options LoadOptions) (*Config, error) {
 		RedisQueueErrorBackoff:   RedisQueueErrorBackoffDefault,
 		MetadataSyncInterval:     MetadataSyncIntervalDefault,
 		QuotaRefreshWorkerLimit:  quotaRefreshWorkerLimit,
+		QuotaAutoRefreshEnabled:  quotaAutoRefreshEnabled,
 		QuotaAutoRefreshInterval: quotaAutoRefreshInterval,
 		WorkDir:                  workDir,
 		SQLitePath:               filepath.Join(workDir, workDirDatabaseName),

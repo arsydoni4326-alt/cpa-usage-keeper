@@ -38,6 +38,30 @@ func TestAppCloseClosesDatabase(t *testing.T) {
 	}
 }
 
+func TestNewWithConfigSkipsQuotaAutoRefreshByDefault(t *testing.T) {
+	app, err := NewWithConfig(testAppConfig(t))
+	if err != nil {
+		t.Fatalf("NewWithConfig returned error: %v", err)
+	}
+	defer app.Close()
+	if app.QuotaAutoRefresh != nil {
+		t.Fatal("expected quota auto refresh runner to be skipped by default")
+	}
+}
+
+func TestNewWithConfigBuildsQuotaAutoRefreshWhenEnabled(t *testing.T) {
+	cfg := testAppConfig(t)
+	cfg.QuotaAutoRefreshEnabled = true
+	app, err := NewWithConfig(cfg)
+	if err != nil {
+		t.Fatalf("NewWithConfig returned error: %v", err)
+	}
+	defer app.Close()
+	if app.QuotaAutoRefresh == nil {
+		t.Fatal("expected quota auto refresh runner when enabled")
+	}
+}
+
 func TestNewWithConfigBuildsRedisIngestAndRouter(t *testing.T) {
 	app, err := NewWithConfig(testAppConfig(t))
 	if err != nil {

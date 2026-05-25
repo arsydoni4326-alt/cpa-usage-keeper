@@ -154,7 +154,7 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 		RedisProcess:      redisProcessRunner,
 		Maintenance:       NewStorageCleanupRunner(syncService),
 		MetadataSync:      NewMetadataSyncRunner(syncService, cfg.MetadataSyncInterval),
-		QuotaAutoRefresh:  quotaService,
+		QuotaAutoRefresh:  quotaAutoRefreshService(cfg, quotaService),
 		BackupMaintenance: backupMaintenance,
 		LogCloser:         logCloser,
 		Router: api.NewRouter(
@@ -178,6 +178,13 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 			},
 		),
 	}, nil
+}
+
+func quotaAutoRefreshService(cfg config.Config, service *quota.Service) *quota.Service {
+	if !cfg.QuotaAutoRefreshEnabled {
+		return nil
+	}
+	return service
 }
 
 func closeGormDB(db *gorm.DB) error {
