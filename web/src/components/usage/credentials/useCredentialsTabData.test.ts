@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { quotaRefreshDisplayError } from './useCredentialsTabData'
+import { CREDENTIAL_PAGES_REFRESH_INTERVAL_MS } from './useCredentialPages'
+import { QUOTA_CACHE_REFRESH_INTERVAL_MS } from './useQuotaCache'
+
+describe('Credentials polling intervals', () => {
+  it('keeps list data on a 5 minute refresh interval', () => {
+    expect(CREDENTIAL_PAGES_REFRESH_INTERVAL_MS).toBe(5 * 60 * 1000)
+  })
+
+  it('keeps quota cache on a 1 minute refresh interval', () => {
+    expect(QUOTA_CACHE_REFRESH_INTERVAL_MS).toBe(60 * 1000)
+  })
+})
 
 describe('quotaRefreshDisplayError', () => {
   it('turns refresh rejection codes into friendly messages', () => {
