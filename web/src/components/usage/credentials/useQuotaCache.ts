@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { ApiError, fetchUsageQuotaCache } from '@/lib/api'
 import type { UsageQuotaRow } from '@/lib/types'
+import { quotaRefreshDisplayError, type QuotaState } from './useQuotaRefreshTasks'
 
 interface UseQuotaCacheOptions {
   enabled: boolean
@@ -10,11 +11,13 @@ interface UseQuotaCacheOptions {
 
 export interface QuotaCacheState {
   quotaByAuthIndex: Record<string, UsageQuotaRow[]>
+  cachedQuotaStateByAuthIndex: Record<string, QuotaState>
   setQuotaByAuthIndex: Dispatch<SetStateAction<Record<string, UsageQuotaRow[]>>>
 }
 
 export function useQuotaCache({ enabled, authIndexes, onAuthRequired }: UseQuotaCacheOptions): QuotaCacheState {
   const [quotaByAuthIndex, setQuotaByAuthIndex] = useState<Record<string, UsageQuotaRow[]>>({})
+  const [cachedQuotaStateByAuthIndex, setCachedQuotaStateByAuthIndex] = useState<Record<string, QuotaState>>({})
   const requestControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -35,14 +38,17 @@ export function useQuotaCache({ enabled, authIndexes, onAuthRequired }: UseQuota
       if (controller.signal.aborted || requestControllerRef.current !== controller) {
         return
       }
+      const returnedAuthIndexes = new Set(response.items.map((item) => item.auth_index))
       setQuotaByAuthIndex((current) => {
         let changed = false
         const next = { ...current }
-        const returnedAuthIndexes = new Set(response.items.map((item) => item.id))
-        // 返回的数据写入本地缓存，未返回的条目保持未知状态，不显示假限额。
+        // cache 接口现在同时返回成功 quota 和可恢复错误；只有 completed 才写入 quota 数据。
         for (const item of response.items) {
-          if (next[item.id] !== item.quota) {
-            next[item.id] = item.quota ?? []
+          if (item.status !== 'completed' || !item.quota) {
+            continue
+          }
+          if (next[item.auth_index] !== item.quota.quota) {
+            next[item.auth_index] = item.quota.quota ?? []
             changed = true
           }
         }
@@ -53,6 +59,20 @@ export function useQuotaCache({ enabled, authIndexes, onAuthRequired }: UseQuota
           }
         }
         return changed ? next : current
+      })
+      setCachedQuotaStateByAuthIndex(() => {
+        const next: Record<string, QuotaState> = {}
+        // failed 缓存项只来自后端配置允许恢复展示的 HTTP 错误，刷新页面后要恢复到行错误状态。
+        for (const item of response.items) {
+          if (item.status !== 'failed') {
+            continue
+          }
+          next[item.auth_index] = {
+            refreshStatus: 'failed',
+            error: quotaRefreshDisplayError(item.error),
+          }
+        }
+        return next
       })
     }).catch((nextError) => {
       if (controller.signal.aborted) {
@@ -72,5 +92,5 @@ export function useQuotaCache({ enabled, authIndexes, onAuthRequired }: UseQuota
     }
   }, [enabled, onAuthRequired, authIndexes])
 
-  return { quotaByAuthIndex, setQuotaByAuthIndex }
+  return { quotaByAuthIndex, cachedQuotaStateByAuthIndex, setQuotaByAuthIndex }
 }

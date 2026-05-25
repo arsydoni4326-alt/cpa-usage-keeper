@@ -255,6 +255,8 @@ export interface UsageQuotaRow {
   window?: UsageQuotaWindow
   resetAt?: string
   resetAfterSeconds?: number
+  window_usage_tokens?: number
+  window_usage_cost?: number
 }
 
 export interface UsageQuotaCheckResponse {
@@ -262,12 +264,21 @@ export interface UsageQuotaCheckResponse {
   quota: UsageQuotaRow[]
 }
 
+export interface UsageQuotaCacheItem {
+  auth_index: string
+  status: 'completed' | 'failed'
+  quota?: UsageQuotaCheckResponse
+  error?: string
+  http_status_code?: number
+  expires_at?: string
+  updated_at: string
+}
+
 export interface UsageQuotaCacheResponse {
-  items: UsageQuotaCheckResponse[]
+  items: UsageQuotaCacheItem[]
 }
 
 export interface UsageQuotaRefreshTaskResponse {
-  taskId: string
   authIndex: string
   status: 'queued' | 'running' | 'completed' | 'failed'
   quota?: UsageQuotaCheckResponse
@@ -276,9 +287,8 @@ export interface UsageQuotaRefreshTaskResponse {
   expiresAt?: string
 }
 
-export interface UsageQuotaRefreshTaskID {
+export interface UsageQuotaRefreshTaskRef {
   authIndex: string
-  taskId: string
 }
 
 export interface UsageQuotaRefreshRejectedAuthIndex {
@@ -287,7 +297,7 @@ export interface UsageQuotaRefreshRejectedAuthIndex {
 }
 
 export interface UsageQuotaRefreshResponse {
-  tasks: UsageQuotaRefreshTaskID[]
+  tasks: UsageQuotaRefreshTaskRef[]
   rejected: UsageQuotaRefreshRejectedAuthIndex[]
   accepted: number
   skipped: number

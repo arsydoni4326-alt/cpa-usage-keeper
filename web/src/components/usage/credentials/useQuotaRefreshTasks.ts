@@ -5,13 +5,11 @@ import type { UsageQuotaRow } from '@/lib/types'
 export interface QuotaState {
   loading?: boolean
   error?: string
-  refreshTaskId?: string
   refreshStatus?: 'queued' | 'running' | 'completed' | 'failed'
 }
 
 interface PendingRefreshTask {
   authIndex: string
-  taskId: string
   source: 'batch' | 'row'
 }
 
@@ -56,12 +54,11 @@ export function useQuotaRefreshTasks({ enabled, currentAuthIndexes, setQuotaByAu
 
       await Promise.all(pendingRefreshTasks.map(async (task) => {
         try {
-          const response = await fetchUsageQuotaRefreshTask(task.taskId, controller.signal)
+          const response = await fetchUsageQuotaRefreshTask(task.authIndex, controller.signal)
           if (cancelled) {
             return
           }
           stateUpdates[task.authIndex] = {
-            refreshTaskId: task.taskId,
             refreshStatus: response.status,
             error: response.status === 'failed' ? quotaRefreshDisplayError(response.error) : undefined,
           }
@@ -82,7 +79,6 @@ export function useQuotaRefreshTasks({ enabled, currentAuthIndexes, setQuotaByAu
           }
           settledAuthIndexes.add(task.authIndex)
           stateUpdates[task.authIndex] = {
-            refreshTaskId: task.taskId,
             refreshStatus: 'failed',
             error: quotaErrorMessage(nextError),
           }
@@ -133,7 +129,7 @@ export function useQuotaRefreshTasks({ enabled, currentAuthIndexes, setQuotaByAu
       setPendingRefreshTasks((current) => {
         const nextByAuthIndex = new Map(current.map((task) => [task.authIndex, task]))
         for (const task of response.tasks) {
-          nextByAuthIndex.set(task.authIndex, { authIndex: task.authIndex, taskId: task.taskId, source })
+          nextByAuthIndex.set(task.authIndex, { authIndex: task.authIndex, source })
         }
         return Array.from(nextByAuthIndex.values())
       })
@@ -142,7 +138,6 @@ export function useQuotaRefreshTasks({ enabled, currentAuthIndexes, setQuotaByAu
         for (const task of response.tasks) {
           next[task.authIndex] = {
             ...next[task.authIndex],
-            refreshTaskId: task.taskId,
             refreshStatus: 'queued',
             error: undefined,
           }
@@ -204,7 +199,6 @@ function mergeQuotaStates(current: Record<string, QuotaState>, updates: Record<s
     if (
       previous.loading !== merged.loading ||
       previous.error !== merged.error ||
-      previous.refreshTaskId !== merged.refreshTaskId ||
       previous.refreshStatus !== merged.refreshStatus
     ) {
       next[authIndex] = merged

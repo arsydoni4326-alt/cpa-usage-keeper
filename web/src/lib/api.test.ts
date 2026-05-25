@@ -342,7 +342,7 @@ describe('fetchUsageEvents', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       json: async () => ({
-        items: [{ id: 'auth-1', quota: [{ key: 'rate_limit.secondary_window', label: 'Weekly', remaining: 12 }] }],
+        items: [{ auth_index: 'auth-1', status: 'completed', quota: { id: 'auth-1', quota: [{ key: 'rate_limit.secondary_window', label: 'Weekly', remaining: 12 }] }, updated_at: '2026-05-25T00:00:00Z' }],
       }),
     } as Response);
     const signal = new AbortController().signal;
@@ -352,8 +352,8 @@ describe('fetchUsageEvents', () => {
     const [url, init] = fetchMock.mock.calls[0];
     const parsed = new URL(String(url), 'http://localhost');
 
-    expect(response.items[0].id).toBe('auth-1');
-    expect(response.items[0].quota[0].remaining).toBe(12);
+    expect(response.items[0].auth_index).toBe('auth-1');
+    expect(response.items[0].quota?.quota[0].remaining).toBe(12);
     expect(parsed.pathname).toBe('/api/v1/quota/cache');
     expect(init).toMatchObject({ credentials: 'include', method: 'POST', signal });
     expect(init?.headers).toEqual({ 'Content-Type': 'application/json' });
@@ -365,7 +365,7 @@ describe('fetchUsageEvents', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       json: async () => ({
-        tasks: [{ authIndex: 'auth-1', taskId: 'task-1' }],
+        tasks: [{ authIndex: 'auth-1' }],
         rejected: [],
         accepted: 1,
         skipped: 0,
@@ -379,7 +379,7 @@ describe('fetchUsageEvents', () => {
     const [url, init] = fetchMock.mock.calls[0];
     const parsed = new URL(String(url), 'http://localhost');
 
-    expect(response.tasks[0]).toEqual({ authIndex: 'auth-1', taskId: 'task-1' });
+    expect(response.tasks[0]).toEqual({ authIndex: 'auth-1' });
     expect(response.limit).toBe(1);
     expect(parsed.pathname).toBe('/api/v1/quota/refresh');
     expect(init).toMatchObject({ credentials: 'include', method: 'POST', signal });
@@ -392,7 +392,6 @@ describe('fetchUsageEvents', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       json: async () => ({
-        taskId: 'task-1',
         authIndex: 'auth-1',
         status: 'completed',
         quota: { id: 'auth-1', quota: [{ key: 'rate_limit.primary_window', label: '5h' }] },
@@ -400,14 +399,14 @@ describe('fetchUsageEvents', () => {
     } as Response);
     const signal = new AbortController().signal;
 
-    const response = await fetchUsageQuotaRefreshTask('task-1', signal);
+    const response = await fetchUsageQuotaRefreshTask('auth-1', signal);
 
     const [url, init] = fetchMock.mock.calls[0];
     const parsed = new URL(String(url), 'http://localhost');
 
     expect(response.status).toBe('completed');
     expect(response.quota?.id).toBe('auth-1');
-    expect(parsed.pathname).toBe('/api/v1/quota/refresh/task-1');
+    expect(parsed.pathname).toBe('/api/v1/quota/refresh/auth-1');
     expect(init).toMatchObject({ credentials: 'include', signal });
   });
 

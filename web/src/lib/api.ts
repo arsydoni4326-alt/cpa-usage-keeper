@@ -269,8 +269,8 @@ export async function refreshUsageQuotas(authIndexes: string[], signal?: AbortSi
   return response.json()
 }
 
-export async function fetchUsageQuotaRefreshTask(taskId: string, signal?: AbortSignal): Promise<UsageQuotaRefreshTaskResponse> {
-  const response = await apiFetch(apiPath(`/quota/refresh/${encodeURIComponent(taskId)}`), { signal })
+export async function fetchUsageQuotaRefreshTask(authIndex: string, signal?: AbortSignal): Promise<UsageQuotaRefreshTaskResponse> {
+  const response = await apiFetch(apiPath(`/quota/refresh/${encodeURIComponent(authIndex)}`), { signal })
   if (!response.ok) {
     await parseApiError(response, `Failed to load usage quota refresh task: ${response.status}`)
   }

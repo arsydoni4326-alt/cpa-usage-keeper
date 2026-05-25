@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { formatQuotaResetLabel } from './AuthFileCredentialsSection'
+import { formatQuotaResetDuration, formatQuotaResetLabel } from './AuthFileCredentialsSection'
 
 const formatLocalResetTime = (resetAt: string) => {
   const resetTime = new Date(resetAt)
@@ -15,7 +15,8 @@ describe('AuthFileCredentialsSection quota reset formatting', () => {
     vi.setSystemTime(new Date('2026-05-10T10:00:00Z'))
     try {
       const resetAt = '2026-05-12T10:15:00Z'
-      expect(formatQuotaResetLabel(resetAt)).toBe(`2d0h15m (${formatLocalResetTime(resetAt)})`)
+      expect(formatQuotaResetLabel(resetAt)).toBe(formatLocalResetTime(resetAt))
+      expect(formatQuotaResetDuration(resetAt)).toBe('2d0h15m')
     } finally {
       vi.useRealTimers()
     }
@@ -25,7 +26,8 @@ describe('AuthFileCredentialsSection quota reset formatting', () => {
     vi.setSystemTime(new Date('2026-05-10T10:00:00Z'))
     try {
       const resetAt = '2026-05-10T14:15:00Z'
-      expect(formatQuotaResetLabel(resetAt)).toBe(`4h15m (${formatLocalResetTime(resetAt)})`)
+      expect(formatQuotaResetLabel(resetAt)).toBe(formatLocalResetTime(resetAt))
+      expect(formatQuotaResetDuration(resetAt)).toBe('4h15m')
     } finally {
       vi.useRealTimers()
     }
