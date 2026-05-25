@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { quotaRefreshDisplayError } from './useCredentialsTabData'
 import { CREDENTIAL_PAGES_REFRESH_INTERVAL_MS } from './useCredentialPages'
-import { QUOTA_CACHE_REFRESH_INTERVAL_MS } from './useQuotaCache'
+import { buildQuotaCacheAuthIndexesKey, QUOTA_CACHE_REFRESH_INTERVAL_MS } from './useQuotaCache'
 
 describe('Credentials polling intervals', () => {
   it('keeps list data on a 5 minute refresh interval', () => {
@@ -10,6 +10,16 @@ describe('Credentials polling intervals', () => {
 
   it('keeps quota cache on a 1 minute refresh interval', () => {
     expect(QUOTA_CACHE_REFRESH_INTERVAL_MS).toBe(60 * 1000)
+  })
+})
+
+describe('buildQuotaCacheAuthIndexesKey', () => {
+  it('keeps equal auth index lists stable across array references', () => {
+    expect(buildQuotaCacheAuthIndexesKey(['auth-1', 'auth-2'])).toBe(buildQuotaCacheAuthIndexesKey(['auth-1', 'auth-2']))
+  })
+
+  it('changes when auth index contents or order changes', () => {
+    expect(buildQuotaCacheAuthIndexesKey(['auth-1', 'auth-2'])).not.toBe(buildQuotaCacheAuthIndexesKey(['auth-2', 'auth-1']))
   })
 })
 

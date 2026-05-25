@@ -47,6 +47,9 @@ func TestNewWithConfigSkipsQuotaAutoRefreshByDefault(t *testing.T) {
 	if app.QuotaAutoRefresh != nil {
 		t.Fatal("expected quota auto refresh runner to be skipped by default")
 	}
+	if app.QuotaService == nil {
+		t.Fatal("expected quota service to remain available for manual refresh")
+	}
 }
 
 func TestNewWithConfigBuildsQuotaAutoRefreshWhenEnabled(t *testing.T) {
@@ -286,6 +289,29 @@ func TestRunStartsPollerAndMaintenanceIndependently(t *testing.T) {
 	}
 }
 
+func TestRunSetsQuotaServiceContextEvenWhenAutoRefreshDisabled(t *testing.T) {
+	cfg := testAppConfig(t)
+	cfg.AppPort = "invalid-port"
+	quotaService := &quotaContextRecorder{contextSet: make(chan context.Context, 1)}
+	app := &App{
+		Config:       &cfg,
+		Router:       gin.New(),
+		QuotaService: quotaService,
+	}
+
+	if err := app.Run(); err == nil {
+		t.Fatal("expected Run to return an error for invalid port")
+	}
+	select {
+	case ctx := <-quotaService.contextSet:
+		if ctx == nil {
+			t.Fatal("expected quota service context to be non-nil")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected quota service context to be set")
+	}
+}
+
 func TestRunCancelsBackgroundTasksWhenRouterStops(t *testing.T) {
 	cfg := testAppConfig(t)
 	cfg.AppPort = "invalid-port"
@@ -317,6 +343,18 @@ func TestRunCancelsBackgroundTasksWhenRouterStops(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("expected database backup runner context to be canceled")
 	}
+}
+
+type quotaContextRecorder struct {
+	contextSet chan context.Context
+}
+
+func (r *quotaContextRecorder) SetRefreshContext(ctx context.Context) {
+	r.contextSet <- ctx
+}
+
+func (r *quotaContextRecorder) StartAutoRefresh(context.Context) error {
+	return nil
 }
 
 type appRunStub struct {

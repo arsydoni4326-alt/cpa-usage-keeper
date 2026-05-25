@@ -5,6 +5,8 @@ import { quotaRefreshDisplayError, type QuotaState } from './useQuotaRefreshTask
 
 export const QUOTA_CACHE_REFRESH_INTERVAL_MS = 60 * 1000
 
+export const buildQuotaCacheAuthIndexesKey = (authIndexes: string[]) => JSON.stringify(authIndexes)
+
 interface UseQuotaCacheOptions {
   enabled: boolean
   authIndexes: string[]
@@ -21,6 +23,8 @@ export function useQuotaCache({ enabled, authIndexes, onAuthRequired }: UseQuota
   const [quotaByAuthIndex, setQuotaByAuthIndex] = useState<Record<string, UsageQuotaRow[]>>({})
   const [cachedQuotaStateByAuthIndex, setCachedQuotaStateByAuthIndex] = useState<Record<string, QuotaState>>({})
   const requestControllerRef = useRef<AbortController | null>(null)
+
+  const authIndexesKey = buildQuotaCacheAuthIndexesKey(authIndexes)
 
   useEffect(() => {
     if (!enabled) {
@@ -100,7 +104,7 @@ export function useQuotaCache({ enabled, authIndexes, onAuthRequired }: UseQuota
       requestControllerRef.current?.abort()
       requestControllerRef.current = null
     }
-  }, [enabled, onAuthRequired, authIndexes])
+  }, [enabled, onAuthRequired, authIndexesKey])
 
   return { quotaByAuthIndex, cachedQuotaStateByAuthIndex, setQuotaByAuthIndex }
 }

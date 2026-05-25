@@ -38,6 +38,11 @@ type Options struct {
 	EnvFile string
 }
 
+type QuotaRunner interface {
+	SetRefreshContext(context.Context)
+	StartAutoRefresh(context.Context) error
+}
+
 type App struct {
 	Config            *config.Config
 	DB                *gorm.DB
@@ -47,7 +52,8 @@ type App struct {
 	RedisProcess      Runner
 	Maintenance       *StorageCleanupRunner
 	MetadataSync      *MetadataSyncRunner
-	QuotaAutoRefresh  *quota.Service
+	QuotaService      QuotaRunner
+	QuotaAutoRefresh  QuotaRunner
 	BackupMaintenance *DatabaseBackupRunner
 	LogCloser         io.Closer
 
@@ -154,6 +160,7 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 		RedisProcess:      redisProcessRunner,
 		Maintenance:       NewStorageCleanupRunner(syncService),
 		MetadataSync:      NewMetadataSyncRunner(syncService, cfg.MetadataSyncInterval),
+		QuotaService:      quotaService,
 		QuotaAutoRefresh:  quotaAutoRefreshService(cfg, quotaService),
 		BackupMaintenance: backupMaintenance,
 		LogCloser:         logCloser,
@@ -180,7 +187,7 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 	}, nil
 }
 
-func quotaAutoRefreshService(cfg config.Config, service *quota.Service) *quota.Service {
+func quotaAutoRefreshService(cfg config.Config, service *quota.Service) QuotaRunner {
 	if !cfg.QuotaAutoRefreshEnabled {
 		return nil
 	}
@@ -252,8 +259,10 @@ func (a *App) Run() error {
 			}
 		})
 	}
+	if a.QuotaService != nil {
+		a.QuotaService.SetRefreshContext(ctx)
+	}
 	if a.QuotaAutoRefresh != nil {
-		a.QuotaAutoRefresh.SetRefreshContext(ctx)
 		a.startBackgroundTask(func() {
 			// quota 自动刷新和手动刷新共用队列，但作为独立后台任务跟随 App 生命周期启动和停止。
 			if err := a.QuotaAutoRefresh.StartAutoRefresh(ctx); err != nil {
