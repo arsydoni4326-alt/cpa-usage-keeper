@@ -14,6 +14,7 @@ import (
 	"cpa-usage-keeper/internal/config"
 	"cpa-usage-keeper/internal/entities"
 	"cpa-usage-keeper/internal/poller"
+	"cpa-usage-keeper/internal/quota"
 	"cpa-usage-keeper/internal/repository"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
@@ -38,30 +39,92 @@ func TestAppCloseClosesDatabase(t *testing.T) {
 	}
 }
 
-func TestNewWithConfigSkipsQuotaAutoRefreshByDefault(t *testing.T) {
+func TestNewWithConfigBuildsQuotaAutoRefreshByDefault(t *testing.T) {
 	app, err := NewWithConfig(testAppConfig(t))
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
 	defer app.Close()
-	if app.QuotaAutoRefresh != nil {
-		t.Fatal("expected quota auto refresh runner to be skipped by default")
+	if app.QuotaAutoRefresh == nil {
+		t.Fatal("expected quota auto refresh runner by default")
 	}
 	if app.QuotaService == nil {
 		t.Fatal("expected quota service to remain available for manual refresh")
 	}
 }
 
-func TestNewWithConfigBuildsQuotaAutoRefreshWhenEnabled(t *testing.T) {
+func TestNewWithConfigSkipsQuotaAutoRefreshWhenDisabled(t *testing.T) {
 	cfg := testAppConfig(t)
-	cfg.QuotaAutoRefreshEnabled = true
+	cfg.QuotaAutoRefreshEnabled = false
 	app, err := NewWithConfig(cfg)
 	if err != nil {
 		t.Fatalf("NewWithConfig returned error: %v", err)
 	}
 	defer app.Close()
-	if app.QuotaAutoRefresh == nil {
-		t.Fatal("expected quota auto refresh runner when enabled")
+	if app.QuotaAutoRefresh != nil {
+		t.Fatal("expected quota auto refresh runner to be skipped when disabled")
+	}
+	if app.QuotaService == nil {
+		t.Fatal("expected quota service to remain available for manual refresh when auto refresh is disabled")
+	}
+}
+
+func TestQuotaActiveRecorderIsDisabledWithAutoRefresh(t *testing.T) {
+	cfg := testAppConfig(t)
+	cfg.QuotaAutoRefreshEnabled = false
+	if recorder := quotaActiveRecorder(cfg, nil); recorder != nil {
+		t.Fatalf("expected disabled quota auto refresh to avoid active recorder, got %T", recorder)
+	}
+}
+
+func TestAppCloseWaitsForQuotaRefreshTasksBeforeDatabaseClose(t *testing.T) {
+	waitCalled := make(chan struct{}, 1)
+	quotaService := &quotaContextRecorder{contextSet: make(chan context.Context, 1), waitCalled: waitCalled}
+	app := &App{QuotaService: quotaService}
+
+	if err := app.Close(); err != nil {
+		t.Fatalf("Close returned error: %v", err)
+	}
+
+	select {
+	case <-waitCalled:
+	case <-time.After(time.Second):
+		t.Fatal("expected App.Close to wait for quota refresh goroutines")
+	}
+}
+
+func TestAppCloseStopsRealQuotaRefreshTasksBeforeDatabaseClose(t *testing.T) {
+	db, err := repository.OpenDatabase(config.Config{SQLitePath: filepath.Join(t.TempDir(), "quota-close.db")})
+	if err != nil {
+		t.Fatalf("OpenDatabase returned error: %v", err)
+	}
+	if err := db.Create(&entities.UsageIdentity{Identity: "auth-1", Name: "auth-1", Provider: "claude", Type: "auth-file", AuthType: entities.UsageIdentityAuthTypeAuthFile}).Error; err != nil {
+		t.Fatalf("seed usage identity returned error: %v", err)
+	}
+	block := make(chan struct{})
+	handler := &appQuotaHandlerStub{block: block}
+	quotaService := quota.NewServiceWithRegistry(db, quota.NewProviderRegistry(map[string]quota.ProviderHandler{"claude": handler}))
+	quotaService.SetRefreshContext(context.Background())
+	app := &App{DB: db, QuotaService: quotaService}
+
+	response, err := quotaService.Refresh(context.Background(), quota.RefreshRequest{AuthIndexes: []string{"auth-1"}, Source: quota.RefreshSourceManual})
+	if err != nil {
+		t.Fatalf("Refresh returned error: %v", err)
+	}
+	waitForAppQuotaTaskStatus(t, quotaService, response.Tasks[0].AuthIndex, quota.RefreshTaskStatusRunning)
+
+	if err := app.Close(); err != nil {
+		t.Fatalf("Close returned error: %v", err)
+	}
+	task, err := quotaService.GetRefreshTaskByAuthIndex(context.Background(), response.Tasks[0].AuthIndex)
+	if err != nil {
+		t.Fatalf("GetRefreshTaskByAuthIndex returned error after close: %v", err)
+	}
+	if task.Status != quota.RefreshTaskStatusFailed {
+		t.Fatalf("expected app close to cancel and drain real quota worker before closing DB, got %+v", task)
+	}
+	if handler.callCount() != 0 {
+		t.Fatalf("expected canceled quota worker not to complete provider call, got %d calls", handler.callCount())
 	}
 }
 
@@ -292,6 +355,7 @@ func TestRunStartsPollerAndMaintenanceIndependently(t *testing.T) {
 func TestRunSetsQuotaServiceContextEvenWhenAutoRefreshDisabled(t *testing.T) {
 	cfg := testAppConfig(t)
 	cfg.AppPort = "invalid-port"
+	cfg.QuotaAutoRefreshEnabled = false
 	quotaService := &quotaContextRecorder{contextSet: make(chan context.Context, 1)}
 	app := &App{
 		Config:       &cfg,
@@ -347,6 +411,7 @@ func TestRunCancelsBackgroundTasksWhenRouterStops(t *testing.T) {
 
 type quotaContextRecorder struct {
 	contextSet chan context.Context
+	waitCalled chan struct{}
 }
 
 func (r *quotaContextRecorder) SetRefreshContext(ctx context.Context) {
@@ -355,6 +420,50 @@ func (r *quotaContextRecorder) SetRefreshContext(ctx context.Context) {
 
 func (r *quotaContextRecorder) StartAutoRefresh(context.Context) error {
 	return nil
+}
+
+func (r *quotaContextRecorder) WaitRefreshTasks() {
+	if r.waitCalled != nil {
+		r.waitCalled <- struct{}{}
+	}
+}
+
+func (r *quotaContextRecorder) StopRefreshTasks() {
+	r.WaitRefreshTasks()
+}
+
+type appQuotaHandlerStub struct {
+	block <-chan struct{}
+	calls int
+}
+
+func (s *appQuotaHandlerStub) Check(ctx context.Context, input quota.ProviderInput) (quota.ProviderOutput, error) {
+	select {
+	case <-ctx.Done():
+		return quota.ProviderOutput{}, ctx.Err()
+	case <-s.block:
+	}
+	s.calls++
+	return quota.ProviderOutput{Result: quota.ClaudeResult{Usage: &quota.ClaudeUsagePayload{FiveHour: &quota.ClaudeUsageWindow{Utilization: 25}}}}, nil
+}
+
+func (s *appQuotaHandlerStub) callCount() int {
+	return s.calls
+}
+
+func waitForAppQuotaTaskStatus(t *testing.T, service *quota.Service, authIndex string, status quota.RefreshTaskStatus) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	var task quota.RefreshTaskResponse
+	var err error
+	for time.Now().Before(deadline) {
+		task, err = service.GetRefreshTaskByAuthIndex(context.Background(), authIndex)
+		if err == nil && task.Status == status {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("auth_index %s did not reach status %s, last task=%+v err=%v", authIndex, status, task, err)
 }
 
 type appRunStub struct {
@@ -400,19 +509,20 @@ func readAppLogFile(t *testing.T, logDir string) string {
 func testAppConfig(t *testing.T) config.Config {
 	t.Helper()
 	return config.Config{
-		AppPort:                "8080",
-		CPABaseURL:             "https://cpa.example.com",
-		CPAManagementKey:       "secret",
-		RedisQueueIdleInterval: time.Second,
-		RedisQueueErrorBackoff: 10 * time.Second,
-		MetadataSyncInterval:   30 * time.Second,
-		SQLitePath:             t.TempDir() + "/app.db",
-		BackupEnabled:          true,
-		BackupDir:              t.TempDir() + "/backups",
-		BackupRetentionDays:    7,
-		RequestTimeout:         5 * time.Second,
-		LogLevel:               "info",
-		LogFileEnabled:         false,
-		LogRetentionDays:       7,
+		AppPort:                 "8080",
+		CPABaseURL:              "https://cpa.example.com",
+		CPAManagementKey:        "secret",
+		RedisQueueIdleInterval:  time.Second,
+		RedisQueueErrorBackoff:  10 * time.Second,
+		MetadataSyncInterval:    30 * time.Second,
+		SQLitePath:              t.TempDir() + "/app.db",
+		BackupEnabled:           true,
+		BackupDir:               t.TempDir() + "/backups",
+		BackupRetentionDays:     7,
+		RequestTimeout:          5 * time.Second,
+		QuotaAutoRefreshEnabled: true,
+		LogLevel:                "info",
+		LogFileEnabled:          false,
+		LogRetentionDays:        7,
 	}
 }

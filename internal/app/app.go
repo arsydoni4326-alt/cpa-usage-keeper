@@ -40,6 +40,8 @@ type Options struct {
 
 type QuotaRunner interface {
 	SetRefreshContext(context.Context)
+	StopRefreshTasks()
+	WaitRefreshTasks()
 	StartAutoRefresh(context.Context) error
 }
 
@@ -181,10 +183,17 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 				UsageIdentity: usageIdentityService,
 				Quota:         quotaService,
 				CPAAPIKeys:    cpaAPIKeyService,
-				Status:        api.StatusRouteConfig{CPAPublicURL: cfg.CPAPublicURL},
+				Status:        api.StatusRouteConfig{CPAPublicURL: cfg.CPAPublicURL, ActiveRecorder: quotaActiveRecorder(cfg, quotaService)},
 			},
 		),
 	}, nil
+}
+
+func quotaActiveRecorder(cfg config.Config, service *quota.Service) api.ActiveStatusRecorder {
+	if !cfg.QuotaAutoRefreshEnabled {
+		return nil
+	}
+	return service
 }
 
 func quotaAutoRefreshService(cfg config.Config, service *quota.Service) QuotaRunner {
@@ -211,6 +220,9 @@ func (a *App) Close() error {
 	}
 
 	a.stopBackgroundTasks()
+	if a.QuotaService != nil {
+		a.QuotaService.StopRefreshTasks()
+	}
 
 	var closeErr error
 	if a.DB != nil {

@@ -63,6 +63,9 @@ func TestRefreshCreatesTaskPerAuthIndexAndCachesCompletedQuota(t *testing.T) {
 	if task.AuthIndex != "auth-1" || task.Quota == nil || task.Quota.ID != "auth-1" || len(task.Quota.Quota) != 1 {
 		t.Fatalf("expected completed task to expose cached quota, got %+v", task)
 	}
+	if task.RefreshedAt == nil || task.RefreshedAt.IsZero() {
+		t.Fatalf("expected completed task to expose refreshed_at, got %+v", task)
+	}
 	if task.ExpiresAt != nil {
 		t.Fatalf("expected completed quota cache to have no expiry, got %v", task.ExpiresAt)
 	}
@@ -73,6 +76,9 @@ func TestRefreshCreatesTaskPerAuthIndexAndCachesCompletedQuota(t *testing.T) {
 	}
 	if len(cache.Items) != 1 || cache.Items[0].AuthIndex != "auth-1" || cache.Items[0].Quota == nil || cache.Items[0].Quota.ID != "auth-1" {
 		t.Fatalf("expected completed quota cache to survive cleanup, got %+v", cache)
+	}
+	if cache.Items[0].RefreshedAt == nil || cache.Items[0].RefreshedAt.IsZero() {
+		t.Fatalf("expected completed quota cache to expose refreshed_at, got %+v", cache.Items[0])
 	}
 	if handler.callCount() != 1 {
 		t.Fatalf("expected one provider call, got %d", handler.callCount())
@@ -106,6 +112,84 @@ func TestRefreshOverwritesPreviousCompletedTaskForSameAuthIndex(t *testing.T) {
 	}
 }
 
+func TestManualRefreshIgnoresRecentAutoRefreshRound(t *testing.T) {
+	db := openQuotaTestDatabase(t)
+	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-1", Provider: "claude", Type: "auth-file", AuthType: entities.UsageIdentityAuthTypeAuthFile})
+	handler := &refreshHandlerStub{output: ProviderOutput{Result: ClaudeResult{Usage: &ClaudeUsagePayload{FiveHour: &ClaudeUsageWindow{Utilization: 25}}}}}
+	service := NewServiceWithRegistry(db, NewProviderRegistry(map[string]ProviderHandler{"claude": handler}))
+	service.refreshCooldown = func(time.Duration) {}
+	service.autoRefreshMu.Lock()
+	service.lastAutoRefreshRoundAt = time.Now()
+	service.autoRefreshMu.Unlock()
+
+	response, err := service.Refresh(context.Background(), RefreshRequest{AuthIndexes: []string{"auth-1"}, Source: RefreshSourceManual})
+	if err != nil {
+		t.Fatalf("Refresh returned error: %v", err)
+	}
+	if response.Accepted != 1 || len(response.Tasks) != 1 {
+		t.Fatalf("expected manual refresh to ignore recent auto round, got %+v", response)
+	}
+	waitForRefreshTask(t, service, response.Tasks[0].AuthIndex, RefreshTaskStatusCompleted)
+	if handler.callCount() != 1 {
+		t.Fatalf("expected manual refresh provider call, got %d", handler.callCount())
+	}
+}
+
+func TestManualRefreshAllowsDisabledAuthFile(t *testing.T) {
+	db := openQuotaTestDatabase(t)
+	// disabled 只限制自动刷新扫描，手动刷新仍允许用户显式触发。
+	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-1", Provider: "claude", Type: "auth-file", AuthType: entities.UsageIdentityAuthTypeAuthFile, Disabled: boolPtr(true)})
+	handler := &refreshHandlerStub{output: ProviderOutput{Result: ClaudeResult{Usage: &ClaudeUsagePayload{FiveHour: &ClaudeUsageWindow{Utilization: 25}}}}}
+	service := NewServiceWithRegistry(db, NewProviderRegistry(map[string]ProviderHandler{"claude": handler}))
+
+	response, err := service.Refresh(context.Background(), RefreshRequest{AuthIndexes: []string{"auth-1"}, Source: RefreshSourceManual})
+	if err != nil {
+		t.Fatalf("Refresh returned error: %v", err)
+	}
+	if response.Accepted != 1 || response.Skipped != 0 || len(response.Tasks) != 1 {
+		t.Fatalf("expected disabled auth file to be accepted for manual refresh, got %+v", response)
+	}
+	waitForRefreshTask(t, service, response.Tasks[0].AuthIndex, RefreshTaskStatusCompleted)
+	if handler.callCount() != 1 {
+		t.Fatalf("expected manual refresh provider call, got %d", handler.callCount())
+	}
+}
+
+func TestManualRefreshFallsBackToIdentityTypeWhenProviderUnsupported(t *testing.T) {
+	db := openQuotaTestDatabase(t)
+	// provider 不支持但 type 支持时，手动刷新应复用 Check/auto 的同一套 handler 解析规则。
+	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-1", Provider: "unknown-provider", Type: "claude", AuthType: entities.UsageIdentityAuthTypeAuthFile})
+	handler := &refreshHandlerStub{output: ProviderOutput{Result: ClaudeResult{Usage: &ClaudeUsagePayload{FiveHour: &ClaudeUsageWindow{Utilization: 25}}}}}
+	service := NewServiceWithRegistry(db, NewProviderRegistry(map[string]ProviderHandler{"claude": handler}))
+
+	response, err := service.Refresh(context.Background(), RefreshRequest{AuthIndexes: []string{"auth-1"}, Source: RefreshSourceManual})
+	if err != nil {
+		t.Fatalf("Refresh returned error: %v", err)
+	}
+	if response.Accepted != 1 || response.Skipped != 0 || len(response.Tasks) != 1 {
+		t.Fatalf("expected manual refresh to fall back to identity type, got %+v", response)
+	}
+	waitForRefreshTask(t, service, response.Tasks[0].AuthIndex, RefreshTaskStatusCompleted)
+	if handler.callCount() != 1 {
+		t.Fatalf("expected type fallback provider call, got %d", handler.callCount())
+	}
+}
+
+func TestManualRefreshRejectsUnsupportedAuthFile(t *testing.T) {
+	db := openQuotaTestDatabase(t)
+	// Auth File 存在但 provider/type 都没有 handler 时，手动刷新返回 unsupported 而不是创建任务。
+	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-1", Provider: "unknown-provider", Type: "unknown-type", AuthType: entities.UsageIdentityAuthTypeAuthFile})
+	service := NewServiceWithRegistry(db, NewProviderRegistry(nil))
+
+	response, err := service.Refresh(context.Background(), RefreshRequest{AuthIndexes: []string{"auth-1"}, Source: RefreshSourceManual})
+	if err != nil {
+		t.Fatalf("Refresh returned error: %v", err)
+	}
+	if response.Accepted != 0 || response.Skipped != 1 || len(response.Tasks) != 0 || !hasRefreshRejection(response.Rejected, "auth-1", "unsupported") {
+		t.Fatalf("expected unsupported auth file to be rejected, got %+v", response)
+	}
+}
+
 func TestRefreshRejectsInvalidEntriesAndIgnoresRunningTask(t *testing.T) {
 	db := openQuotaTestDatabase(t)
 	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-1", Provider: "claude", Type: "auth-file", AuthType: entities.UsageIdentityAuthTypeAuthFile})
@@ -122,7 +206,7 @@ func TestRefreshRejectsInvalidEntriesAndIgnoresRunningTask(t *testing.T) {
 	if response.Accepted != 1 || response.Skipped != 4 || len(response.Tasks) != 1 || len(response.Rejected) != 4 {
 		t.Fatalf("unexpected refresh response: %+v", response)
 	}
-	if !hasRefreshRejection(response.Rejected, "auth-1", "duplicate") || !hasRefreshRejection(response.Rejected, "provider-1", "not_auth_file") || !hasRefreshRejection(response.Rejected, "deleted-1", "not_found") || !hasRefreshRejection(response.Rejected, "missing", "not_found") {
+	if !hasRefreshRejection(response.Rejected, "auth-1", "duplicate_request") || !hasRefreshRejection(response.Rejected, "provider-1", "not_auth_file") || !hasRefreshRejection(response.Rejected, "deleted-1", "not_found") || !hasRefreshRejection(response.Rejected, "missing", "not_found") {
 		t.Fatalf("unexpected rejected entries: %+v", response.Rejected)
 	}
 
@@ -140,6 +224,35 @@ func TestRefreshRejectsInvalidEntriesAndIgnoresRunningTask(t *testing.T) {
 	if handler.callCount() != 1 {
 		t.Fatalf("expected duplicate refresh to reuse provider call, got %d", handler.callCount())
 	}
+}
+
+func TestManualRefreshReturnsDuplicateForRunningTaskEvenWhenIdentityDeleted(t *testing.T) {
+	db := openQuotaTestDatabase(t)
+	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-1", Provider: "claude", Type: "auth-file", AuthType: entities.UsageIdentityAuthTypeAuthFile})
+	block := make(chan struct{})
+	handler := &refreshHandlerStub{block: block, output: ProviderOutput{Result: ClaudeResult{Usage: &ClaudeUsagePayload{FiveHour: &ClaudeUsageWindow{Utilization: 25}}}}}
+	service := NewServiceWithRegistry(db, NewProviderRegistry(map[string]ProviderHandler{"claude": handler}))
+	service.refreshCooldown = func(time.Duration) {}
+
+	first, err := service.Refresh(context.Background(), RefreshRequest{AuthIndexes: []string{"auth-1"}, Source: RefreshSourceManual})
+	if err != nil {
+		t.Fatalf("first Refresh returned error: %v", err)
+	}
+	waitForRefreshTask(t, service, first.Tasks[0].AuthIndex, RefreshTaskStatusRunning)
+	if err := db.Model(&entities.UsageIdentity{}).Where("identity = ?", "auth-1").Update("is_deleted", true).Error; err != nil {
+		t.Fatalf("delete usage identity returned error: %v", err)
+	}
+
+	second, err := service.Refresh(context.Background(), RefreshRequest{AuthIndexes: []string{"auth-1"}, Source: RefreshSourceManual})
+	if err != nil {
+		t.Fatalf("second Refresh returned error: %v", err)
+	}
+
+	if second.Accepted != 0 || second.Skipped != 1 || len(second.Tasks) != 0 || !hasRefreshRejection(second.Rejected, "auth-1", "duplicate") {
+		t.Fatalf("expected active task to win over deleted identity validation, got %+v", second)
+	}
+	close(block)
+	waitForRefreshTask(t, service, first.Tasks[0].AuthIndex, RefreshTaskStatusCompleted)
 }
 
 func TestRefreshQueueUsesConfiguredWorkersTimeoutAndCooldown(t *testing.T) {
@@ -269,6 +382,27 @@ func TestRefreshTaskUsesParentContextCancellation(t *testing.T) {
 	close(block)
 }
 
+func TestStopRefreshTasksPreventsNewRefreshWorkers(t *testing.T) {
+	db := openQuotaTestDatabase(t)
+	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-1", Provider: "claude", Type: "auth-file", AuthType: entities.UsageIdentityAuthTypeAuthFile})
+	handler := &refreshHandlerStub{output: ProviderOutput{Result: ClaudeResult{Usage: &ClaudeUsagePayload{FiveHour: &ClaudeUsageWindow{Utilization: 25}}}}}
+	service := NewServiceWithRegistry(db, NewProviderRegistry(map[string]ProviderHandler{"claude": handler}))
+
+	service.StopRefreshTasks()
+	response, err := service.Refresh(context.Background(), RefreshRequest{AuthIndexes: []string{"auth-1"}, Source: RefreshSourceManual})
+	if err != nil {
+		t.Fatalf("Refresh returned error: %v", err)
+	}
+
+	task := waitForRefreshTask(t, service, response.Tasks[0].AuthIndex, RefreshTaskStatusFailed)
+	if task.Error != "Quota refresh timed out. Please try again later." {
+		t.Fatalf("expected stopped service task to fail with timeout message, got %+v", task)
+	}
+	if handler.callCount() != 0 {
+		t.Fatalf("expected stopped service not to start worker, got %d provider calls", handler.callCount())
+	}
+}
+
 func TestRefreshTaskFailureReturnsFriendlyMessage(t *testing.T) {
 	db := openQuotaTestDatabase(t)
 	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-1", Provider: "claude", Type: "auth-file", AuthType: entities.UsageIdentityAuthTypeAuthFile})
@@ -306,8 +440,11 @@ func TestRefreshTaskCachesConfiguredHTTPError(t *testing.T) {
 	if task.HTTPStatusCode == nil || *task.HTTPStatusCode != 401 {
 		t.Fatalf("expected task to expose HTTP status 401, got %+v", task)
 	}
-	if task.ExpiresAt == nil || task.ExpiresAt.Sub(*task.CachedAt) != RefreshErrorCacheTTL {
-		t.Fatalf("expected 401 cache TTL %s, got cachedAt=%v expiresAt=%v", RefreshErrorCacheTTL, task.CachedAt, task.ExpiresAt)
+	if task.RefreshedAt == nil || task.RefreshedAt.IsZero() {
+		t.Fatalf("expected failed task to expose refreshed_at, got %+v", task)
+	}
+	if task.ExpiresAt == nil || task.ExpiresAt.Sub(*task.RefreshedAt) != RefreshErrorCacheTTL {
+		t.Fatalf("expected 401 cache TTL %s, got refreshedAt=%v expiresAt=%v", RefreshErrorCacheTTL, task.RefreshedAt, task.ExpiresAt)
 	}
 
 	cache, err := service.GetCachedQuota(context.Background(), CacheRequest{AuthIndexes: []string{"auth-1"}})
@@ -316,6 +453,9 @@ func TestRefreshTaskCachesConfiguredHTTPError(t *testing.T) {
 	}
 	if len(cache.Items) != 1 || cache.Items[0].Status != RefreshTaskStatusFailed || cache.Items[0].HTTPStatusCode == nil || *cache.Items[0].HTTPStatusCode != 401 {
 		t.Fatalf("expected cached failed item with HTTP 401, got %+v", cache.Items)
+	}
+	if cache.Items[0].RefreshedAt == nil || cache.Items[0].RefreshedAt.IsZero() {
+		t.Fatalf("expected cached failed item to expose refreshed_at, got %+v", cache.Items[0])
 	}
 }
 

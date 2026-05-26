@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"cpa-usage-keeper/internal/quota"
 )
@@ -49,8 +50,9 @@ func (s *quotaProviderStub) GetCachedQuota(ctx context.Context, request quota.Ca
 }
 
 func TestQuotaCacheReturnsCachedCurrentPageQuota(t *testing.T) {
+	refreshedAt := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
 	provider := &quotaProviderStub{cacheResponse: quota.CacheResponse{
-		Items: []quota.CachedQuotaItem{{AuthIndex: "auth-1", Status: quota.RefreshTaskStatusCompleted, Quota: &quota.CheckResponse{ID: "auth-1", Quota: []quota.QuotaRow{{Key: "rate_limit.secondary_window", Label: "Weekly", PlanType: "plus"}}}}},
+		Items: []quota.CachedQuotaItem{{AuthIndex: "auth-1", Status: quota.RefreshTaskStatusCompleted, RefreshedAt: &refreshedAt, Quota: &quota.CheckResponse{ID: "auth-1", Quota: []quota.QuotaRow{{Key: "rate_limit.secondary_window", Label: "Weekly", PlanType: "plus"}}}}},
 	}}
 	router := NewRouter(nil, nil, nil, nil, AuthConfig{}, nil, "", OptionalProviders{Quota: provider})
 
@@ -66,7 +68,7 @@ func TestQuotaCacheReturnsCachedCurrentPageQuota(t *testing.T) {
 		t.Fatalf("expected auth indexes to be forwarded, got %+v", provider.cacheRequest.AuthIndexes)
 	}
 	body := resp.Body.String()
-	if !contains(body, `"items"`) || !contains(body, `"id":"auth-1"`) || !contains(body, `"label":"Weekly"`) || !contains(body, `"planType":"plus"`) {
+	if !contains(body, `"items"`) || !contains(body, `"refreshed_at":"2026-05-26T12:00:00Z"`) || contains(body, `"updated_at"`) || !contains(body, `"id":"auth-1"`) || !contains(body, `"label":"Weekly"`) || !contains(body, `"planType":"plus"`) {
 		t.Fatalf("unexpected response body: %s", body)
 	}
 }
@@ -163,10 +165,12 @@ func TestQuotaRefreshRejectsEmptyAuthIndexes(t *testing.T) {
 }
 
 func TestQuotaRefreshTaskReturnsCachedQuotaByAuthIndex(t *testing.T) {
+	refreshedAt := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
 	provider := &quotaProviderStub{taskResponse: quota.RefreshTaskResponse{
-		AuthIndex: "auth-1",
-		Status:    quota.RefreshTaskStatusCompleted,
-		Quota:     &quota.CheckResponse{ID: "auth-1", Quota: []quota.QuotaRow{{Key: "rate_limit.primary_window", Label: "5h", PlanType: "pro"}}},
+		AuthIndex:   "auth-1",
+		Status:      quota.RefreshTaskStatusCompleted,
+		RefreshedAt: &refreshedAt,
+		Quota:       &quota.CheckResponse{ID: "auth-1", Quota: []quota.QuotaRow{{Key: "rate_limit.primary_window", Label: "5h", PlanType: "pro"}}},
 	}}
 	router := NewRouter(nil, nil, nil, nil, AuthConfig{}, nil, "", OptionalProviders{Quota: provider})
 
@@ -181,7 +185,7 @@ func TestQuotaRefreshTaskReturnsCachedQuotaByAuthIndex(t *testing.T) {
 		t.Fatalf("expected auth_index to be forwarded, got %q", provider.taskAuthIndex)
 	}
 	body := resp.Body.String()
-	if contains(body, `"taskId"`) || !contains(body, `"status":"completed"`) || !contains(body, `"quota":{"id":"auth-1"`) || !contains(body, `"key":"rate_limit.primary_window"`) || !contains(body, `"planType":"pro"`) {
+	if contains(body, `"taskId"`) || contains(body, `"cachedAt"`) || !contains(body, `"refreshed_at":"2026-05-26T12:00:00Z"`) || !contains(body, `"status":"completed"`) || !contains(body, `"quota":{"id":"auth-1"`) || !contains(body, `"key":"rate_limit.primary_window"`) || !contains(body, `"planType":"pro"`) {
 		t.Fatalf("unexpected response body: %s", body)
 	}
 }

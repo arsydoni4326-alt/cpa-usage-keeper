@@ -26,6 +26,10 @@ type StatusProvider interface {
 	Status() poller.Status
 }
 
+type ActiveStatusRecorder interface {
+	RecordActiveStatus(time.Time)
+}
+
 type QuotaProvider interface {
 	GetCachedQuota(context.Context, quota.CacheRequest) (quota.CacheResponse, error)
 	Refresh(context.Context, quota.RefreshRequest) (quota.RefreshResponse, error)
@@ -33,7 +37,8 @@ type QuotaProvider interface {
 }
 
 type StatusRouteConfig struct {
-	CPAPublicURL string
+	CPAPublicURL   string
+	ActiveRecorder ActiveStatusRecorder
 }
 
 type OptionalProviders struct {
@@ -244,6 +249,13 @@ func registerStatusRoutes(router gin.IRoutes, statusProvider StatusProvider, con
 		}
 
 		c.JSON(http.StatusOK, buildStatusResponse(statusProvider.Status(), config))
+	})
+	router.GET("/status/active", func(c *gin.Context) {
+		if config.ActiveRecorder != nil {
+			// 前端可见页面用这个轻量心跳续约，避免限额自动刷新在无人查看后台时持续扫库和请求上游。
+			config.ActiveRecorder.RecordActiveStatus(time.Now())
+		}
+		c.Status(http.StatusNoContent)
 	})
 }
 

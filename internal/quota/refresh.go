@@ -47,7 +47,7 @@ type CachedQuotaItem struct {
 	Error          string            `json:"error,omitempty"`
 	HTTPStatusCode *int              `json:"http_status_code,omitempty"`
 	ExpiresAt      *time.Time        `json:"expires_at,omitempty"`
-	UpdatedAt      time.Time         `json:"updated_at"`
+	RefreshedAt    *time.Time        `json:"refreshed_at,omitempty"`
 }
 
 type RefreshRequest struct {
@@ -78,7 +78,7 @@ type RefreshTaskResponse struct {
 	Quota          *CheckResponse    `json:"quota,omitempty"`
 	Error          string            `json:"error,omitempty"`
 	HTTPStatusCode *int              `json:"http_status_code,omitempty"`
-	CachedAt       *time.Time        `json:"cachedAt,omitempty"`
+	RefreshedAt    *time.Time        `json:"refreshed_at,omitempty"`
 	ExpiresAt      *time.Time        `json:"expiresAt,omitempty"`
 }
 
@@ -91,8 +91,7 @@ type RefreshTaskRecord struct {
 	Source         RefreshSource
 	CreatedAt      time.Time
 	StartedAt      time.Time
-	FinishedAt     time.Time
-	CachedAt       time.Time
+	RefreshedAt    time.Time
 	ExpiresAt      time.Time
 }
 
@@ -126,10 +125,12 @@ func (s *Service) GetCachedQuota(ctx context.Context, request CacheRequest) (Cac
 		switch {
 		case task.Status == RefreshTaskStatusCompleted && task.Quota != nil:
 			quota := *task.Quota
-			response.Items = append(response.Items, CachedQuotaItem{AuthIndex: authIndex, Status: RefreshTaskStatusCompleted, Quota: &quota, UpdatedAt: task.CachedAt})
+			refreshedAt := task.RefreshedAt
+			response.Items = append(response.Items, CachedQuotaItem{AuthIndex: authIndex, Status: RefreshTaskStatusCompleted, Quota: &quota, RefreshedAt: &refreshedAt})
 		case task.Status == RefreshTaskStatusFailed && task.HTTPStatusCode != nil && isRefreshCacheableHTTPStatus(*task.HTTPStatusCode):
 			expiresAt := task.ExpiresAt
-			response.Items = append(response.Items, CachedQuotaItem{AuthIndex: authIndex, Status: RefreshTaskStatusFailed, Error: task.Error, HTTPStatusCode: task.HTTPStatusCode, ExpiresAt: &expiresAt, UpdatedAt: task.FinishedAt})
+			refreshedAt := task.RefreshedAt
+			response.Items = append(response.Items, CachedQuotaItem{AuthIndex: authIndex, Status: RefreshTaskStatusFailed, Error: task.Error, HTTPStatusCode: task.HTTPStatusCode, ExpiresAt: &expiresAt, RefreshedAt: &refreshedAt})
 		}
 	}
 	return response, nil
@@ -167,8 +168,8 @@ func (s *Service) Refresh(ctx context.Context, request RefreshRequest) (RefreshR
 		}
 		// 如果本次请求里已经出现过该 auth_index，就拒绝重复项。
 		if _, ok := seen[authIndex]; ok {
-			// duplicate 表示请求内重复，不会再尝试创建任务。
-			response.Rejected = append(response.Rejected, RefreshRejectedAuthIndex{AuthIndex: authIndex, Error: "duplicate"})
+			// duplicate_request 表示同一个请求体里重复提交，不代表后端已有可轮询任务。
+			response.Rejected = append(response.Rejected, RefreshRejectedAuthIndex{AuthIndex: authIndex, Error: "duplicate_request"})
 			// 当前项处理完毕，继续看下一项。
 			continue
 		}
@@ -179,6 +180,11 @@ func (s *Service) Refresh(ctx context.Context, request RefreshRequest) (RefreshR
 			// 超出限制时按 invalid 处理，不创建后台任务。
 			response.Rejected = append(response.Rejected, RefreshRejectedAuthIndex{AuthIndex: authIndex, Error: "invalid"})
 			// 当前项处理完毕，继续看下一项。
+			continue
+		}
+		// 已有 queued/running 任务时优先按 duplicate 返回，避免身份刚删除时把“正在刷新”误报成 not_found。
+		if s.hasActiveRefreshTaskByAuthIndex(authIndex) {
+			response.Rejected = append(response.Rejected, RefreshRejectedAuthIndex{AuthIndex: authIndex, Error: "duplicate"})
 			continue
 		}
 		// 入队前先确认 auth_index 对应有效 auth file，并且 provider 支持 quota 查询。
@@ -211,12 +217,24 @@ func (s *Service) Refresh(ctx context.Context, request RefreshRequest) (RefreshR
 	// 如果本次有任务入队，就启动一个 dispatcher 顺序等待 worker slot 并派发实际 worker。
 	if len(queuedAuthIndexes) > 0 {
 		// dispatcher 自身只有一个 goroutine，大批量自动刷新不会产生“每个任务一个阻塞 goroutine”。
-		go s.dispatchRefreshTasks(queuedAuthIndexes)
+		if !s.startRefreshGoroutine(func() {
+			s.dispatchRefreshTasks(queuedAuthIndexes)
+		}) {
+			// App 关闭期间不再启动 dispatcher，已创建的 queued 任务要快速失败，避免前端无限等待。
+			s.markQueuedRefreshTasksFailed(queuedAuthIndexes, context.Canceled)
+		}
 	}
 	// Skipped 直接等于 rejected 数量，表示本次未入队的项。
 	response.Skipped = len(response.Rejected)
 	// 返回入队结果；后台任务完成后由轮询/cache 接口读取。
 	return response, nil
+}
+
+func (s *Service) hasActiveRefreshTaskByAuthIndex(authIndex string) bool {
+	s.refreshMu.Lock()
+	defer s.refreshMu.Unlock()
+	task, ok := s.refreshTasks[authIndex]
+	return ok && task.isActive()
 }
 
 func (s *Service) GetRefreshTaskByAuthIndex(ctx context.Context, authIndex string) (RefreshTaskResponse, error) {
@@ -239,7 +257,7 @@ func (s *Service) validateRefreshAuthIndex(ctx context.Context, authIndex string
 	// 先按 auth-file 身份查找；查不到时再区分“非 auth file”和“不存在”。
 	identity, err := repository.GetActiveAuthFileUsageIdentityByAuthIndex(ctx, s.db, authIndex)
 	if err == nil {
-		if _, _, ok := s.resolveQuotaHandler(identity.Provider, identity.Type); !ok {
+		if _, _, ok := s.resolveQuotaHandlerForIdentity(identity); !ok {
 			return "unsupported", nil
 		}
 		return "", nil
@@ -290,15 +308,23 @@ func (s *Service) ensureRefreshTask(authIndex string, source RefreshSource) (*Re
 
 func (s *Service) dispatchRefreshTasks(authIndexes []string) {
 	// dispatcher 顺序处理本次入队列表，避免为每个 queued 任务创建一个等待 token 的 goroutine。
+	refreshDone := s.refreshContextSnapshot().Done()
 	for index, authIndex := range authIndexes {
 		// 等待 worker slot 时同时监听 refreshContext，确保应用关闭时 queued 任务可以快速失败。
 		select {
 		// worker token 控制全局并发，防止一次批量刷新同时压垮 CPA/上游接口。
 		case s.refreshWorkerTokens <- struct{}{}:
 			// 拿到 worker slot 后再启动真正执行 provider 调用的 worker goroutine。
-			go s.runRefreshTaskWithWorker(authIndex)
+			if !s.startRefreshGoroutine(func() {
+				s.runRefreshTaskWithWorker(authIndex)
+			}) {
+				// 关闭期间如果拿到 token 后无法启动 worker，需要释放 token 并让当前及剩余 queued 任务失败。
+				<-s.refreshWorkerTokens
+				s.markQueuedRefreshTasksFailed(authIndexes[index:], context.Canceled)
+				return
+			}
 		// refreshContext 取消说明应用正在关闭或刷新服务停止。
-		case <-s.refreshContext.Done():
+		case <-refreshDone:
 			// 当前任务和剩余任务都还没有调用 provider，需要一起标记失败避免 queued 记录永久占位。
 			s.markQueuedRefreshTasksFailed(authIndexes[index:], context.Canceled)
 			// 当前 dispatcher 退出，已标记失败的任务会按普通失败 TTL 清理。
@@ -324,7 +350,7 @@ func (s *Service) runRefreshTaskWithWorker(authIndex string) {
 		return
 	}
 	// 每个任务独立设置超时；超时或 provider 错误都会沉淀到任务状态里给前端展示。
-	ctx, cancel := context.WithTimeout(s.refreshContext, RefreshTaskTimeout)
+	ctx, cancel := context.WithTimeout(s.refreshContextSnapshot(), RefreshTaskTimeout)
 	// 任务结束时释放 timeout timer，避免资源泄漏。
 	defer cancel()
 	// Check 会按 auth_index 读取身份、调用对应 provider，并标准化 quota rows。
@@ -411,10 +437,8 @@ func (s *Service) markRefreshTaskCompleted(authIndex string, response CheckRespo
 	}
 	// 标记任务完成，前端轮询会停止 pending 状态。
 	task.Status = RefreshTaskStatusCompleted
-	// 记录任务结束时间。
-	task.FinishedAt = now
-	// 成功 quota cache 不设置 ExpiresAt，CachedAt 用于前端展示更新时间。
-	task.CachedAt = now
+	// RefreshedAt 是对外唯一的刷新时间口径，成功缓存不设置 ExpiresAt。
+	task.RefreshedAt = now
 	// 保存包含 token/cost 的 quota 响应，后续 cache 接口直接复用。
 	task.Quota = &response
 }
@@ -447,10 +471,8 @@ func (s *Service) markRefreshTaskFailed(authIndex string, err error) {
 	}
 	// 失败任务分两类保存：401/402 这类可配置 HTTP 错误要进入页面恢复缓存；其它失败只短期保留给当前轮询。
 	task.Status = RefreshTaskStatusFailed
-	// 记录任务失败完成时间。
-	task.FinishedAt = now
-	// 记录失败缓存写入时间。
-	task.CachedAt = now
+	// RefreshedAt 是对外唯一的刷新时间口径，失败缓存也使用同一字段。
+	task.RefreshedAt = now
 	// 写入前端展示的错误信息。
 	task.Error = message
 	// 写入可选 HTTP 状态码，cache 接口会用它判断是否可恢复展示。
@@ -497,9 +519,9 @@ func (t *RefreshTaskRecord) response() RefreshTaskResponse {
 		quota := *t.Quota
 		response.Quota = &quota
 	}
-	if !t.CachedAt.IsZero() {
-		cachedAt := t.CachedAt
-		response.CachedAt = &cachedAt
+	if !t.RefreshedAt.IsZero() {
+		refreshedAt := t.RefreshedAt
+		response.RefreshedAt = &refreshedAt
 	}
 	if !t.ExpiresAt.IsZero() {
 		expiresAt := t.ExpiresAt
