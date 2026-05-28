@@ -63,6 +63,32 @@ func TestRedisIngestRunnerHTTPPullFailureKeepsOneSecondInitialBackoff(t *testing
 	}
 }
 
+func TestRedisIngestRunnerStartupHTTPInboxWriteFailureUsesOneSecondBackoff(t *testing.T) {
+	runner := NewRedisIngestRunner(
+		internalFailingSubscribeSource{err: errors.New("subscribe unavailable")},
+		internalFailingPullSource{err: errors.New("redis unavailable")},
+		internalStaticPullSource{messages: []string{`{"request_id":"http"}`}},
+		internalFailingInboxWriter{err: errors.New("sqlite locked")},
+		RedisIngestRunnerConfig{IdleInterval: time.Millisecond, BatchSize: 10},
+	)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var delays []time.Duration
+	runner.sleep = func(_ context.Context, delay time.Duration) bool {
+		delays = append(delays, delay)
+		cancel()
+		return false
+	}
+
+	if err := runner.Run(ctx); err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	want := []time.Duration{time.Second}
+	if !reflect.DeepEqual(delays, want) {
+		t.Fatalf("unexpected http inbox write retry delays: got %v want %v", delays, want)
+	}
+}
+
 type internalFailingSubscribeSource struct {
 	err error
 }
@@ -91,8 +117,24 @@ func (s internalFailingPullSource) Pull(context.Context) ([]string, error) {
 	return nil, nil
 }
 
+type internalStaticPullSource struct {
+	messages []string
+}
+
+func (s internalStaticPullSource) Pull(context.Context) ([]string, error) {
+	return append([]string(nil), s.messages...), nil
+}
+
 type internalNoopInboxWriter struct{}
 
 func (internalNoopInboxWriter) Insert(context.Context, string, []string, time.Time) (int, error) {
 	return 0, nil
+}
+
+type internalFailingInboxWriter struct {
+	err error
+}
+
+func (w internalFailingInboxWriter) Insert(context.Context, string, []string, time.Time) (int, error) {
+	return 0, w.err
 }

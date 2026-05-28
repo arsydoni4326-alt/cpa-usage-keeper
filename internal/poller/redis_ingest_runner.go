@@ -175,6 +175,12 @@ func (r *RedisIngestRunner) Run(ctx context.Context) error {
 			// http_pull 模式退出后重新探测，避免异常退出后永久停止。
 			continue
 		}
+		if errors.Is(httpErr, errRedisIngestInboxWrite) {
+			if !r.pauseAfterInboxWriteFailure(ctx, "http_inbox_write_failed", httpErr) {
+				return nil
+			}
+			continue
+		}
 		// 三条远端入口都失败时合并错误，状态和日志能同时看到完整失败链。
 		joined := errors.Join(subErr, redisErr, httpErr)
 		// 连续启动失败使用指数退避，避免 CPA 故障时高频刷错误。
