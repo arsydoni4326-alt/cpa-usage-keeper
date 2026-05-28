@@ -1556,52 +1556,62 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                     >
                       <label className={styles.customRangeField}>
                         <span className={styles.customRangeFieldLabel}>{t('usage_stats.custom_start')}</span>
-                        <input
-                          type="date"
-                          className={`input ${styles.customRangeInput}`}
-                          value={customTimeRange.start}
-                          min={customDateRangeBounds.min}
-                          max={customDateRangeBounds.max}
-                          disabled={!isCustomRange}
-                          onClick={handleCustomDateInputActivate}
-                          onFocus={handleCustomDateInputActivate}
-                          onKeyDown={handleCustomDateInputKeyDown}
-                          onPaste={(event) => event.preventDefault()}
-                          onChange={(event) => {
-                            const nextValue = event.target.value;
-                            if (!isCustomDateWithinBounds(nextValue, customDateRangeBounds)) return;
-                            setCustomTimeRange((current) => ({
-                              ...current,
-                              start: nextValue
-                            }));
-                          }}
-                          aria-label={t('usage_stats.custom_start')}
-                        />
+                        <span className={styles.customRangeInputShell}>
+                          <input
+                            type="date"
+                            className={`input ${styles.customRangeInput}`}
+                            value={customTimeRange.start}
+                            min={customDateRangeBounds.min}
+                            max={customDateRangeBounds.max}
+                            disabled={!isCustomRange}
+                            onClick={handleCustomDateInputActivate}
+                            onFocus={handleCustomDateInputActivate}
+                            onKeyDown={handleCustomDateInputKeyDown}
+                            onPaste={(event) => event.preventDefault()}
+                            onChange={(event) => {
+                              const nextValue = event.target.value;
+                              if (!isCustomDateWithinBounds(nextValue, customDateRangeBounds)) return;
+                              setCustomTimeRange((current) => ({
+                                ...current,
+                                start: nextValue
+                              }));
+                            }}
+                            aria-label={t('usage_stats.custom_start')}
+                          />
+                          <span className={styles.customRangeInputDisplay} aria-hidden="true">
+                            {customTimeRange.start || 'YYYY-MM-DD'}
+                          </span>
+                        </span>
                       </label>
                       <span className={styles.customRangeSeparator} aria-hidden="true">—</span>
                       <label className={styles.customRangeField}>
                         <span className={styles.customRangeFieldLabel}>{t('usage_stats.custom_end')}</span>
-                        <input
-                          type="date"
-                          className={`input ${styles.customRangeInput}`}
-                          value={customTimeRange.end}
-                          min={customDateRangeBounds.min}
-                          max={customDateRangeBounds.max}
-                          disabled={!isCustomRange}
-                          onClick={handleCustomDateInputActivate}
-                          onFocus={handleCustomDateInputActivate}
-                          onKeyDown={handleCustomDateInputKeyDown}
-                          onPaste={(event) => event.preventDefault()}
-                          onChange={(event) => {
-                            const nextValue = event.target.value;
-                            if (!isCustomDateWithinBounds(nextValue, customDateRangeBounds)) return;
-                            setCustomTimeRange((current) => ({
-                              ...current,
-                              end: nextValue
-                            }));
-                          }}
-                          aria-label={t('usage_stats.custom_end')}
-                        />
+                        <span className={styles.customRangeInputShell}>
+                          <input
+                            type="date"
+                            className={`input ${styles.customRangeInput}`}
+                            value={customTimeRange.end}
+                            min={customDateRangeBounds.min}
+                            max={customDateRangeBounds.max}
+                            disabled={!isCustomRange}
+                            onClick={handleCustomDateInputActivate}
+                            onFocus={handleCustomDateInputActivate}
+                            onKeyDown={handleCustomDateInputKeyDown}
+                            onPaste={(event) => event.preventDefault()}
+                            onChange={(event) => {
+                              const nextValue = event.target.value;
+                              if (!isCustomDateWithinBounds(nextValue, customDateRangeBounds)) return;
+                              setCustomTimeRange((current) => ({
+                                ...current,
+                                end: nextValue
+                              }));
+                            }}
+                            aria-label={t('usage_stats.custom_end')}
+                          />
+                          <span className={styles.customRangeInputDisplay} aria-hidden="true">
+                            {customTimeRange.end || 'YYYY-MM-DD'}
+                          </span>
+                        </span>
                       </label>
                     </div>
                   </div>
