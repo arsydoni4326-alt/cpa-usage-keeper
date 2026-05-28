@@ -545,6 +545,43 @@ describe('overview chart data flow', () => {
     expect(series.dataByCategory.output[24]).toBe(0);
   });
 
+  it('subtracts cached tokens from overview token breakdown input series', () => {
+    const series = buildTokenBreakdownChartSeries({
+      usage: {
+        ...overviewUsage,
+        hourly_series: {
+          ...overviewUsage.hourly_series!,
+          input_tokens: {
+            '2026-04-23T00:00:00Z': 1000,
+          },
+          output_tokens: {
+            '2026-04-23T00:00:00Z': 100,
+          },
+          tokens: {
+            '2026-04-23T00:00:00Z': 1150,
+          },
+          cached_tokens: {
+            '2026-04-23T00:00:00Z': 600,
+          },
+          reasoning_tokens: {
+            '2026-04-23T00:00:00Z': 50,
+          },
+        },
+      },
+      period: 'hour',
+      hourWindowHours: 1,
+      endMs: Date.parse('2026-04-23T00:16:00Z'),
+    });
+
+    expect(series.dataByCategory.input).toEqual([0, 400]);
+    expect(series.dataByCategory.cached).toEqual([0, 600]);
+    expect(series.dataByCategory.output).toEqual([0, 50]);
+    expect(series.dataByCategory.reasoning).toEqual([0, 50]);
+    expect(series.tooltipDataByCategory.input).toEqual([0, 1000]);
+    expect(series.tooltipDataByCategory.output).toEqual([0, 100]);
+    expect(series.totalTokens).toEqual([0, 1150]);
+  });
+
   it('keeps today token breakdown hour buckets aligned to full-day boundary buckets', () => {
     const series = buildTokenBreakdownChartSeries({
       usage: {
@@ -730,10 +767,13 @@ describe('overview chart data flow', () => {
       isDark: false,
       isMobile: false,
       stacked: true,
+      totalTokens: [1150],
+      totalLabel: 'Total',
     });
 
     const tickCallback = options.scales?.y?.ticks?.callback;
     const tooltipLabel = options.plugins?.tooltip?.callbacks?.label;
+    const tooltipFooter = options.plugins?.tooltip?.callbacks?.footer;
 
     expect(options.scales?.y?.stacked).toBe(true);
     expect(options.scales?.x?.stacked).toBe(true);
@@ -741,9 +781,17 @@ describe('overview chart data flow', () => {
     expect(tickCallback?.call({} as never, 1_500_000, 0, [])).toBe('1.50M');
     expect(typeof tooltipLabel).toBe('function');
     expect(tooltipLabel?.({
-      dataset: { label: 'Input' },
-      parsed: { y: 2_500_000_000 },
-    } as never)).toBe('Input: 2.50B tokens');
+      dataset: { label: 'Input', tooltipData: [1_000_000_000] },
+      dataIndex: 0,
+      parsed: { y: 400_000_000 },
+    } as never)).toBe('Input: 1.00B tokens');
+    expect(tooltipLabel?.({
+      dataset: null,
+      dataIndex: 0,
+      parsed: { y: 125 },
+    } as never)).toBe('125 tokens');
+    expect(typeof tooltipFooter).toBe('function');
+    expect(tooltipFooter?.([{ dataIndex: 0 }] as never)).toBe('Total: 1.15K tokens');
   });
 
   it('keeps mobile hourly overview chart data points visible without changing desktop point size', () => {
