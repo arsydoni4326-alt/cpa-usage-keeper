@@ -102,8 +102,17 @@ const toNumber = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const getDatasetLabelPrefix = (dataset: unknown): string => {
+  const label = dataset && typeof dataset === 'object'
+    ? (dataset as { label?: unknown }).label
+    : undefined;
+  return typeof label === 'string' && label ? `${label}: ` : '';
+};
+
 const getTooltipTokenValue = (dataset: unknown, dataIndex: number | undefined, fallback: unknown): number => {
-  const tooltipData = (dataset as { tooltipData?: unknown[] }).tooltipData;
+  const tooltipData = dataset && typeof dataset === 'object'
+    ? (dataset as { tooltipData?: unknown[] }).tooltipData
+    : undefined;
   const tooltipValue = typeof dataIndex === 'number' ? tooltipData?.[dataIndex] : undefined;
   return toNumber(tooltipValue ?? fallback);
 };
@@ -232,7 +241,7 @@ function buildAnalysisTokenChartOptions({ chartTheme, isMobile, totalTokens, tot
         usePointStyle: true,
         callbacks: {
           label: (context) => {
-            const label = context.dataset.label ? `${context.dataset.label}: ` : '';
+            const label = getDatasetLabelPrefix(context.dataset);
             const value = getTooltipTokenValue(context.dataset, context.dataIndex, context.parsed.y);
             return `${label}${formatCompactNumber(value)}`;
           },

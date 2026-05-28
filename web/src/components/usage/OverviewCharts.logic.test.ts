@@ -785,6 +785,11 @@ describe('overview chart data flow', () => {
       dataIndex: 0,
       parsed: { y: 400_000_000 },
     } as never)).toBe('Input: 1.00B tokens');
+    expect(tooltipLabel?.({
+      dataset: null,
+      dataIndex: 0,
+      parsed: { y: 125 },
+    } as never)).toBe('125 tokens');
     expect(typeof tooltipFooter).toBe('function');
     expect(tooltipFooter?.([{ dataIndex: 0 }] as never)).toBe('Total: 1.15K tokens');
   });

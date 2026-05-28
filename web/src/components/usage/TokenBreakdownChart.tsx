@@ -85,8 +85,17 @@ const getTokenSource = (usage: UsageOverviewPayload | null, period: TokenBreakdo
   period === 'hour' ? (usage?.hourly_series ?? usage?.series) : (usage?.daily_series ?? usage?.series)
 );
 
+const getDatasetLabelPrefix = (dataset: unknown): string => {
+  const label = dataset && typeof dataset === 'object'
+    ? (dataset as { label?: unknown }).label
+    : undefined;
+  return typeof label === 'string' && label ? `${label}: ` : '';
+};
+
 const getTooltipTokenValue = (dataset: unknown, dataIndex: number | undefined, fallback: unknown): number => {
-  const tooltipData = (dataset as { tooltipData?: unknown[] }).tooltipData;
+  const tooltipData = dataset && typeof dataset === 'object'
+    ? (dataset as { tooltipData?: unknown[] }).tooltipData
+    : undefined;
   const tooltipValue = typeof dataIndex === 'number' ? tooltipData?.[dataIndex] : undefined;
   return Number(tooltipValue ?? fallback ?? 0);
 };
@@ -180,7 +189,7 @@ export const buildTokenBreakdownChartOptions = ({
         ...baseOptions.plugins?.tooltip,
         callbacks: {
           label: (context) => {
-            const label = context.dataset.label ? `${context.dataset.label}: ` : '';
+            const label = getDatasetLabelPrefix(context.dataset);
             const value = getTooltipTokenValue(context.dataset, context.dataIndex, context.parsed.y);
             return `${label}${formatCompactTokenValue(value, true)}`;
           },

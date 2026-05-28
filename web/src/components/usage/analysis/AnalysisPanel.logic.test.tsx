@@ -79,6 +79,11 @@ describe('AnalysisPanel token chart data', () => {
       dataIndex: 0,
       parsed: { y: 50 },
     } as never)).toBe('usage_stats.output_tokens: 100');
+    expect(tooltipLabel?.({
+      dataset: null,
+      dataIndex: 0,
+      parsed: { y: 125 },
+    } as never)).toBe('125');
     const tooltipFooter = chartCapture.barOptions?.plugins?.tooltip?.callbacks?.footer;
     expect(typeof tooltipFooter).toBe('function');
     expect(tooltipFooter?.([{ dataIndex: 0 }] as never)).toBe('usage_stats.total_tokens: 1.15K');
