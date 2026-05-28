@@ -136,6 +136,14 @@ const toNumber = (value: unknown): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+export function calculateDisplayInputTokens({ inputTokens, cachedTokens }: { inputTokens: unknown; cachedTokens: unknown }): number {
+  return Math.max(Math.max(toNumber(inputTokens), 0) - Math.max(toNumber(cachedTokens), 0), 0);
+}
+
+export function calculateDisplayOutputTokens({ outputTokens, reasoningTokens }: { outputTokens: unknown; reasoningTokens: unknown }): number {
+  return Math.max(Math.max(toNumber(outputTokens), 0) - Math.max(toNumber(reasoningTokens), 0), 0);
+}
+
 const formatLocalDayKey = (date: Date): string => {
   const pad = (value: number) => String(value).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;

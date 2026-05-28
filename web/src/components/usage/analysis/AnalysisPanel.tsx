@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { Chart, ChartData, ChartOptions, Plugin, TooltipModel } from 'chart.js';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import type { AnalysisCompositionItem, AnalysisHeatmapCell, AnalysisResponse, AnalysisTokenUsageBucket } from '@/lib/types';
-import { formatCompactNumber } from '@/utils/usage';
+import { calculateDisplayInputTokens, calculateDisplayOutputTokens, formatCompactNumber } from '@/utils/usage';
 import styles from './AnalysisPanel.module.scss';
 
 interface AnalysisPanelProps {
@@ -19,6 +19,7 @@ type ChartRow = {
   output: number;
   cached: number;
   reasoning: number;
+  total: number;
   requests: number;
 };
 
@@ -64,6 +65,7 @@ type TokenLabels = {
   output: string;
   cached: string;
   reasoning: string;
+  total: string;
   requests: string;
 };
 
@@ -150,10 +152,17 @@ const formatBucketLabel = (bucket: string, granularity: AnalysisResponse['granul
 function buildTokenUsageRows(buckets: AnalysisTokenUsageBucket[], granularity: AnalysisResponse['granularity']): ChartRow[] {
   return buckets.map((bucket) => ({
     label: formatBucketLabel(bucket.bucket, granularity),
-    input: toNumber(bucket.input_tokens),
-    output: toNumber(bucket.output_tokens),
+    input: calculateDisplayInputTokens({
+      inputTokens: bucket.input_tokens,
+      cachedTokens: bucket.cached_tokens,
+    }),
+    output: calculateDisplayOutputTokens({
+      outputTokens: bucket.output_tokens,
+      reasoningTokens: bucket.reasoning_tokens,
+    }),
     cached: toNumber(bucket.cached_tokens),
     reasoning: toNumber(bucket.reasoning_tokens),
+    total: toNumber(bucket.total_tokens),
     requests: toNumber(bucket.requests),
   }));
 }
@@ -191,7 +200,7 @@ function buildTokenLegendItems(labels: TokenLabels): LegendItem[] {
   ];
 }
 
-function buildAnalysisTokenChartOptions({ chartTheme, isMobile }: { chartTheme: ChartTheme; isMobile: boolean }): ChartOptions<'bar'> {
+function buildAnalysisTokenChartOptions({ chartTheme, isMobile, totalTokens, totalLabel }: { chartTheme: ChartTheme; isMobile: boolean; totalTokens: number[]; totalLabel: string }): ChartOptions<'bar'> {
   return {
     responsive: true,
     maintainAspectRatio: false,
@@ -211,6 +220,11 @@ function buildAnalysisTokenChartOptions({ chartTheme, isMobile }: { chartTheme: 
           label: (context) => {
             const label = context.dataset.label ? `${context.dataset.label}: ` : '';
             return `${label}${formatCompactNumber(Number(context.parsed.y ?? 0))}`;
+          },
+          footer: (items) => {
+            const dataIndex = items[0]?.dataIndex ?? -1;
+            if (dataIndex < 0) return '';
+            return `${totalLabel}: ${formatCompactNumber(Number(totalTokens[dataIndex] ?? 0))}`;
           },
         },
       },
@@ -379,11 +393,17 @@ function TokenUsageChart({ rows, loading, isDark, isMobile }: { rows: ChartRow[]
     output: t('usage_stats.output_tokens'),
     cached: t('usage_stats.cached_tokens'),
     reasoning: t('usage_stats.reasoning_tokens'),
+    total: t('usage_stats.total_tokens'),
     requests: t('usage_stats.requests_count'),
   }), [t]);
   const chartTheme = useMemo(() => getChartTheme(isDark), [isDark]);
   const chartData = useMemo(() => buildAnalysisTokenChartData(rows, tokenLabels), [rows, tokenLabels]);
-  const chartOptions = useMemo(() => buildAnalysisTokenChartOptions({ chartTheme, isMobile }), [chartTheme, isMobile]);
+  const chartOptions = useMemo(() => buildAnalysisTokenChartOptions({
+    chartTheme,
+    isMobile,
+    totalTokens: rows.map((row) => row.total),
+    totalLabel: tokenLabels.total,
+  }), [chartTheme, isMobile, rows, tokenLabels.total]);
   const legendItems = useMemo(() => buildTokenLegendItems(tokenLabels), [tokenLabels]);
   return (
     <section className={`${styles.analysisCard} ${styles.tokenUsageCard}`}>

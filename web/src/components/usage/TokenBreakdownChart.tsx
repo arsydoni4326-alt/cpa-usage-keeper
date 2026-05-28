@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Line } from 'react-chartjs-2';
 import type { ChartOptions } from 'chart.js';
 import { Card } from '@/components/ui/Card';
-import { formatCompactTokenValue, type TokenCategory } from '@/utils/usage';
+import { calculateDisplayInputTokens, calculateDisplayOutputTokens, formatCompactTokenValue, type TokenCategory } from '@/utils/usage';
 import { buildChartOptions, getHourChartMinWidth } from '@/utils/usage/chartConfig';
 import type { UsageOverviewPayload } from './hooks/useUsageData';
 import styles from '@/pages/UsagePage.module.scss';
@@ -26,6 +26,7 @@ type TokenSeriesSource = NonNullable<UsageOverviewPayload['series']>;
 export type TokenBreakdownChartSeries = {
   labels: string[];
   dataByCategory: Record<TokenCategory, number[]>;
+  totalTokens: number[];
 };
 
 export type BuildTokenBreakdownChartSeriesOptions = {
@@ -114,11 +115,18 @@ export const buildTokenBreakdownChartSeries = ({
   return {
     labels: labels.map((label, index) => formatChartLabel(label, period, includeFinalHourBucket && index === labels.length - 1)),
     dataByCategory: {
-      input: labels.map((label) => Number(source?.input_tokens?.[label] ?? 0)),
-      output: labels.map((label) => Number(source?.output_tokens?.[label] ?? 0)),
+      input: labels.map((label) => calculateDisplayInputTokens({
+        inputTokens: source?.input_tokens?.[label],
+        cachedTokens: source?.cached_tokens?.[label],
+      })),
+      output: labels.map((label) => calculateDisplayOutputTokens({
+        outputTokens: source?.output_tokens?.[label],
+        reasoningTokens: source?.reasoning_tokens?.[label],
+      })),
       cached: labels.map((label) => Number(source?.cached_tokens?.[label] ?? 0)),
       reasoning: labels.map((label) => Number(source?.reasoning_tokens?.[label] ?? 0)),
     },
+    totalTokens: labels.map((label) => Number(source?.tokens?.[label] ?? 0)),
   };
 };
 
@@ -139,12 +147,16 @@ export const buildTokenBreakdownChartOptions = ({
   isDark,
   isMobile,
   stacked = false,
+  totalTokens = [],
+  totalLabel = 'Total',
 }: {
   period: TokenBreakdownChartPeriod;
   labels: string[];
   isDark: boolean;
   isMobile: boolean;
   stacked?: boolean;
+  totalTokens?: number[];
+  totalLabel?: string;
 }): ChartOptions<'line'> => {
   const baseOptions = buildChartOptions({ period, labels, isDark, isMobile });
   return {
@@ -157,6 +169,11 @@ export const buildTokenBreakdownChartOptions = ({
           label: (context) => {
             const label = context.dataset.label ? `${context.dataset.label}: ` : '';
             return `${label}${formatCompactTokenValue(Number(context.parsed.y ?? 0), true)}`;
+          },
+          footer: (items) => {
+            const dataIndex = items[0]?.dataIndex ?? -1;
+            if (dataIndex < 0) return '';
+            return `${totalLabel}: ${formatCompactTokenValue(Number(totalTokens[dataIndex] ?? 0), true)}`;
           },
         },
       },
@@ -225,6 +242,8 @@ export function TokenBreakdownChart({
       isDark,
       isMobile,
       stacked: true,
+      totalTokens: series.totalTokens,
+      totalLabel: t('usage_stats.total_tokens'),
     });
 
     return { chartData: data, chartOptions: options };
