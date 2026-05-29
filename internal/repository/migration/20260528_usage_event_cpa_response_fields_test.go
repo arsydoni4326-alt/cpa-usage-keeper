@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestAddUsageEventTTFTMSMigrationAddsNullableColumn(t *testing.T) {
+func TestAddUsageEventCPAResponseFieldsMigrationAddsColumns(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(testSQLiteDSN(filepath.Join(t.TempDir(), "legacy.db"))), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open database: %v", err)
@@ -32,22 +32,28 @@ func TestAddUsageEventTTFTMSMigrationAddsNullableColumn(t *testing.T) {
 		t.Fatalf("seed legacy usage event: %v", err)
 	}
 
-	if err := addUsageEventTTFTMSMigration(db); err != nil {
-		t.Fatalf("add usage event ttft_ms: %v", err)
+	if err := addUsageEventCPAResponseFieldsMigration(db); err != nil {
+		t.Fatalf("add usage event CPA response fields: %v", err)
 	}
-	if err := addUsageEventTTFTMSMigration(db); err != nil {
-		t.Fatalf("add usage event ttft_ms should be idempotent: %v", err)
+	if err := addUsageEventCPAResponseFieldsMigration(db); err != nil {
+		t.Fatalf("add usage event CPA response fields should be idempotent: %v", err)
 	}
 
-	if !db.Migrator().HasColumn("usage_events", "ttft_ms") {
-		t.Fatal("expected usage_events.ttft_ms column to exist")
+	for _, column := range []string{"ttft_ms", "service_tier"} {
+		if !db.Migrator().HasColumn("usage_events", column) {
+			t.Fatalf("expected usage_events.%s column to exist", column)
+		}
 	}
 
 	var ttftMS sql.NullInt64
-	if err := db.Raw(`SELECT ttft_ms FROM usage_events WHERE id = ?`, int64(1)).Row().Scan(&ttftMS); err != nil {
-		t.Fatalf("scan ttft_ms: %v", err)
+	var serviceTier string
+	if err := db.Raw(`SELECT ttft_ms, service_tier FROM usage_events WHERE id = ?`, int64(1)).Row().Scan(&ttftMS, &serviceTier); err != nil {
+		t.Fatalf("scan CPA response fields: %v", err)
 	}
 	if ttftMS.Valid {
 		t.Fatalf("expected existing usage event ttft_ms to stay NULL, got %d", ttftMS.Int64)
+	}
+	if serviceTier != "" {
+		t.Fatalf("expected existing usage event service_tier to default to empty string, got %q", serviceTier)
 	}
 }
