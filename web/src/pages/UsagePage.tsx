@@ -45,7 +45,7 @@ import {
 } from '@/components/usage';
 import { buildUsageRangeQuery } from '@/utils/usage/rangeQuery';
 import {
-  getModelNamesFromUsage,
+  getOverviewModelNames,
   resolveUsageFilterWindow,
   sanitizeChartLines,
   type UsageFilterWindow,
@@ -1373,7 +1373,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   });
 
   const overviewModelNames = useMemo(
-    () => getModelNamesFromUsage(usage?.usage ?? null),
+    () => getOverviewModelNames(usage),
     [usage]
   );
 
