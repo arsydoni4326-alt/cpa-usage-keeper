@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"cpa-usage-keeper/internal/helper"
 	"cpa-usage-keeper/internal/redact"
 	"cpa-usage-keeper/internal/service"
 	servicedto "cpa-usage-keeper/internal/service/dto"
@@ -114,7 +115,7 @@ func loadCPAAPIKeyInfos(c *gin.Context, provider service.CPAAPIKeyProvider) (map
 	}
 	infos := make(map[string]analysisAPIKeyInfo, len(rows))
 	for _, row := range rows {
-		infos[row.APIKey] = analysisAPIKeyInfo{ID: row.ID, Label: cpaAPIKeyDisplayLabel(row)}
+		infos[row.APIKey] = analysisAPIKeyInfo{ID: row.ID, Label: helper.CPAAPIKeyDisplayLabel(row)}
 	}
 	return infos, nil
 }

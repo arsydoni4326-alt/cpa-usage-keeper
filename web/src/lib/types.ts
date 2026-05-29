@@ -151,8 +151,10 @@ export interface UsageEventTokens {
 export interface UsageEvent {
   id?: string
   timestamp: string
+  api_key?: string
   model: string
   reasoning_effort?: string
+  endpoint?: string
   source: string
   source_raw?: string
   source_type?: string

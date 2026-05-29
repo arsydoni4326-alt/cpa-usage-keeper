@@ -37,8 +37,11 @@ type RequestEventRow = {
   timestamp: string;
   timestampMs: number;
   timestampLabel: string;
+  apiKey: string;
   model: string;
   reasoningEffort: string;
+  requestType: string;
+  endpoint: string;
   sourceRaw: string;
   source: string;
   sourceType: string;
@@ -93,6 +96,27 @@ const formatRequestEventTimestamp = (timestamp: string): string => {
 const formatCacheRateForSource = (cachedTokens: number, inputTokens: number, sourceType?: string): string => {
   const rate = calculateCacheRate({ inputTokens, cachedTokens, sourceType });
   return rate === null ? '-' : `${rate.toFixed(2)}%`;
+};
+
+const formatTTFTMs = (ttftMs: number | null): string => {
+  if (ttftMs === null || ttftMs <= 0) {
+    return '-';
+  }
+  return formatDurationMs(ttftMs);
+};
+
+const parseRequestEndpoint = (rawEndpoint: unknown): { requestType: string; endpoint: string } => {
+  const raw = String(rawEndpoint ?? '').trim().replace(/\s+/g, ' ');
+  if (!raw) {
+    return { requestType: '-', endpoint: '-' };
+  }
+  const [first, ...rest] = raw.split(' ');
+  const upperMethod = first.toUpperCase();
+  const hasMethod = ['GET', 'POST'].includes(upperMethod);
+  const requestType = upperMethod === 'POST' ? 'HTTP' : upperMethod === 'GET' ? 'WS' : '-';
+  const path = hasMethod ? rest.join(' ').trim() : raw;
+  const normalizedPath = path.startsWith('/v1/') ? path.slice(3) : path === '/v1' ? '/' : path;
+  return { requestType, endpoint: normalizedPath || '-' };
 };
 
 const encodeCsv = (value: string | number): string => {
@@ -154,8 +178,10 @@ export function RequestEventsDetailsCard({
           : normalizeAuthIndex(authIndexRaw) || '-';
       const source = String(event.source ?? '').trim() || '-';
       const sourceType = String(event.source_type ?? '').trim();
+      const apiKey = String(event.api_key ?? '').trim() || '-';
       const model = String(event.model ?? '').trim() || '-';
       const reasoningEffort = String(event.reasoning_effort ?? '').trim() || '-';
+      const endpointFields = parseRequestEndpoint(event.endpoint);
       const inputTokens = Math.max(toNumber(event.tokens?.input_tokens), 0);
       const outputTokens = Math.max(toNumber(event.tokens?.output_tokens), 0);
       const reasoningTokens = Math.max(toNumber(event.tokens?.reasoning_tokens), 0);
@@ -187,8 +213,11 @@ export function RequestEventsDetailsCard({
         timestamp,
         timestampMs: Number.isNaN(timestampMs) ? 0 : timestampMs,
         timestampLabel: formatRequestEventTimestamp(timestamp),
+        apiKey,
         model,
         reasoningEffort,
+        requestType: endpointFields.requestType,
+        endpoint: endpointFields.endpoint,
         sourceRaw: sourceRaw || '-',
         source,
         sourceType,
@@ -277,14 +306,17 @@ export function RequestEventsDetailsCard({
 
     const csvHeader = [
       'timestamp',
+      'api_key',
+      'source',
       'model',
       'reasoning_effort',
-      'source',
-      'source_raw',
-      'auth_index',
       'result',
       ...(hasTTFTData ? ['ttft_ms'] : []),
       ...(hasLatencyData ? ['latency_ms'] : []),
+      'request_type',
+      'endpoint',
+      'source_raw',
+      'auth_index',
       'input_tokens',
       'output_tokens',
       'reasoning_tokens',
@@ -296,14 +328,17 @@ export function RequestEventsDetailsCard({
     const csvRows = rows.map((row) =>
       [
         row.timestamp,
+        row.apiKey === '-' ? '' : row.apiKey,
+        row.source,
         row.model,
         row.reasoningEffort === '-' ? '' : row.reasoningEffort,
-        row.source,
-        row.sourceRaw,
-        row.authIndex,
         row.failed ? 'failed' : 'success',
         ...(hasTTFTData ? [row.ttftMs ?? ''] : []),
         ...(hasLatencyData ? [row.latencyMs ?? ''] : []),
+        row.requestType === '-' ? '' : row.requestType,
+        row.endpoint === '-' ? '' : row.endpoint,
+        row.sourceRaw,
+        row.authIndex,
         row.inputTokens,
         row.outputTokens,
         row.reasoningTokens,
@@ -328,14 +363,17 @@ export function RequestEventsDetailsCard({
 
     const payload = rows.map((row) => ({
       timestamp: row.timestamp,
+      api_key: row.apiKey === '-' ? '' : row.apiKey,
+      source: row.source,
       model: row.model,
       reasoning_effort: row.reasoningEffort === '-' ? '' : row.reasoningEffort,
-      source: row.source,
-      source_raw: row.sourceRaw,
-      auth_index: row.authIndex,
       failed: row.failed,
       ...(hasTTFTData && row.ttftMs !== null ? { ttft_ms: row.ttftMs } : {}),
       ...(hasLatencyData && row.latencyMs !== null ? { latency_ms: row.latencyMs } : {}),
+      request_type: row.requestType === '-' ? '' : row.requestType,
+      endpoint: row.endpoint === '-' ? '' : row.endpoint,
+      source_raw: row.sourceRaw,
+      auth_index: row.authIndex,
       tokens: {
         input_tokens: row.inputTokens,
         output_tokens: row.outputTokens,
@@ -440,12 +478,15 @@ export function RequestEventsDetailsCard({
               <thead>
                 <tr>
                   <th>{t('usage_stats.request_events_timestamp')}</th>
+                  <th>{t('usage_stats.api_key_filter')}</th>
+                  <th>{t('usage_stats.request_events_source')}</th>
                   <th>{t('usage_stats.model_name')}</th>
                   <th title={t('usage_stats.reasoning_effort_hint')}>{t('usage_stats.reasoning_effort')}</th>
-                  <th>{t('usage_stats.request_events_source')}</th>
                   <th>{t('usage_stats.request_events_result')}</th>
-                  {hasTTFTData && <th title={ttftHint}>{t('usage_stats.ttft')}</th>}
+                  <th title={ttftHint}>{t('usage_stats.ttft')}</th>
                   {hasLatencyData && <th title={latencyHint}>{t('usage_stats.latency')}</th>}
+                  <th>{t('usage_stats.request_type')}</th>
+                  <th>{t('usage_stats.request_endpoint')}</th>
                   <th>{t('usage_stats.input_tokens')}</th>
                   <th>{t('usage_stats.output_tokens')}</th>
                   <th className={styles.requestEventsReasoningHeader}>{t('usage_stats.reasoning_tokens')}</th>
@@ -461,8 +502,7 @@ export function RequestEventsDetailsCard({
                     <td title={row.timestamp} className={styles.requestEventsTimestamp}>
                       {row.timestampLabel}
                     </td>
-                    <td className={styles.modelCell}>{row.model}</td>
-                    <td>{row.reasoningEffort}</td>
+                    <td className={styles.requestEventsAPIKeyCell} title={row.apiKey}>{row.apiKey}</td>
                     <td className={styles.requestEventsSourceCell} title={row.source}>
                       <span className={styles.requestEventsSourceStack}>
                         <span className={styles.requestEventsSourceValue}>{row.source}</span>
@@ -478,6 +518,8 @@ export function RequestEventsDetailsCard({
                         )}
                       </span>
                     </td>
+                    <td className={styles.modelCell}>{row.model}</td>
+                    <td>{row.reasoningEffort}</td>
                     <td>
                       <span
                         className={
@@ -489,12 +531,12 @@ export function RequestEventsDetailsCard({
                         {row.failed ? t('usage_stats.failure') : t('usage_stats.success')}
                       </span>
                     </td>
-                    {hasTTFTData && (
-                      <td className={styles.durationCell}>{formatDurationMs(row.ttftMs)}</td>
-                    )}
+                    <td className={styles.durationCell}>{formatTTFTMs(row.ttftMs)}</td>
                     {hasLatencyData && (
                       <td className={styles.durationCell}>{formatDurationMs(row.latencyMs)}</td>
                     )}
+                    <td>{row.requestType}</td>
+                    <td className={styles.requestEventsEndpointCell} title={row.endpoint}>{row.endpoint}</td>
                     <td>{row.inputTokens.toLocaleString()}</td>
                     <td>{row.outputTokens.toLocaleString()}</td>
                     <td>{row.reasoningTokens.toLocaleString()}</td>

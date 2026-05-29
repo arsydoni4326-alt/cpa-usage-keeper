@@ -46,6 +46,7 @@ type UsageEventRecord struct {
 	APIGroupKey         string
 	Model               string
 	ReasoningEffort     string
+	Endpoint            string
 	AuthType            string
 	Provider            string
 	Source              string

@@ -66,6 +66,7 @@ func TestUsageEventsReturnsFilteredRows(t *testing.T) {
 		Timestamp:           time.Date(2026, 4, 22, 11, 0, 0, 0, time.UTC),
 		Model:               "claude-sonnet",
 		ReasoningEffort:     "medium",
+		Endpoint:            "POST /v1/responses",
 		AuthType:            "apikey",
 		Provider:            "OpenAI Mirror",
 		Source:              "sk-provider-key",
@@ -118,6 +119,9 @@ func TestUsageEventsReturnsFilteredRows(t *testing.T) {
 	if !contains(body, `"reasoning_effort":"medium"`) {
 		t.Fatalf("expected reasoning effort in response body: %s", body)
 	}
+	if !contains(body, `"endpoint":"POST /v1/responses"`) {
+		t.Fatalf("expected endpoint in response body: %s", body)
+	}
 	if !contains(body, `"ttft_ms":45`) {
 		t.Fatalf("expected ttft_ms in response body: %s", body)
 	}
@@ -162,6 +166,71 @@ func TestUsageEventsResponseDoesNotExposeSourceKey(t *testing.T) {
 	}
 	if contains(body, `"source_key"`) {
 		t.Fatalf("expected source_key to be removed from usage event response, got %s", body)
+	}
+}
+
+func TestUsageEventsResolvesCPAAPIKeyAliasFromGroupKey(t *testing.T) {
+	provider := &usageEventsStub{events: []servicedto.UsageEventRecord{{
+		ID:          49,
+		Timestamp:   time.Date(2026, 4, 22, 11, 0, 0, 0, time.UTC),
+		APIGroupKey: "sk-alpha123456",
+		Model:       "claude-sonnet",
+		AuthType:    "apikey",
+		Provider:    "Fallback Provider",
+	}}}
+	keyProvider := &authCPAAPIKeyStub{row: entities.CPAAPIKey{
+		ID:         7,
+		APIKey:     "sk-alpha123456",
+		DisplayKey: "sk-*********123456",
+		KeyAlias:   "Production Key",
+	}}
+	router := NewRouter(nil, nil, provider, nil, AuthConfig{}, nil, "", OptionalProviders{CPAAPIKeys: keyProvider})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/usage/events?range=24h", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	body := resp.Body.String()
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", resp.Code, body)
+	}
+	if !contains(body, `"api_key":"Production Key"`) {
+		t.Fatalf("expected API key alias in response body: %s", body)
+	}
+	if contains(body, `sk-alpha123456`) || contains(body, `sk-*********123456`) {
+		t.Fatalf("expected raw and masked key to be hidden when alias exists, got %s", body)
+	}
+}
+
+func TestUsageEventsFallsBackToMaskedCPAAPIKeyFromGroupKey(t *testing.T) {
+	provider := &usageEventsStub{events: []servicedto.UsageEventRecord{{
+		ID:          50,
+		Timestamp:   time.Date(2026, 4, 22, 11, 0, 0, 0, time.UTC),
+		APIGroupKey: "sk-beta654321",
+		Model:       "claude-sonnet",
+		AuthType:    "apikey",
+		Provider:    "Fallback Provider",
+	}}}
+	keyProvider := &authCPAAPIKeyStub{row: entities.CPAAPIKey{
+		ID:         8,
+		APIKey:     "sk-beta654321",
+		DisplayKey: "sk-*********654321",
+	}}
+	router := NewRouter(nil, nil, provider, nil, AuthConfig{}, nil, "", OptionalProviders{CPAAPIKeys: keyProvider})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/usage/events?range=24h", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	body := resp.Body.String()
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", resp.Code, body)
+	}
+	if !contains(body, `"api_key":"sk-*********654321"`) {
+		t.Fatalf("expected masked API key in response body: %s", body)
+	}
+	if contains(body, `sk-beta654321`) {
+		t.Fatalf("expected raw API key to stay hidden, got %s", body)
 	}
 }
 

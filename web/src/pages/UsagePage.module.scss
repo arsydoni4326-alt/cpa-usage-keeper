@@ -1640,6 +1640,7 @@
 
 .modelCell {
   font-weight: 500;
+  min-width: 135px;
   max-width: 240px;
   word-break: break-all;
 }
@@ -2343,17 +2344,29 @@
 }
 
 .requestEventsSourceCell,
+.requestEventsAPIKeyCell,
 .requestEventsAuthIndex {
   font-family:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
     monospace;
   font-size: 11px;
-  max-width: 180px;
+  max-width: 280px;
   word-break: break-all;
 }
 
 .requestEventsSourceCell {
-  min-width: 150px;
+  min-width: 165px;
+}
+
+.requestEventsAPIKeyCell {
+  min-width: 135px;
+  max-width: 240px;
+}
+
+.requestEventsEndpointCell {
+  min-width: 120px;
+  max-width: 180px;
+  word-break: break-all;
 }
 
 .requestEventsSourceStack {

@@ -14,7 +14,7 @@ import (
 )
 
 // usageEventProjectionColumns 限制 usage_events 查询列，避免 Overview 和列表页把 RawJSON 等大字段读入内存。
-const usageEventProjectionColumns = "id, api_group_key, provider, auth_type, model, reasoning_effort, timestamp, source, auth_index, failed, latency_ms, ttft_ms, input_tokens, output_tokens, reasoning_tokens, cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens"
+const usageEventProjectionColumns = "id, api_group_key, provider, auth_type, model, reasoning_effort, endpoint, timestamp, source, auth_index, failed, latency_ms, ttft_ms, input_tokens, output_tokens, reasoning_tokens, cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens"
 
 // usageEventProjection 是 usage_events 轻量投影，专门承接 select columns 的查询结果。
 type usageEventProjection struct {
@@ -24,6 +24,7 @@ type usageEventProjection struct {
 	AuthType            string
 	Model               string
 	ReasoningEffort     string
+	Endpoint            string
 	Timestamp           time.Time
 	Source              string
 	AuthIndex           string
@@ -142,6 +143,7 @@ func usageEventProjectionToRecord(event usageEventProjection) dto.UsageEventReco
 		APIGroupKey:         strings.TrimSpace(event.APIGroupKey),
 		Model:               strings.TrimSpace(event.Model),
 		ReasoningEffort:     strings.TrimSpace(event.ReasoningEffort),
+		Endpoint:            strings.TrimSpace(event.Endpoint),
 		AuthType:            strings.TrimSpace(event.AuthType),
 		Provider:            strings.TrimSpace(event.Provider),
 		Source:              strings.TrimSpace(event.Source),
@@ -169,6 +171,7 @@ func usageEventProjectionToEntity(event usageEventProjection) entities.UsageEven
 		AuthType:            event.AuthType,
 		Model:               event.Model,
 		ReasoningEffort:     event.ReasoningEffort,
+		Endpoint:            event.Endpoint,
 		Timestamp:           event.Timestamp,
 		Source:              event.Source,
 		AuthIndex:           event.AuthIndex,

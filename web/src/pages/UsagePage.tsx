@@ -197,6 +197,8 @@ export const shouldAutoRefreshUsageTab = ({
   return false;
 };
 
+export const shouldLoadPricingOnUsageTabEntry = (activeTab: UsageTab) => activeTab === 'events';
+
 type RequestEventFilterState = {
   model: string;
   source: string;
@@ -652,6 +654,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     loading: pricingLoading,
     error: pricingError,
     loadPricing,
+    loadModelPrices,
     setModelPrices,
   } = usePricingData({
     onAuthRequired,
@@ -1253,6 +1256,13 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   }), [autoRefreshEnabled, refreshAutoRefreshTab]);
 
   useHeaderRefresh(refreshActiveTab);
+
+  useEffect(() => {
+    if (!shouldLoadPricingOnUsageTabEntry(activeTab)) {
+      return;
+    }
+    void loadModelPrices();
+  }, [activeTab, loadModelPrices]);
 
   useEffect(() => {
     if (activeTab !== 'events') {
