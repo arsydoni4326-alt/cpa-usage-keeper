@@ -113,7 +113,7 @@ const parseRequestEndpoint = (rawEndpoint: unknown): { requestType: string; endp
   const [first, ...rest] = raw.split(' ');
   const upperMethod = first.toUpperCase();
   const hasMethod = ['GET', 'POST'].includes(upperMethod);
-  const requestType = upperMethod === 'POST' ? 'HTTP' : upperMethod === 'GET' ? 'WS' : '-';
+  const requestType = upperMethod === 'POST' ? 'SSE' : upperMethod === 'GET' ? 'WS' : '-';
   const path = hasMethod ? rest.join(' ').trim() : raw;
   const normalizedPath = path.startsWith('/v1/') ? path.slice(3) : path === '/v1' ? '/' : path;
   return { requestType, endpoint: normalizedPath || '-' };

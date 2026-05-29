@@ -74,7 +74,7 @@ describe('RequestEventsDetailsCard pagination', () => {
     expect(html).toContain('class="_requestEventsAPIKeyCell_');
     expect(html).toContain('title="Production Key">Production Key</td>');
     expect(html).toContain('<td>medium</td>');
-    expect(html).toMatch(/<td>HTTP<\/td><td class="[^"]*requestEventsEndpointCell[^"]*" title="\/messages">\/messages<\/td>/);
+    expect(html).toMatch(/<td>SSE<\/td><td class="[^"]*requestEventsEndpointCell[^"]*" title="\/messages">\/messages<\/td>/);
     expect(html.indexOf('>45ms</td>')).toBeLessThan(html.indexOf('>120ms</td>'));
     expect(html).toContain('1 / 6');
     expect(html).toContain('20');

@@ -40,6 +40,12 @@ describe('i18n resources', () => {
     expect(i18n.getResource('zh-TW', 'translation', 'usage_stats.latency')).toBe('總延遲');
   });
 
+  it('uses compact Chinese labels for request event type column', () => {
+    expect(i18n.getResource('en', 'translation', 'usage_stats.request_type')).toBe('Type');
+    expect(i18n.getResource('zh', 'translation', 'usage_stats.request_type')).toBe('类型');
+    expect(i18n.getResource('zh-TW', 'translation', 'usage_stats.request_type')).toBe('類型');
+  });
+
   it('keeps Analysis heatmap cell tooltips focused on model totals', () => {
     expect(i18n.getResource('en', 'translation', 'usage_stats.analysis_heatmap_cell_title')).toBe('{{model}}: {{tokens}} Tokens, {{requests}} Requests');
     expect(i18n.getResource('zh', 'translation', 'usage_stats.analysis_heatmap_cell_title')).toBe('{{model}}：{{tokens}} Token，{{requests}} 次请求');
