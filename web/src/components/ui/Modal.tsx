@@ -6,6 +6,8 @@ import {
   useState,
   type PropsWithChildren,
   type ReactNode,
+  type TouchEvent,
+  type WheelEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
@@ -37,13 +39,6 @@ const scrollLockSnapshot = {
   scrollY: 0,
   contentScrollTop: 0,
   contentEl: null as HTMLElement | null,
-  bodyPosition: '',
-  bodyTop: '',
-  bodyLeft: '',
-  bodyRight: '',
-  bodyWidth: '',
-  bodyOverflow: '',
-  htmlOverflow: '',
 };
 
 const resolveContentScrollContainer = () => {
@@ -55,31 +50,15 @@ const resolveContentScrollContainer = () => {
 const lockScroll = () => {
   if (typeof document === 'undefined') return;
   if (activeModalCount === 0) {
-    const body = document.body;
     const html = document.documentElement;
     const contentEl = resolveContentScrollContainer();
 
     scrollLockSnapshot.scrollY = window.scrollY || window.pageYOffset || html.scrollTop || 0;
     scrollLockSnapshot.contentEl = contentEl;
     scrollLockSnapshot.contentScrollTop = contentEl?.scrollTop ?? 0;
-    scrollLockSnapshot.bodyPosition = body.style.position;
-    scrollLockSnapshot.bodyTop = body.style.top;
-    scrollLockSnapshot.bodyLeft = body.style.left;
-    scrollLockSnapshot.bodyRight = body.style.right;
-    scrollLockSnapshot.bodyWidth = body.style.width;
-    scrollLockSnapshot.bodyOverflow = body.style.overflow;
-    scrollLockSnapshot.htmlOverflow = html.style.overflow;
 
-    body.classList.add(MODAL_LOCK_CLASS);
+    document.body.classList.add(MODAL_LOCK_CLASS);
     html.classList.add(MODAL_LOCK_CLASS);
-
-    body.style.position = 'fixed';
-    body.style.top = `-${scrollLockSnapshot.scrollY}px`;
-    body.style.left = '0';
-    body.style.right = '0';
-    body.style.width = '100%';
-    body.style.overflow = 'hidden';
-    html.style.overflow = 'hidden';
   }
   activeModalCount += 1;
 };
@@ -88,22 +67,13 @@ const unlockScroll = () => {
   if (typeof document === 'undefined') return;
   activeModalCount = Math.max(0, activeModalCount - 1);
   if (activeModalCount === 0) {
-    const body = document.body;
     const html = document.documentElement;
     const scrollY = scrollLockSnapshot.scrollY;
     const contentScrollTop = scrollLockSnapshot.contentScrollTop;
     const contentEl = scrollLockSnapshot.contentEl;
 
-    body.classList.remove(MODAL_LOCK_CLASS);
+    document.body.classList.remove(MODAL_LOCK_CLASS);
     html.classList.remove(MODAL_LOCK_CLASS);
-
-    body.style.position = scrollLockSnapshot.bodyPosition;
-    body.style.top = scrollLockSnapshot.bodyTop;
-    body.style.left = scrollLockSnapshot.bodyLeft;
-    body.style.right = scrollLockSnapshot.bodyRight;
-    body.style.width = scrollLockSnapshot.bodyWidth;
-    body.style.overflow = scrollLockSnapshot.bodyOverflow;
-    html.style.overflow = scrollLockSnapshot.htmlOverflow;
 
     if (contentEl) {
       contentEl.scrollTo({ top: contentScrollTop, left: 0, behavior: 'auto' });
@@ -272,8 +242,20 @@ export function Modal({
   const overlayClass = `modal-overlay ${isClosing ? 'modal-overlay-closing' : 'modal-overlay-entering'}`;
   const modalClass = `modal ${isClosing ? 'modal-closing' : 'modal-entering'}${className ? ` ${className}` : ''}`;
 
+  const handleOverlayWheel = (event: WheelEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (target instanceof Element && target.closest('.modal-body')) return;
+    event.preventDefault();
+  };
+
+  const handleOverlayTouchMove = (event: TouchEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (target instanceof Element && target.closest('.modal-body')) return;
+    event.preventDefault();
+  };
+
   const modalContent = (
-    <div className={overlayClass}>
+    <div className={overlayClass} onWheel={handleOverlayWheel} onTouchMove={handleOverlayTouchMove}>
       <div
         ref={modalRef}
         className={modalClass}
