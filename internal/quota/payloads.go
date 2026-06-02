@@ -383,7 +383,7 @@ func floatPtrField(object map[string]json.RawMessage, keys ...string) *float64 {
 func floatValue(object map[string]json.RawMessage, keys ...string) (float64, bool) {
 	for _, key := range keys {
 		if raw, ok := object[key]; ok {
-			if strings.TrimSpace(string(raw)) == "null" {
+			if rawJSONNull(raw) {
 				continue
 			}
 			var number float64
@@ -400,6 +400,10 @@ func floatValue(object map[string]json.RawMessage, keys ...string) (float64, boo
 		}
 	}
 	return 0, false
+}
+
+func rawJSONNull(raw json.RawMessage) bool {
+	return len(raw) == 4 && raw[0] == 'n' && raw[1] == 'u' && raw[2] == 'l' && raw[3] == 'l'
 }
 
 func intField(object map[string]json.RawMessage, keys ...string) int64 {
