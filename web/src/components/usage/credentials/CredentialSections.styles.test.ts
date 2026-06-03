@@ -6,6 +6,13 @@ const credentialShellSource = readFileSync(new URL('./CredentialSectionShell.tsx
 const aiProviderSectionSource = readFileSync(new URL('./AiProviderCredentialsSection.tsx', import.meta.url), 'utf8')
 const authFileSectionSource = readFileSync(new URL('./AuthFileCredentialsSection.tsx', import.meta.url), 'utf8')
 
+const cssBlock = (selector: string) => {
+  const start = credentialStyles.indexOf(selector)
+  expect(start).toBeGreaterThanOrEqual(0)
+  const next = credentialStyles.indexOf('\n.', start + selector.length)
+  return credentialStyles.slice(start, next === -1 ? undefined : next)
+}
+
 describe('Credential section styles', () => {
   it('keeps Auth Files and AI Provider row sizing separate', () => {
     expect(credentialStyles).toMatch(/\.authFileCredentialRow\s*\{[\s\S]*?grid-template-columns:\s*minmax\(170px, 250px\) minmax\(394px, max-content\) minmax\(250px, 1fr\);/)
@@ -77,6 +84,9 @@ describe('Credential section styles', () => {
     expect(credentialStyles).toMatch(/\.credentialInspectionMetric\s*\{[\s\S]*?align-self:\s*start;/)
     expect(credentialStyles).toMatch(/\.credentialInspectionMetric\s*\{[\s\S]*?align-content:\s*start;/)
     expect(credentialStyles).toMatch(/\.credentialInspectionStartButton\s*\{[\s\S]*?align-self:\s*center;/)
+    expect(cssBlock('.credentialInspectionStatCardUnauthorized')).toContain('color: var(--danger-color);')
+    expect(cssBlock('.credentialInspectionStatusUnauthorized')).toContain('background: color-mix(in srgb, var(--danger-color) 12%, transparent);')
+    expect(cssBlock('.credentialInspectionStatusUnauthorized')).toContain('color: var(--danger-color);')
     expect(authFileSectionSource).toContain('status?.completed_at')
     expect(authFileSectionSource).toContain('role="progressbar"')
     expect(authFileSectionSource).toContain('aria-valuenow={progress}')
