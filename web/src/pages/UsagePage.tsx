@@ -320,15 +320,18 @@ export const scheduleStatusActiveHeartbeat = ({
   let controller: AbortController | null = null;
   let timer: number | null = null;
   const isVisible = () => isUsagePageVisible(targetDocument);
-  const stopPolling = () => {
-    controller?.abort();
-    controller = null;
+  const stopTimer = () => {
     if (timer !== null) {
       timers.clearInterval(timer);
       timer = null;
     }
   };
-  const loadAndMarkActive = async () => {
+  const stopPolling = () => {
+    controller?.abort();
+    controller = null;
+    stopTimer();
+  };
+  const loadAndMaybeMarkActive = async () => {
     controller?.abort();
     const requestController = new AbortController();
     controller = requestController;
@@ -337,11 +340,21 @@ export const scheduleStatusActiveHeartbeat = ({
       const status = await loadStatus(requestController.signal);
       setStatus(status);
       setStatusError(status.last_error || '');
+      if (status.quotaAutoRefreshEnabled !== true) {
+        stopTimer();
+        return false;
+      }
       await markActive(requestController.signal);
+      return true;
     } catch (error) {
       if (requestController.signal.aborted) return;
       if (error instanceof ApiError && error.status === 401) {
         onAuthRequired?.();
+      }
+      return false;
+    } finally {
+      if (controller === requestController) {
+        controller = null;
       }
     }
   };
@@ -350,10 +363,14 @@ export const scheduleStatusActiveHeartbeat = ({
       stopPolling();
       return;
     }
-    void loadAndMarkActive();
-    timer = timers.setInterval(() => {
-      void loadAndMarkActive();
-    }, intervalMs);
+    void loadAndMaybeMarkActive().then((shouldHeartbeat) => {
+      if (!shouldHeartbeat || !isVisible() || timer !== null) {
+        return;
+      }
+      timer = timers.setInterval(() => {
+        void loadAndMaybeMarkActive();
+      }, intervalMs);
+    });
   };
   const handleVisibilityChange = () => {
     stopPolling();

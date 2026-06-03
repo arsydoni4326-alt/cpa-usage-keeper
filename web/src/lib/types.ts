@@ -167,6 +167,8 @@ export interface UsageIdentity {
   type: string
   provider: string
   prefix: string
+  file_name?: string
+  file_path?: string
   priority?: number
   disabled: boolean
   note?: string
@@ -242,6 +244,7 @@ export interface UsageQuotaCheckResponse {
 
 export interface UsageQuotaCacheItem {
   auth_index: string
+  file_name?: string
   status: 'completed' | 'failed'
   quota?: UsageQuotaCheckResponse
   error?: string
@@ -256,6 +259,7 @@ export interface UsageQuotaCacheResponse {
 
 export interface UsageQuotaRefreshTaskResponse {
   authIndex: string
+  file_name?: string
   status: 'queued' | 'running' | 'completed' | 'failed'
   quota?: UsageQuotaCheckResponse
   error?: string
@@ -270,6 +274,7 @@ export interface UsageQuotaInspectionResult {
   auth_index: string
   name: string
   type: string
+  file_name?: string
   status: UsageQuotaInspectionResultStatus
   error?: string
   http_status_code?: number

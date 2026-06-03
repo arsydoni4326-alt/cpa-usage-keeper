@@ -35,6 +35,7 @@ type InspectionResult struct {
 	AuthIndex      string                 `json:"auth_index"`
 	Name           string                 `json:"name"`
 	Type           string                 `json:"type"`
+	FileName       *string                `json:"file_name,omitempty"`
 	Status         InspectionResultStatus `json:"status"`
 	Error          string                 `json:"error,omitempty"`
 	HTTPStatusCode *int                   `json:"http_status_code,omitempty"`
@@ -143,6 +144,7 @@ func inspectionResultForTask(identity entities.UsageIdentity, task *RefreshTaskR
 		AuthIndex:      identity.Identity,
 		Name:           firstNonEmpty(task.Name, identity.Name),
 		Type:           firstNonEmpty(task.Type, identity.Type),
+		FileName:       task.FileName,
 		Error:          task.Error,
 		HTTPStatusCode: task.HTTPStatusCode,
 	}

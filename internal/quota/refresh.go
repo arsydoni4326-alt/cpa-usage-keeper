@@ -43,6 +43,7 @@ type CacheResponse struct {
 
 type CachedQuotaItem struct {
 	AuthIndex      string            `json:"auth_index"`
+	FileName       *string           `json:"file_name,omitempty"`
 	Status         RefreshTaskStatus `json:"status"`
 	Quota          *CheckResponse    `json:"quota,omitempty"`
 	Error          string            `json:"error,omitempty"`
@@ -75,6 +76,7 @@ type RefreshRejectedAuthIndex struct {
 
 type RefreshTaskResponse struct {
 	AuthIndex      string            `json:"authIndex"`
+	FileName       *string           `json:"file_name,omitempty"`
 	Status         RefreshTaskStatus `json:"status"`
 	Quota          *CheckResponse    `json:"quota,omitempty"`
 	Error          string            `json:"error,omitempty"`
@@ -87,6 +89,7 @@ type RefreshTaskRecord struct {
 	AuthIndex      string
 	Name           string
 	Type           string
+	FileName       *string
 	Status         RefreshTaskStatus
 	Quota          *CheckResponse
 	Error          string
@@ -129,11 +132,11 @@ func (s *Service) GetCachedQuota(ctx context.Context, request CacheRequest) (Cac
 		case task.Status == RefreshTaskStatusCompleted && task.Quota != nil:
 			quota := *task.Quota
 			refreshedAt := task.RefreshedAt
-			response.Items = append(response.Items, CachedQuotaItem{AuthIndex: authIndex, Status: RefreshTaskStatusCompleted, Quota: &quota, RefreshedAt: &refreshedAt})
+			response.Items = append(response.Items, CachedQuotaItem{AuthIndex: authIndex, FileName: task.FileName, Status: RefreshTaskStatusCompleted, Quota: &quota, RefreshedAt: &refreshedAt})
 		case task.Status == RefreshTaskStatusFailed && task.HTTPStatusCode != nil && isRefreshCacheableHTTPStatus(*task.HTTPStatusCode):
 			expiresAt := task.ExpiresAt
 			refreshedAt := task.RefreshedAt
-			response.Items = append(response.Items, CachedQuotaItem{AuthIndex: authIndex, Status: RefreshTaskStatusFailed, Error: task.Error, HTTPStatusCode: task.HTTPStatusCode, ExpiresAt: &expiresAt, RefreshedAt: &refreshedAt})
+			response.Items = append(response.Items, CachedQuotaItem{AuthIndex: authIndex, FileName: task.FileName, Status: RefreshTaskStatusFailed, Error: task.Error, HTTPStatusCode: task.HTTPStatusCode, ExpiresAt: &expiresAt, RefreshedAt: &refreshedAt})
 		}
 	}
 	return response, nil
@@ -303,6 +306,8 @@ func (s *Service) ensureRefreshTaskWithIdentity(authIndex string, source Refresh
 		// 展示字段来自入队时的身份快照，巡检弹框读取缓存时无需逐条回查 identity。
 		Name: identity.Name,
 		Type: identity.Type,
+		// FileName 是 CPA auth-files 的原始 name，后续删除功能不能复用展示名。
+		FileName: identity.FileName,
 		// Status 初始为 queued，表示已经入队但尚未占用 worker。
 		Status: RefreshTaskStatusQueued,
 		// Source 记录任务来源，便于区分手动刷新和自动刷新。
@@ -521,6 +526,7 @@ func (t *RefreshTaskRecord) isActive() bool {
 func (t *RefreshTaskRecord) response() RefreshTaskResponse {
 	response := RefreshTaskResponse{
 		AuthIndex:      t.AuthIndex,
+		FileName:       t.FileName,
 		Status:         t.Status,
 		Error:          t.Error,
 		HTTPStatusCode: t.HTTPStatusCode,

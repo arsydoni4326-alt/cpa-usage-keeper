@@ -47,7 +47,7 @@ func (s *refreshHandlerStub) callCount() int {
 
 func TestRefreshCreatesTaskPerAuthIndexAndCachesCompletedQuota(t *testing.T) {
 	db := openQuotaTestDatabase(t)
-	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-1", Provider: "claude", Type: "auth-file", AuthType: entities.UsageIdentityAuthTypeAuthFile})
+	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-1", Provider: "claude", Type: "auth-file", AuthType: entities.UsageIdentityAuthTypeAuthFile, FileName: quotaStringPtr("claude-user.json")})
 	handler := &refreshHandlerStub{output: ProviderOutput{Result: ClaudeResult{Usage: &ClaudeUsagePayload{FiveHour: &ClaudeUsageWindow{Utilization: 25}}}}}
 	service := NewServiceWithRegistry(db, NewProviderRegistry(map[string]ProviderHandler{"claude": handler}))
 
@@ -76,6 +76,9 @@ func TestRefreshCreatesTaskPerAuthIndexAndCachesCompletedQuota(t *testing.T) {
 	}
 	if len(cache.Items) != 1 || cache.Items[0].AuthIndex != "auth-1" || cache.Items[0].Quota == nil || cache.Items[0].Quota.ID != "auth-1" {
 		t.Fatalf("expected completed quota cache to survive cleanup, got %+v", cache)
+	}
+	if cache.Items[0].FileName == nil || *cache.Items[0].FileName != "claude-user.json" {
+		t.Fatalf("expected completed quota cache to expose file_name, got %+v", cache.Items[0])
 	}
 	if cache.Items[0].RefreshedAt == nil || cache.Items[0].RefreshedAt.IsZero() {
 		t.Fatalf("expected completed quota cache to expose refreshed_at, got %+v", cache.Items[0])
@@ -512,7 +515,7 @@ func TestStartInspectionClearsSettledCacheAndStartsOneAuthFileRound(t *testing.T
 
 func TestInspectionStatusUsesRefreshTaskIdentitySnapshot(t *testing.T) {
 	db := openQuotaTestDatabase(t)
-	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-1", Name: "Original Account", Provider: "claude", Type: "claude", AuthType: entities.UsageIdentityAuthTypeAuthFile})
+	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-1", Name: "Original Account", Provider: "claude", Type: "claude", AuthType: entities.UsageIdentityAuthTypeAuthFile, FileName: quotaStringPtr("original.json")})
 	block := make(chan struct{})
 	handler := &refreshHandlerStub{block: block, output: ProviderOutput{Result: ClaudeResult{Usage: &ClaudeUsagePayload{FiveHour: &ClaudeUsageWindow{Utilization: 25}}}}}
 	service := NewServiceWithRegistry(db, NewProviderRegistry(map[string]ProviderHandler{"claude": handler}))
@@ -522,7 +525,7 @@ func TestInspectionStatusUsesRefreshTaskIdentitySnapshot(t *testing.T) {
 		t.Fatalf("StartInspection returned error: %v", err)
 	}
 	waitForRefreshTask(t, service, "auth-1", RefreshTaskStatusRunning)
-	if err := db.Model(&entities.UsageIdentity{}).Where("identity = ?", "auth-1").Updates(map[string]any{"name": "Renamed Account", "type": "gemini-cli"}).Error; err != nil {
+	if err := db.Model(&entities.UsageIdentity{}).Where("identity = ?", "auth-1").Updates(map[string]any{"name": "Renamed Account", "type": "gemini-cli", "file_name": "renamed.json"}).Error; err != nil {
 		t.Fatalf("rename usage identity returned error: %v", err)
 	}
 
@@ -535,7 +538,7 @@ func TestInspectionStatusUsesRefreshTaskIdentitySnapshot(t *testing.T) {
 	if len(status.Results) != 1 {
 		t.Fatalf("expected one inspection result, got %+v", status.Results)
 	}
-	if status.Results[0].Name != "Original Account" || status.Results[0].Type != "claude" {
+	if status.Results[0].Name != "Original Account" || status.Results[0].Type != "claude" || status.Results[0].FileName == nil || *status.Results[0].FileName != "original.json" {
 		t.Fatalf("expected task identity snapshot to be reused, got %+v", status.Results[0])
 	}
 }
@@ -660,4 +663,8 @@ func hasRefreshRejection(rejections []RefreshRejectedAuthIndex, authIndex string
 		}
 	}
 	return false
+}
+
+func quotaStringPtr(value string) *string {
+	return &value
 }
