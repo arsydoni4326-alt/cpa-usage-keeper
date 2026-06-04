@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildUsageSparklineSeries } from './useSparklines';
+import { SPARKLINE_COLORS, buildUsageSparklineSeries } from './useSparklines';
 import type { UsagePayload } from './useUsageData';
 
 const usageWithBackendSeries: UsagePayload = {
@@ -80,5 +80,12 @@ describe('buildUsageSparklineSeries', () => {
     });
 
     expect(series.cachedRate).toEqual([0]);
+  });
+});
+
+describe('SPARKLINE_COLORS', () => {
+  it('keeps the requests sparkline aligned with the Total Requests card accent', () => {
+    expect(SPARKLINE_COLORS.requests.border).toBe('#3b82f6');
+    expect(SPARKLINE_COLORS.requests.background).toBe('rgba(59, 130, 246, 0.18)');
   });
 });
