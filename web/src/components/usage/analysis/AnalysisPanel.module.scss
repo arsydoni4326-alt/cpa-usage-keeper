@@ -722,11 +722,11 @@
   gap: 3px;
   width: max-content;
   max-width: min(280px, calc(100vw - 16px));
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
-  background: rgba(17, 14, 22, 0.98);
-  color: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.22);
   padding: 10px 12px;
   pointer-events: none;
   text-align: left;
@@ -741,7 +741,7 @@
 }
 
 .heatmapTooltipTitle {
-  color: #fff7ed;
+  color: var(--text-primary);
   font-weight: 900;
   margin-bottom: 4px;
 }
