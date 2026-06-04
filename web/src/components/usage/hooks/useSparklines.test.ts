@@ -81,6 +81,46 @@ describe('buildUsageSparklineSeries', () => {
 
     expect(series.cachedRate).toEqual([0]);
   });
+
+  it('normalizes invalid sparkline series values to zero', () => {
+    const invalidNumber = 'not-a-number' as unknown as number;
+    const series = buildUsageSparklineSeries({
+      usage: {
+        ...usageWithBackendSeries,
+        series: {
+          ...usageWithBackendSeries.series!,
+          requests: {
+            '2026-04-23T10:00:00Z': invalidNumber,
+          },
+          tokens: {
+            '2026-04-23T10:00:00Z': -4,
+          },
+          rpm: {
+            '2026-04-23T10:00:00Z': Number.POSITIVE_INFINITY,
+          },
+          tpm: {
+            '2026-04-23T10:00:00Z': Number.NaN,
+          },
+          cost: {
+            '2026-04-23T10:00:00Z': invalidNumber,
+          },
+          input_tokens: {
+            '2026-04-23T10:00:00Z': invalidNumber,
+          },
+          cached_tokens: {
+            '2026-04-23T10:00:00Z': 25,
+          },
+        },
+      },
+    });
+
+    expect(series.requests).toEqual([0]);
+    expect(series.tokens).toEqual([0]);
+    expect(series.rpm).toEqual([0]);
+    expect(series.tpm).toEqual([0]);
+    expect(series.cost).toEqual([0]);
+    expect(series.cachedRate).toEqual([0]);
+  });
 });
 
 describe('SPARKLINE_COLORS', () => {

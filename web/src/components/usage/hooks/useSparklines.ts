@@ -54,6 +54,11 @@ export const SPARKLINE_COLORS = {
   cost: { border: '#f59e0b', background: 'rgba(245, 158, 11, 0.18)' },
 } as const;
 
+const normalizeSparklineNumber = (value: unknown): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(parsed, 0) : 0;
+};
+
 export function buildUsageSparklineSeries({ usage }: Omit<UseSparklinesOptions, 'loading'>): UsageSparklineSeries {
   if (!usage?.series) {
     return { labels: [], requests: [], tokens: [], rpm: [], tpm: [], cachedRate: [], cost: [] };
@@ -66,16 +71,16 @@ export function buildUsageSparklineSeries({ usage }: Omit<UseSparklinesOptions, 
 
   return {
     labels,
-    requests: labels.map((label) => Number(usage.series?.requests?.[label] ?? 0)),
-    tokens: labels.map((label) => Number(usage.series?.tokens?.[label] ?? 0)),
-    rpm: labels.map((label) => Number(usage.series?.rpm?.[label] ?? 0)),
-    tpm: labels.map((label) => Number(usage.series?.tpm?.[label] ?? 0)),
+    requests: labels.map((label) => normalizeSparklineNumber(usage.series?.requests?.[label])),
+    tokens: labels.map((label) => normalizeSparklineNumber(usage.series?.tokens?.[label])),
+    rpm: labels.map((label) => normalizeSparklineNumber(usage.series?.rpm?.[label])),
+    tpm: labels.map((label) => normalizeSparklineNumber(usage.series?.tpm?.[label])),
     cachedRate: labels.map((label) => {
-      const inputTokens = Math.max(Number(usage.series?.input_tokens?.[label] ?? 0), 0);
-      const cachedTokens = Math.max(Number(usage.series?.cached_tokens?.[label] ?? 0), 0);
+      const inputTokens = normalizeSparklineNumber(usage.series?.input_tokens?.[label]);
+      const cachedTokens = normalizeSparklineNumber(usage.series?.cached_tokens?.[label]);
       return calculateCacheRate({ inputTokens, cachedTokens }) ?? 0;
     }),
-    cost: labels.map((label) => Number(usage.series?.cost?.[label] ?? 0)),
+    cost: labels.map((label) => normalizeSparklineNumber(usage.series?.cost?.[label])),
   };
 }
 
