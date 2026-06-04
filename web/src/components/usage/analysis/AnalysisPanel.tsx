@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties, type FocusEvent, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Chart, ChartData, ChartOptions, Plugin, TooltipModel } from 'chart.js';
+import type { Chart, ChartData, ChartOptions, Plugin, ScriptableContext, TooltipModel } from 'chart.js';
 import { Bar, Doughnut, Scatter } from 'react-chartjs-2';
 import type { AnalysisCompositionItem, AnalysisCostBreakdown, AnalysisHeatmapCell, AnalysisModelEfficiencyItem, AnalysisResponse, AnalysisTokenUsageBucket } from '@/lib/types';
 import { calculateDisplayInputTokens, calculateDisplayOutputTokens, formatCompactNumber, formatUsd } from '@/utils/usage';
@@ -51,11 +51,24 @@ type TokenTooltipDataset = ChartData<'bar', number[], string>['datasets'][number
   tooltipData?: number[];
 };
 type MixedTokenChartData = ChartData<'bar', Array<number | null>, string>;
-type HeatmapTooltipState = {
+type FloatingTooltipState = {
   lines: string[];
   x: number;
   y: number;
   placement: 'above' | 'below';
+};
+type CostBreakdownSegmentKey = 'input' | 'output' | 'cached';
+type CostBreakdownSegment = {
+  key: CostBreakdownSegmentKey;
+  label: string;
+  value: number;
+  color: string;
+  tokens: number;
+};
+type ModelEfficiencyColor = {
+  base: string;
+  light: string;
+  dark: string;
 };
 
 const CHART_COLORS: GradientColor[] = [
@@ -73,16 +86,19 @@ const TOKEN_COLORS = {
   requests: '#ff5a40',
   cost: '#14b8a6',
 };
-const MODEL_EFFICIENCY_COLORS = [
-  '#5b7fb9',
-  '#b46f68',
-  '#6f9a7a',
-  '#b79257',
-  '#8d79b5',
-  '#5f9aa7',
-  '#b07194',
-  '#8c9f61',
+const MODEL_EFFICIENCY_COLORS: ModelEfficiencyColor[] = [
+  { base: '#5b7fb9', light: '#7898c8', dark: '#395a8d' },
+  { base: '#b46f68', light: '#c68b84', dark: '#864943' },
+  { base: '#6f9a7a', light: '#89b193', dark: '#4b7255' },
+  { base: '#b79257', light: '#c6a66d', dark: '#86652e' },
+  { base: '#8d79b5', light: '#a08cc4', dark: '#66518d' },
+  { base: '#5f9aa7', light: '#7aadb8', dark: '#3e737f' },
+  { base: '#b07194', light: '#c188a7', dark: '#854f6c' },
+  { base: '#8c9f61', light: '#a0b374', dark: '#62733d' },
 ];
+const COST_TOOLTIP_MAX_WIDTH = 280;
+const COST_TOOLTIP_VIEWPORT_PADDING = 8;
+const COST_TOOLTIP_CURSOR_OFFSET = 14;
 const HEATMAP_TOOLTIP_MAX_WIDTH = 280;
 const HEATMAP_TOOLTIP_VIEWPORT_PADDING = 8;
 const HEATMAP_TOOLTIP_CURSOR_OFFSET = 14;
@@ -90,6 +106,12 @@ const MODEL_EFFICIENCY_TOOLTIP_ID = 'analysis-model-efficiency-tooltip';
 const MODEL_EFFICIENCY_TOOLTIP_MAX_WIDTH = 320;
 const MODEL_EFFICIENCY_TOOLTIP_VIEWPORT_PADDING = 8;
 const MODEL_EFFICIENCY_TOOLTIP_CURSOR_OFFSET = 14;
+const MODEL_EFFICIENCY_MIN_RADIUS = 5;
+const MODEL_EFFICIENCY_MAX_RADIUS = 24;
+const MODEL_EFFICIENCY_HOVER_RADIUS_DELTA = 4;
+const MODEL_EFFICIENCY_RADIUS_EASING = 0.75;
+const MODEL_EFFICIENCY_OUTLIER_RATIO = 8;
+const MODEL_EFFICIENCY_AXIS_PADDING_FACTOR = 2.5;
 const EMPTY_COMPOSITION_ITEMS: AnalysisCompositionItem[] = [];
 type TokenLabels = {
   input: string;
@@ -563,22 +585,60 @@ function getCostRatePerMillion(cost: number, tokens: number) {
   return tokens > 0 ? (cost / tokens) * 1_000_000 : 0;
 }
 
+function getCostSegmentTokens(rows: ChartRow[]): Record<CostBreakdownSegmentKey, number> {
+  return rows.reduce(
+    (totals, row) => ({
+      input: totals.input + Math.max(row.rawInput - row.cached, 0),
+      output: totals.output + row.rawOutput,
+      cached: totals.cached + row.cached,
+    }),
+    { input: 0, output: 0, cached: 0 },
+  );
+}
+
 function CostBreakdownCard({ breakdown, rows, loading }: { breakdown: AnalysisCostBreakdown | undefined; rows: ChartRow[]; loading: boolean }) {
   const { t } = useTranslation();
+  const [costTooltip, setCostTooltip] = useState<FloatingTooltipState | null>(null);
   const safeBreakdown = breakdown ?? { input_cost_usd: 0, output_cost_usd: 0, cached_cost_usd: 0, total_cost_usd: 0, cost_available: true };
   const totalCost = toNumber(safeBreakdown.total_cost_usd);
   const totalTokens = rows.reduce((sum, row) => sum + row.total, 0);
+  const segmentTokens = getCostSegmentTokens(rows);
   const blendedRate = getCostRatePerMillion(totalCost, totalTokens);
   const ratePoints = rows
     .filter((row) => row.costAvailable && row.total > 0)
     .map((row) => getCostRatePerMillion(row.cost, row.total));
   const rateMax = Math.max(0, ...ratePoints);
-  const segments = [
-    { key: 'input', label: t('usage_stats.input_tokens'), value: toNumber(safeBreakdown.input_cost_usd), color: TOKEN_COLORS.input.base, light: TOKEN_COLORS.input.light },
-    { key: 'output', label: t('usage_stats.output_tokens'), value: toNumber(safeBreakdown.output_cost_usd), color: TOKEN_COLORS.output.base, light: TOKEN_COLORS.output.light },
-    { key: 'cached', label: t('usage_stats.cached_tokens'), value: toNumber(safeBreakdown.cached_cost_usd), color: TOKEN_COLORS.cached.base, light: TOKEN_COLORS.cached.light },
+  const segments: CostBreakdownSegment[] = [
+    { key: 'input', label: t('usage_stats.input_tokens'), value: toNumber(safeBreakdown.input_cost_usd), color: TOKEN_COLORS.input.base, tokens: segmentTokens.input },
+    { key: 'output', label: t('usage_stats.output_tokens'), value: toNumber(safeBreakdown.output_cost_usd), color: TOKEN_COLORS.output.base, tokens: segmentTokens.output },
+    { key: 'cached', label: t('usage_stats.cached_tokens'), value: toNumber(safeBreakdown.cached_cost_usd), color: TOKEN_COLORS.cached.base, tokens: segmentTokens.cached },
   ];
   const hasData = totalCost > 0 || segments.some((segment) => segment.value > 0);
+  const buildCostTooltipLines = (segment: CostBreakdownSegment, percent: number) => [
+    segment.label,
+    `${t('usage_stats.total_cost')}: ${formatUsd(segment.value)}`,
+    `${t('usage_stats.analysis_cost_share')}: ${formatPercent(percent)}`,
+    `${t('usage_stats.total_tokens')}: ${formatCompactNumber(segment.tokens)}`,
+    `${t('usage_stats.analysis_cost_per_million_tokens')}: ${formatUsd(getCostRatePerMillion(segment.value, segment.tokens))}`,
+  ];
+  const showCostTooltip = (
+    lines: string[],
+    event: MouseEvent<HTMLSpanElement> | FocusEvent<HTMLSpanElement>,
+  ) => {
+    const viewportWidth = typeof window === 'undefined' ? 1024 : window.innerWidth;
+    const viewportHeight = typeof window === 'undefined' ? 768 : window.innerHeight;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const pointerX = 'clientX' in event && event.clientX > 0 ? event.clientX : rect.left + rect.width / 2;
+    const pointerY = 'clientY' in event && event.clientY > 0 ? event.clientY : rect.top + rect.height / 2;
+    const left = Math.max(
+      COST_TOOLTIP_VIEWPORT_PADDING,
+      Math.min(pointerX + COST_TOOLTIP_CURSOR_OFFSET, viewportWidth - COST_TOOLTIP_MAX_WIDTH - COST_TOOLTIP_VIEWPORT_PADDING),
+    );
+    const placement = pointerY > viewportHeight - 200 ? 'above' : 'below';
+    const y = pointerY + (placement === 'above' ? -COST_TOOLTIP_CURSOR_OFFSET : COST_TOOLTIP_CURSOR_OFFSET);
+    setCostTooltip({ lines, x: left, y, placement });
+  };
+  const hideCostTooltip = () => setCostTooltip(null);
   return (
     <section className={`${styles.analysisCard} ${styles.costBreakdownCard}`}>
       <div className={styles.cardHeader}>
@@ -597,6 +657,7 @@ function CostBreakdownCard({ breakdown, rows, loading }: { breakdown: AnalysisCo
           <div className={styles.costStack} aria-label={t('usage_stats.analysis_cost_breakdown_title')}>
             {segments.map((segment) => {
               const percent = totalCost > 0 ? (segment.value / totalCost) * 100 : 0;
+              const tooltipLines = buildCostTooltipLines(segment, percent);
               return (
                 <span
                   key={segment.key}
@@ -605,13 +666,34 @@ function CostBreakdownCard({ breakdown, rows, loading }: { breakdown: AnalysisCo
                     '--cost-segment-color': segment.color,
                     flexBasis: `${Math.max(percent, segment.value > 0 ? 4 : 0)}%`,
                   } as CSSProperties}
-                  title={`${segment.label}: ${formatUsd(segment.value)} (${formatPercent(percent)})`}
+                  tabIndex={0}
+                  aria-label={tooltipLines.join(', ')}
+                  onMouseEnter={(event) => showCostTooltip(tooltipLines, event)}
+                  onMouseMove={(event) => showCostTooltip(tooltipLines, event)}
+                  onMouseLeave={hideCostTooltip}
+                  onFocus={(event) => showCostTooltip(tooltipLines, event)}
+                  onBlur={hideCostTooltip}
                 >
                   <span>{formatPercent(percent)}</span>
                 </span>
               );
             })}
           </div>
+          {costTooltip ? (
+            <div
+              className={styles.costStackFloatingTooltip}
+              role="tooltip"
+              style={{
+                left: costTooltip.x,
+                top: costTooltip.y,
+                transform: costTooltip.placement === 'above' ? 'translateY(-100%)' : undefined,
+              }}
+            >
+              {costTooltip.lines.map((line, index) => (
+                <span key={`${index}-${line}`} className={index === 0 ? styles.costStackTooltipTitle : ''}>{line}</span>
+              ))}
+            </div>
+          ) : null}
           <div className={styles.costRatePanel}>
             <div className={styles.costRateMetric}>
               <span>{t('usage_stats.total_cost')}</span>
@@ -661,8 +743,85 @@ type EfficiencyPoint = {
   cacheRate: number;
 };
 
-const getEfficiencyColor = (index: number) => {
+const getEfficiencyPalette = (index: number) => {
   return MODEL_EFFICIENCY_COLORS[index % MODEL_EFFICIENCY_COLORS.length];
+};
+
+const getEfficiencyColor = (index: number) => getEfficiencyPalette(index).base;
+
+const getNearestRankPercentile = (values: number[], percentile: number) => {
+  const sortedValues = values
+    .filter((value) => Number.isFinite(value) && value > 0)
+    .sort((a, b) => a - b);
+  if (sortedValues.length === 0) return 0;
+  const index = Math.min(sortedValues.length - 1, Math.max(0, Math.ceil(percentile * sortedValues.length) - 1));
+  return sortedValues[index];
+};
+
+const buildModelEfficiencyRadii = (values: number[]) => {
+  const positiveValues = values.filter((value) => Number.isFinite(value) && value > 0);
+  if (positiveValues.length === 0) {
+    return values.map(() => MODEL_EFFICIENCY_MIN_RADIUS);
+  }
+  const minValue = Math.min(...positiveValues);
+  const maxValue = Math.max(...positiveValues);
+  if (minValue === maxValue) {
+    const radius = (MODEL_EFFICIENCY_MIN_RADIUS + MODEL_EFFICIENCY_MAX_RADIUS) / 2;
+    return values.map((value) => (value > 0 ? radius : MODEL_EFFICIENCY_MIN_RADIUS));
+  }
+
+  // 用 log 压缩头部模型，并在明显离群时把参考上限拉回到头部和长尾之间。
+  const p90Value = getNearestRankPercentile(positiveValues, 0.9);
+  const referenceMax = p90Value > 0 && maxValue > p90Value * MODEL_EFFICIENCY_OUTLIER_RATIO
+    ? Math.sqrt(maxValue * p90Value)
+    : maxValue;
+  const logMin = Math.log(minValue + 1);
+  const logMax = Math.log(Math.max(referenceMax, minValue * 1.1) + 1);
+  const logRange = Math.max(logMax - logMin, Number.EPSILON);
+  return values.map((value) => {
+    if (!Number.isFinite(value) || value <= 0) return MODEL_EFFICIENCY_MIN_RADIUS;
+    const clampedValue = Math.min(value, referenceMax);
+    const normalized = Math.max(0, Math.min(1, (Math.log(clampedValue + 1) - logMin) / logRange));
+    const eased = Math.pow(normalized, MODEL_EFFICIENCY_RADIUS_EASING);
+    const radius = MODEL_EFFICIENCY_MIN_RADIUS + eased * (MODEL_EFFICIENCY_MAX_RADIUS - MODEL_EFFICIENCY_MIN_RADIUS);
+    return Number(radius.toFixed(2));
+  });
+};
+
+const getLogScaleBounds = (values: number[]) => {
+  const positiveValues = values.filter((value) => Number.isFinite(value) && value > 0);
+  if (positiveValues.length === 0) return {};
+  const minValue = Math.min(...positiveValues);
+  const maxValue = Math.max(...positiveValues);
+  return {
+    min: Math.max(minValue / MODEL_EFFICIENCY_AXIS_PADDING_FACTOR, Number.EPSILON),
+    max: maxValue * MODEL_EFFICIENCY_AXIS_PADDING_FACTOR,
+  };
+};
+
+type ModelEfficiencyPointContext = ScriptableContext<'line'> & {
+  element?: {
+    x?: number;
+    y?: number;
+    options?: {
+      radius?: number;
+    };
+  };
+};
+
+const getEfficiencyPointFill = (context: ModelEfficiencyPointContext) => {
+  const palette = getEfficiencyPalette(context.dataIndex ?? 0);
+  const { ctx } = context.chart;
+  const x = context.element?.x;
+  const y = context.element?.y;
+  if (typeof x !== 'number' || typeof y !== 'number') {
+    return palette.base;
+  }
+  const radius = typeof context.element?.options?.radius === 'number' ? context.element.options.radius : 12;
+  const gradient = ctx.createLinearGradient(x - radius, y, x + radius, y);
+  gradient.addColorStop(0, palette.light);
+  gradient.addColorStop(1, palette.base);
+  return gradient;
 };
 
 const getModelEfficiencyRate = (row: AnalysisModelEfficiencyItem) => {
@@ -702,7 +861,7 @@ function createModelEfficiencyTooltipHandler({
 }: {
   rows: AnalysisModelEfficiencyItem[];
   labels: ModelEfficiencyTooltipLabels;
-}): (args: { chart: Chart<'scatter'>; tooltip: TooltipModel<'scatter'> }) => void {
+}): (args: { chart: Chart; tooltip: TooltipModel<'scatter'> }) => void {
   return ({ chart, tooltip }) => {
     if (typeof document === 'undefined') return;
     const tooltipEl = getModelEfficiencyTooltipElement();
@@ -764,6 +923,7 @@ function ModelEfficiencyCard({ rows, loading, isDark, isMobile }: { rows: Analys
     costPerMillion: t('usage_stats.analysis_cost_per_million_tokens'),
     requests: t('usage_stats.requests_count'),
   }), [t]);
+  const pointRadii = useMemo(() => buildModelEfficiencyRadii(pricedRows.map((row) => toNumber(row.requests))), [pricedRows]);
   const chartData = useMemo<ChartData<'scatter', EfficiencyPoint[], string>>(() => ({
     labels: pricedRows.map((row) => row.model),
     datasets: [{
@@ -777,16 +937,18 @@ function ModelEfficiencyCard({ rows, loading, isDark, isMobile }: { rows: Analys
         totalTokens: toNumber(row.total_tokens),
         cacheRate: toNumber(row.cache_rate),
       })),
-      pointRadius: pricedRows.map((row) => Math.min(18, Math.max(5, Math.sqrt(toNumber(row.requests)) * 3))),
-      pointHoverRadius: pricedRows.map((row) => Math.min(22, Math.max(7, Math.sqrt(toNumber(row.requests)) * 3.4))),
-      backgroundColor: pricedRows.map((_, index) => getEfficiencyColor(index)),
-      borderColor: pricedRows.map((_, index) => getEfficiencyColor(index)),
+      pointRadius: pointRadii,
+      pointHoverRadius: pointRadii.map((radius) => Math.min(MODEL_EFFICIENCY_MAX_RADIUS + MODEL_EFFICIENCY_HOVER_RADIUS_DELTA, radius + MODEL_EFFICIENCY_HOVER_RADIUS_DELTA)),
+      backgroundColor: getEfficiencyPointFill,
+      borderColor: pricedRows.map((_, index) => getEfficiencyPalette(index).base),
       borderWidth: 1,
+      clip: false,
     }],
-  }), [pricedRows, t]);
+  }), [pointRadii, pricedRows, t]);
   const chartOptions = useMemo<ChartOptions<'scatter'>>(() => ({
     responsive: true,
     maintainAspectRatio: false,
+    layout: { padding: { top: 16, right: 24, bottom: 22, left: 18 } },
     plugins: {
       legend: { display: false },
       tooltip: {
@@ -815,12 +977,14 @@ function ModelEfficiencyCard({ rows, loading, isDark, isMobile }: { rows: Analys
     scales: {
       x: {
         type: 'logarithmic',
+        ...getLogScaleBounds(pricedRows.map((row) => toNumber(row.total_tokens))),
         grid: { color: chartTheme.grid },
         border: { color: chartTheme.axis },
         ticks: { color: chartTheme.textSecondary, font: { size: 10 }, maxTicksLimit: isMobile ? 4 : 5, callback: (value) => formatCompactNumber(Number(value)) },
       },
       y: {
         type: 'logarithmic',
+        ...getLogScaleBounds(pricedRows.map((row) => getModelEfficiencyRate(row))),
         grid: { color: chartTheme.grid },
         border: { color: chartTheme.axis },
         ticks: { color: chartTheme.textSecondary, font: { size: 10 }, maxTicksLimit: isMobile ? 4 : 5, callback: (value) => formatUsd(Number(value)) },
@@ -866,7 +1030,7 @@ function ModelEfficiencyCard({ rows, loading, isDark, isMobile }: { rows: Analys
 
 function Heatmap({ cells, apiKeys, models, loading, isDark }: { cells: AnalysisHeatmapCell[]; apiKeys: string[]; models: string[]; loading: boolean; isDark: boolean }) {
   const { t } = useTranslation();
-  const [tooltip, setTooltip] = useState<HeatmapTooltipState | null>(null);
+  const [tooltip, setTooltip] = useState<FloatingTooltipState | null>(null);
   const cellMap = useMemo(() => new Map(cells.map((cell) => [`${cell.api_key}\0${cell.model}`, cell])), [cells]);
   const maxHeatmapTokens = useMemo(() => Math.max(0, ...cells.map((cell) => toNumber(cell.total_tokens))), [cells]);
   const buildTooltipLines = (model: string, cell: AnalysisHeatmapCell | undefined) => {

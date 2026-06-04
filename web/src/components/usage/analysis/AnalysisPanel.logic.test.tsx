@@ -273,6 +273,9 @@ describe('AnalysisPanel token chart data', () => {
     expect(markup).toContain('background-color:#16a34a');
     expect(markup).toContain('background-color:#d97706');
     expect(markup).not.toContain('filter:saturate');
+    expect(markup).toContain('usage_stats.analysis_cost_share: 16.67%');
+    expect(markup).toContain('usage_stats.analysis_cost_per_million_tokens: $2.00');
+    expect(markup).toContain('usage_stats.total_tokens: 500.00K');
     expect(markup).toContain('$6.00');
     expect(markup).toContain('$2.00');
     expect(markup).toContain('16.67%');
@@ -300,7 +303,7 @@ describe('AnalysisPanel token chart data', () => {
         },
         {
           model: 'claude-sonnet',
-          requests: 9,
+          requests: 100,
           input_tokens: 1200,
           output_tokens: 500,
           cached_tokens: 200,
@@ -314,7 +317,7 @@ describe('AnalysisPanel token chart data', () => {
         },
         {
           model: 'gemini-pro',
-          requests: 16,
+          requests: 10000,
           input_tokens: 1500,
           output_tokens: 650,
           cached_tokens: 300,
@@ -337,13 +340,40 @@ describe('AnalysisPanel token chart data', () => {
     expect(chartCapture.scatterOptions?.scales?.y?.type).toBe('logarithmic');
     expect(chartCapture.scatterOptions?.scales?.x).not.toHaveProperty('beginAtZero');
     expect(chartCapture.scatterOptions?.scales?.y).not.toHaveProperty('beginAtZero');
+    const pointRadii = chartCapture.scatterData?.datasets[0]?.pointRadius as number[];
+    expect(pointRadii[0]).toBe(5);
+    expect(pointRadii[1]).toBeGreaterThan(10);
+    expect(pointRadii[2]).toBe(24);
+    expect(pointRadii[2] - pointRadii[1]).toBeGreaterThan(4);
+    expect(chartCapture.scatterData?.datasets[0]?.clip).toBe(false);
+    expect(chartCapture.scatterOptions?.layout?.padding).toEqual({ top: 16, right: 24, bottom: 22, left: 18 });
+    expect((chartCapture.scatterOptions?.scales?.x as { min?: number }).min).toBeLessThan(2_000_000);
+    expect((chartCapture.scatterOptions?.scales?.x as { max?: number }).max).toBeGreaterThan(9_000_000);
+    expect((chartCapture.scatterOptions?.scales?.y as { min?: number }).min).toBeLessThan(1);
+    expect((chartCapture.scatterOptions?.scales?.y as { max?: number }).max).toBeGreaterThan(4);
     expect(markup).not.toContain('gpt-4o');
     expect(markup).not.toContain('claude-sonnet');
     expect(markup).not.toContain('gemini-pro');
-    const modelColors = chartCapture.scatterData?.datasets[0]?.backgroundColor as string[];
+    const modelColors = chartCapture.scatterData?.datasets[0]?.borderColor as string[];
     expect(new Set(modelColors)).toHaveProperty('size', 3);
     expect(modelColors).not.toContain('#dc2626');
     expect(modelColors).not.toContain('#2563eb');
+    expect(typeof chartCapture.scatterData?.datasets[0]?.backgroundColor).toBe('function');
+    const gradient = {
+      addColorStop: vi.fn(),
+    };
+    const createLinearGradient = vi.fn(() => gradient);
+    const createRadialGradient = vi.fn();
+    const fill = (chartCapture.scatterData?.datasets[0]?.backgroundColor as (context: unknown) => unknown)({
+      dataIndex: 0,
+      chart: { ctx: { createLinearGradient, createRadialGradient } },
+      element: { x: 40, y: 50, options: { radius: 12 } },
+    });
+    expect(fill).toBe(gradient);
+    expect(createRadialGradient).not.toHaveBeenCalled();
+    expect(createLinearGradient).toHaveBeenCalledWith(28, 50, 52, 50);
+    expect(gradient.addColorStop).toHaveBeenCalledWith(0, '#7898c8');
+    expect(gradient.addColorStop).toHaveBeenCalledWith(1, '#5b7fb9');
     expect(chartCapture.scatterOptions?.plugins?.tooltip?.enabled).toBe(false);
     expect(typeof chartCapture.scatterOptions?.plugins?.tooltip?.external).toBe('function');
   });
