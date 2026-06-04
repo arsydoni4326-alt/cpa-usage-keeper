@@ -29,17 +29,15 @@ type analysisResponse struct {
 }
 
 type analysisTokenUsage struct {
-	Bucket              time.Time `json:"bucket"`
-	InputTokens         int64     `json:"input_tokens"`
-	OutputTokens        int64     `json:"output_tokens"`
-	CachedTokens        int64     `json:"cached_tokens"`
-	CacheReadTokens     int64     `json:"cache_read_tokens"`
-	CacheCreationTokens int64     `json:"cache_creation_tokens"`
-	ReasoningTokens     int64     `json:"reasoning_tokens"`
-	TotalTokens         int64     `json:"total_tokens"`
-	Requests            int64     `json:"requests"`
-	CostUSD             float64   `json:"cost_usd"`
-	CostAvailable       bool      `json:"cost_available"`
+	Bucket          time.Time `json:"bucket"`
+	InputTokens     int64     `json:"input_tokens"`
+	OutputTokens    int64     `json:"output_tokens"`
+	CachedTokens    int64     `json:"cached_tokens"`
+	ReasoningTokens int64     `json:"reasoning_tokens"`
+	TotalTokens     int64     `json:"total_tokens"`
+	Requests        int64     `json:"requests"`
+	CostUSD         float64   `json:"cost_usd"`
+	CostAvailable   bool      `json:"cost_available"`
 }
 
 type analysisCompositionItem struct {
@@ -170,17 +168,15 @@ func buildAnalysisPayload(snapshot *servicedto.AnalysisSnapshot, apiKeyInfos map
 	tokenUsage := make([]analysisTokenUsage, 0, len(snapshot.TokenUsage))
 	for _, bucket := range snapshot.TokenUsage {
 		tokenUsage = append(tokenUsage, analysisTokenUsage{
-			Bucket:              bucket.Bucket,
-			InputTokens:         bucket.InputTokens,
-			OutputTokens:        bucket.OutputTokens,
-			CachedTokens:        bucket.CachedTokens,
-			CacheReadTokens:     bucket.CacheReadTokens,
-			CacheCreationTokens: bucket.CacheCreationTokens,
-			ReasoningTokens:     bucket.ReasoningTokens,
-			TotalTokens:         bucket.TotalTokens,
-			Requests:            bucket.Requests,
-			CostUSD:             bucket.CostUSD,
-			CostAvailable:       bucket.CostAvailable,
+			Bucket:          bucket.Bucket,
+			InputTokens:     bucket.InputTokens,
+			OutputTokens:    bucket.OutputTokens,
+			CachedTokens:    bucket.CachedTokens,
+			ReasoningTokens: bucket.ReasoningTokens,
+			TotalTokens:     bucket.TotalTokens,
+			Requests:        bucket.Requests,
+			CostUSD:         bucket.CostUSD,
+			CostAvailable:   bucket.CostAvailable,
 		})
 	}
 	apiComposition := buildAnalysisCompositionPayload(snapshot.APIKeyComposition, apiKeyInfos)

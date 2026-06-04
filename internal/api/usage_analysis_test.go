@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -268,19 +267,17 @@ func TestBuildAnalysisHeatmapPayloadKeepsDuplicateAPIKeyLabelsSeparate(t *testin
 	}
 }
 
-func TestUsageAnalysisIncludesCacheReadCreationTokenDetails(t *testing.T) {
+func TestUsageAnalysisUsesCachedTokensWithoutCacheReadCreationDetails(t *testing.T) {
 	bucket := time.Date(2026, 4, 22, 10, 0, 0, 0, time.Local)
 	provider := &usageAnalysisStub{analysis: &servicedto.AnalysisSnapshot{
 		Granularity: servicedto.AnalysisGranularityHourly,
 		TokenUsage: []servicedto.AnalysisTokenUsageBucket{{
-			Bucket:              bucket,
-			InputTokens:         130,
-			OutputTokens:        30,
-			CachedTokens:        20,
-			CacheReadTokens:     20,
-			CacheCreationTokens: 10,
-			TotalTokens:         160,
-			Requests:            1,
+			Bucket:       bucket,
+			InputTokens:  130,
+			OutputTokens: 30,
+			CachedTokens: 20,
+			TotalTokens:  160,
+			Requests:     1,
 		}},
 	}}
 	router := NewRouter(nil, nil, provider, nil, AuthConfig{}, nil, "")
@@ -292,17 +289,12 @@ func TestUsageAnalysisIncludesCacheReadCreationTokenDetails(t *testing.T) {
 	if resp.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", resp.Code)
 	}
-	var payload struct {
-		TokenUsage []struct {
-			CacheReadTokens     int64 `json:"cache_read_tokens"`
-			CacheCreationTokens int64 `json:"cache_creation_tokens"`
-		} `json:"token_usage"`
+	body := resp.Body.String()
+	if !contains(body, `"cached_tokens":20`) {
+		t.Fatalf("expected cached_tokens in analysis payload, got %s", body)
 	}
-	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("decode analysis payload: %v", err)
-	}
-	if len(payload.TokenUsage) != 1 || payload.TokenUsage[0].CacheReadTokens != 20 || payload.TokenUsage[0].CacheCreationTokens != 10 {
-		t.Fatalf("expected cache read/creation token fields in analysis payload, got %+v", payload.TokenUsage)
+	if contains(body, "cache_read_tokens") || contains(body, "cache_creation_tokens") {
+		t.Fatalf("expected analysis payload to omit cache read/creation fields, got %s", body)
 	}
 }
 

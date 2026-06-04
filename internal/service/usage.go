@@ -135,17 +135,15 @@ func mapAnalysisRecord(record *repodto.AnalysisRecord) *servicedto.AnalysisSnaps
 	tokenUsage := make([]servicedto.AnalysisTokenUsageBucket, 0, len(record.TokenUsage))
 	for _, bucket := range record.TokenUsage {
 		tokenUsage = append(tokenUsage, servicedto.AnalysisTokenUsageBucket{
-			Bucket:              bucket.Bucket,
-			InputTokens:         bucket.InputTokens,
-			OutputTokens:        bucket.OutputTokens,
-			CachedTokens:        bucket.CachedTokens,
-			CacheReadTokens:     bucket.CacheReadTokens,
-			CacheCreationTokens: bucket.CacheCreationTokens,
-			ReasoningTokens:     bucket.ReasoningTokens,
-			TotalTokens:         bucket.TotalTokens,
-			Requests:            bucket.Requests,
-			CostUSD:             bucket.CostUSD,
-			CostAvailable:       bucket.CostAvailable,
+			Bucket:          bucket.Bucket,
+			InputTokens:     bucket.InputTokens,
+			OutputTokens:    bucket.OutputTokens,
+			CachedTokens:    bucket.CachedTokens,
+			ReasoningTokens: bucket.ReasoningTokens,
+			TotalTokens:     bucket.TotalTokens,
+			Requests:        bucket.Requests,
+			CostUSD:         bucket.CostUSD,
+			CostAvailable:   bucket.CostAvailable,
 		})
 	}
 	apiKeys := make([]servicedto.AnalysisCompositionItem, 0, len(record.APIKeyComposition))

@@ -20,8 +20,6 @@ type ChartRow = {
   rawInput: number;
   rawOutput: number;
   cached: number;
-  cacheRead: number;
-  cacheCreation: number;
   reasoning: number;
   total: number;
   requests: number;
@@ -252,8 +250,6 @@ function buildTokenUsageRows(buckets: AnalysisTokenUsageBucket[], granularity: A
     rawInput: toNumber(bucket.input_tokens),
     rawOutput: toNumber(bucket.output_tokens),
     cached: toNumber(bucket.cached_tokens),
-    cacheRead: toNumber(bucket.cache_read_tokens),
-    cacheCreation: toNumber(bucket.cache_creation_tokens),
     reasoning: toNumber(bucket.reasoning_tokens),
     total: toNumber(bucket.total_tokens),
     requests: toNumber(bucket.requests),
@@ -589,21 +585,13 @@ function getCostRatePerMillion(cost: number, tokens: number) {
   return tokens > 0 ? (cost / tokens) * 1_000_000 : 0;
 }
 
-function getCostCachedTokens(row: ChartRow) {
-  const explicitCachedCostTokens = row.cacheRead + row.cacheCreation;
-  return explicitCachedCostTokens > 0 ? explicitCachedCostTokens : row.cached;
-}
-
 function getCostSegmentTokens(rows: ChartRow[]): Record<CostBreakdownSegmentKey, number> {
   return rows.reduce(
-    (totals, row) => {
-      const cachedCostTokens = getCostCachedTokens(row);
-      return {
-        input: totals.input + Math.max(row.rawInput - cachedCostTokens, 0),
-        output: totals.output + row.rawOutput,
-        cached: totals.cached + cachedCostTokens,
-      };
-    },
+    (totals, row) => ({
+      input: totals.input + Math.max(row.rawInput - row.cached, 0),
+      output: totals.output + row.rawOutput,
+      cached: totals.cached + row.cached,
+    }),
     { input: 0, output: 0, cached: 0 },
   );
 }
