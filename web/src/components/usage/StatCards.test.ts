@@ -49,6 +49,7 @@ describe('buildStatCardMetrics', () => {
     expect(metrics.rateStats.windowMinutes).toBe(120);
     expect(metrics.rateStats.rpm).toBe(0.025);
     expect(metrics.rateStats.tpm).toBe(6.475);
+    expect(metrics.requestStats.successRate).toBeCloseTo(88.8888888889);
     expect(metrics.tokenBreakdown.cachedTokens).toBe(22);
     expect(metrics.tokenBreakdown.reasoningTokens).toBe(33);
     expect(metrics.cacheRateStats.cachedRate).toBe(10);
@@ -69,6 +70,21 @@ describe('buildStatCardMetrics', () => {
 
     expect(metrics.cacheRateStats.cachedRate).toBeNull();
     expect(metrics.cacheRateStats.inputTokens).toBe(0);
+  });
+
+  it('keeps success rate empty when total requests are missing', () => {
+    const metrics = buildStatCardMetrics({
+      usage: {
+        ...usageWithBackendSummary,
+        usage: {
+          ...usageWithBackendSummary,
+          total_requests: 0,
+          success_count: 3,
+        },
+      },
+    });
+
+    expect(metrics.requestStats.successRate).toBeNull();
   });
 
   it('keeps priced total cost visible when availability is partial', () => {

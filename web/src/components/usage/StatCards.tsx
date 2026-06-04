@@ -17,7 +17,7 @@ import {
   formatUsd,
 } from '@/utils/usage';
 import { sparklineOptions } from '@/utils/usage/chartConfig';
-import type { UsageOverviewPayload } from './hooks/useUsageData';
+import type { UsageOverviewPayload, UsagePayload } from './hooks/useUsageData';
 import type { SparklineBundle } from './hooks/useSparklines';
 import styles from '@/pages/UsagePage.module.scss';
 
@@ -47,6 +47,7 @@ export interface StatCardsProps {
 }
 
 interface StatCardMetrics {
+  requestStats: { successRate: number | null };
   tokenBreakdown: { cachedTokens: number; reasoningTokens: number };
   rateStats: { rpm: number; tpm: number; windowMinutes: number; requestCount: number; tokenCount: number };
   cacheRateStats: { cachedRate: number | null; cachedTokens: number; inputTokens: number };
@@ -63,9 +64,22 @@ const sumNumberRecord = (record?: Record<string, number>): number => (
   Object.values(record ?? {}).reduce((sum, value) => sum + Math.max(safeNumber(value), 0), 0)
 );
 
+const calculateSuccessRate = (usageSnapshot: UsagePayload | null): number | null => {
+  const totalRequests = Math.max(safeNumber(usageSnapshot?.total_requests), 0);
+  if (totalRequests <= 0) {
+    return null;
+  }
+  return (Math.max(safeNumber(usageSnapshot?.success_count), 0) / totalRequests) * 100;
+};
+
 export function buildStatCardMetrics({ usage }: { usage: UsageOverviewPayload | null }): StatCardMetrics {
+  // overview 运行态和旧测试夹具的 snapshot 位置不同，这里统一后再计算请求成功率。
+  const usageSnapshot = (usage?.usage ?? usage) as UsagePayload | null;
+  const requestStats = { successRate: calculateSuccessRate(usageSnapshot) };
+
   if (!usage?.summary) {
     return {
+      requestStats,
       tokenBreakdown: { cachedTokens: 0, reasoningTokens: 0 },
       rateStats: { rpm: 0, tpm: 0, windowMinutes: 1, requestCount: 0, tokenCount: 0 },
       cacheRateStats: { cachedRate: null, cachedTokens: 0, inputTokens: 0 },
@@ -78,6 +92,7 @@ export function buildStatCardMetrics({ usage }: { usage: UsageOverviewPayload | 
   const inputTokens = sumNumberRecord(usage.series?.input_tokens);
 
   return {
+    requestStats,
     tokenBreakdown: {
       cachedTokens,
       reasoningTokens: usage.summary.reasoning_tokens ?? 0,
@@ -102,7 +117,7 @@ export function buildStatCardMetrics({ usage }: { usage: UsageOverviewPayload | 
 export function StatCards({ usage, loading, sparklines }: StatCardsProps) {
   const { t } = useTranslation();
   const usageSnapshot = usage?.usage ?? null;
-  const { tokenBreakdown, rateStats, cacheRateStats, totalCost, costAvailable } = useMemo(
+  const { requestStats, tokenBreakdown, rateStats, cacheRateStats, totalCost, costAvailable } = useMemo(
     () => buildStatCardMetrics({ usage }),
     [usage]
   );
@@ -112,9 +127,9 @@ export function StatCards({ usage, loading, sparklines }: StatCardsProps) {
       key: 'requests',
       label: t('usage_stats.total_requests'),
       icon: <IconSatellite size={16} />,
-      accent: '#8b8680',
-      accentSoft: 'rgba(139, 134, 128, 0.18)',
-      accentBorder: 'rgba(139, 134, 128, 0.35)',
+      accent: '#3b82f6',
+      accentSoft: 'rgba(59, 130, 246, 0.18)',
+      accentBorder: 'rgba(59, 130, 246, 0.34)',
       value: loading ? '-' : (usageSnapshot?.total_requests ?? 0).toLocaleString(),
       meta: (
         <>
@@ -125,6 +140,10 @@ export function StatCards({ usage, loading, sparklines }: StatCardsProps) {
           <span className={styles.statMetaItem}>
             <span className={styles.statMetaDot} style={{ backgroundColor: '#c65746' }} />
             {t('usage_stats.failed_requests')}: {loading ? '-' : (usageSnapshot?.failure_count ?? 0)}
+          </span>
+          <span className={styles.statMetaItem}>
+            {t('usage_stats.success_rate')}:{' '}
+            {loading || requestStats.successRate === null ? '-' : `${formatFixedTwoDecimals(requestStats.successRate)}%`}
           </span>
         </>
       ),
