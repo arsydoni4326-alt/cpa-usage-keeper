@@ -316,6 +316,8 @@ export interface AnalysisTokenUsageBucket {
   input_tokens: number
   output_tokens: number
   cached_tokens: number
+  cache_read_tokens: number
+  cache_creation_tokens: number
   reasoning_tokens: number
   total_tokens: number
   requests: number
@@ -353,6 +355,7 @@ export interface AnalysisHeatmapCell {
 
 export interface AnalysisHeatmapPayload {
   api_keys: string[]
+  api_key_labels: Record<string, string>
   models: string[]
   cells: AnalysisHeatmapCell[]
 }

@@ -29,15 +29,17 @@ type analysisResponse struct {
 }
 
 type analysisTokenUsage struct {
-	Bucket          time.Time `json:"bucket"`
-	InputTokens     int64     `json:"input_tokens"`
-	OutputTokens    int64     `json:"output_tokens"`
-	CachedTokens    int64     `json:"cached_tokens"`
-	ReasoningTokens int64     `json:"reasoning_tokens"`
-	TotalTokens     int64     `json:"total_tokens"`
-	Requests        int64     `json:"requests"`
-	CostUSD         float64   `json:"cost_usd"`
-	CostAvailable   bool      `json:"cost_available"`
+	Bucket              time.Time `json:"bucket"`
+	InputTokens         int64     `json:"input_tokens"`
+	OutputTokens        int64     `json:"output_tokens"`
+	CachedTokens        int64     `json:"cached_tokens"`
+	CacheReadTokens     int64     `json:"cache_read_tokens"`
+	CacheCreationTokens int64     `json:"cache_creation_tokens"`
+	ReasoningTokens     int64     `json:"reasoning_tokens"`
+	TotalTokens         int64     `json:"total_tokens"`
+	Requests            int64     `json:"requests"`
+	CostUSD             float64   `json:"cost_usd"`
+	CostAvailable       bool      `json:"cost_available"`
 }
 
 type analysisCompositionItem struct {
@@ -55,9 +57,10 @@ type analysisCompositionItem struct {
 }
 
 type analysisHeatmap struct {
-	APIKeys []string              `json:"api_keys"`
-	Models  []string              `json:"models"`
-	Cells   []analysisHeatmapCell `json:"cells"`
+	APIKeys      []string              `json:"api_keys"`
+	APIKeyLabels map[string]string     `json:"api_key_labels"`
+	Models       []string              `json:"models"`
+	Cells        []analysisHeatmapCell `json:"cells"`
 }
 
 type analysisHeatmapCell struct {
@@ -138,7 +141,7 @@ func emptyAnalysisResponse() analysisResponse {
 		ModelComposition:      []analysisCompositionItem{},
 		AuthFilesComposition:  []analysisCompositionItem{},
 		AIProviderComposition: []analysisCompositionItem{},
-		Heatmap:               analysisHeatmap{APIKeys: []string{}, Models: []string{}, Cells: []analysisHeatmapCell{}},
+		Heatmap:               analysisHeatmap{APIKeys: []string{}, APIKeyLabels: map[string]string{}, Models: []string{}, Cells: []analysisHeatmapCell{}},
 		CostBreakdown:         analysisCostBreakdown{CostAvailable: true},
 		ModelEfficiency:       []analysisModelEfficiency{},
 	}
@@ -167,15 +170,17 @@ func buildAnalysisPayload(snapshot *servicedto.AnalysisSnapshot, apiKeyInfos map
 	tokenUsage := make([]analysisTokenUsage, 0, len(snapshot.TokenUsage))
 	for _, bucket := range snapshot.TokenUsage {
 		tokenUsage = append(tokenUsage, analysisTokenUsage{
-			Bucket:          bucket.Bucket,
-			InputTokens:     bucket.InputTokens,
-			OutputTokens:    bucket.OutputTokens,
-			CachedTokens:    bucket.CachedTokens,
-			ReasoningTokens: bucket.ReasoningTokens,
-			TotalTokens:     bucket.TotalTokens,
-			Requests:        bucket.Requests,
-			CostUSD:         bucket.CostUSD,
-			CostAvailable:   bucket.CostAvailable,
+			Bucket:              bucket.Bucket,
+			InputTokens:         bucket.InputTokens,
+			OutputTokens:        bucket.OutputTokens,
+			CachedTokens:        bucket.CachedTokens,
+			CacheReadTokens:     bucket.CacheReadTokens,
+			CacheCreationTokens: bucket.CacheCreationTokens,
+			ReasoningTokens:     bucket.ReasoningTokens,
+			TotalTokens:         bucket.TotalTokens,
+			Requests:            bucket.Requests,
+			CostUSD:             bucket.CostUSD,
+			CostAvailable:       bucket.CostAvailable,
 		})
 	}
 	apiComposition := buildAnalysisCompositionPayload(snapshot.APIKeyComposition, apiKeyInfos)
@@ -256,10 +261,12 @@ func analysisAPIKeyLabel(apiKey string, apiKeyInfos map[string]analysisAPIKeyInf
 
 func buildAnalysisHeatmapPayload(cells []servicedto.AnalysisHeatmapCell, apiKeyInfos map[string]analysisAPIKeyInfo) analysisHeatmap {
 	apiRequests := map[string]int64{}
+	apiKeyLabels := map[string]string{}
 	modelRequests := map[string]int64{}
 	maxTokens := int64(0)
 	for _, cell := range cells {
-		apiKey := analysisAPIKeyLabel(cell.APIKey, apiKeyInfos)
+		apiKey := analysisAPIKeyResponseKey(cell.APIKey, apiKeyInfos)
+		apiKeyLabels[apiKey] = analysisAPIKeyLabel(cell.APIKey, apiKeyInfos)
 		apiRequests[apiKey] += cell.Requests
 		modelRequests[cell.Model] += cell.Requests
 		if cell.TotalTokens > maxTokens {
@@ -274,8 +281,9 @@ func buildAnalysisHeatmapPayload(cells []servicedto.AnalysisHeatmapCell, apiKeyI
 		if maxTokens > 0 {
 			intensity = float64(cell.TotalTokens) / float64(maxTokens)
 		}
+		apiKey := analysisAPIKeyResponseKey(cell.APIKey, apiKeyInfos)
 		payloadCells = append(payloadCells, analysisHeatmapCell{
-			APIKey:          analysisAPIKeyLabel(cell.APIKey, apiKeyInfos),
+			APIKey:          apiKey,
 			Model:           cell.Model,
 			InputTokens:     cell.InputTokens,
 			OutputTokens:    cell.OutputTokens,
@@ -288,7 +296,7 @@ func buildAnalysisHeatmapPayload(cells []servicedto.AnalysisHeatmapCell, apiKeyI
 			Intensity:       intensity,
 		})
 	}
-	return analysisHeatmap{APIKeys: apiKeys, Models: models, Cells: payloadCells}
+	return analysisHeatmap{APIKeys: apiKeys, APIKeyLabels: apiKeyLabels, Models: models, Cells: payloadCells}
 }
 
 func buildAnalysisModelEfficiencyPayload(items []servicedto.AnalysisModelEfficiencyItem) []analysisModelEfficiency {

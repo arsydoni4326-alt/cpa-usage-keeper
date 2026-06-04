@@ -20,6 +20,8 @@ type ChartRow = {
   rawInput: number;
   rawOutput: number;
   cached: number;
+  cacheRead: number;
+  cacheCreation: number;
   reasoning: number;
   total: number;
   requests: number;
@@ -250,6 +252,8 @@ function buildTokenUsageRows(buckets: AnalysisTokenUsageBucket[], granularity: A
     rawInput: toNumber(bucket.input_tokens),
     rawOutput: toNumber(bucket.output_tokens),
     cached: toNumber(bucket.cached_tokens),
+    cacheRead: toNumber(bucket.cache_read_tokens),
+    cacheCreation: toNumber(bucket.cache_creation_tokens),
     reasoning: toNumber(bucket.reasoning_tokens),
     total: toNumber(bucket.total_tokens),
     requests: toNumber(bucket.requests),
@@ -585,13 +589,21 @@ function getCostRatePerMillion(cost: number, tokens: number) {
   return tokens > 0 ? (cost / tokens) * 1_000_000 : 0;
 }
 
+function getCostCachedTokens(row: ChartRow) {
+  const explicitCachedCostTokens = row.cacheRead + row.cacheCreation;
+  return explicitCachedCostTokens > 0 ? explicitCachedCostTokens : row.cached;
+}
+
 function getCostSegmentTokens(rows: ChartRow[]): Record<CostBreakdownSegmentKey, number> {
   return rows.reduce(
-    (totals, row) => ({
-      input: totals.input + Math.max(row.rawInput - row.cached, 0),
-      output: totals.output + row.rawOutput,
-      cached: totals.cached + row.cached,
-    }),
+    (totals, row) => {
+      const cachedCostTokens = getCostCachedTokens(row);
+      return {
+        input: totals.input + Math.max(row.rawInput - cachedCostTokens, 0),
+        output: totals.output + row.rawOutput,
+        cached: totals.cached + cachedCostTokens,
+      };
+    },
     { input: 0, output: 0, cached: 0 },
   );
 }
@@ -603,10 +615,13 @@ function CostBreakdownCard({ breakdown, rows, loading }: { breakdown: AnalysisCo
   const totalCost = toNumber(safeBreakdown.total_cost_usd);
   const totalTokens = rows.reduce((sum, row) => sum + row.total, 0);
   const segmentTokens = getCostSegmentTokens(rows);
-  const blendedRate = getCostRatePerMillion(totalCost, totalTokens);
-  const ratePoints = rows
-    .filter((row) => row.costAvailable && row.total > 0)
-    .map((row) => getCostRatePerMillion(row.cost, row.total));
+  const costAvailable = safeBreakdown.cost_available !== false;
+  const blendedRate = costAvailable ? getCostRatePerMillion(totalCost, totalTokens) : null;
+  const ratePoints = costAvailable
+    ? rows
+      .filter((row) => row.costAvailable && row.total > 0)
+      .map((row) => getCostRatePerMillion(row.cost, row.total))
+    : [];
   const rateMax = Math.max(0, ...ratePoints);
   const segments: CostBreakdownSegment[] = [
     { key: 'input', label: t('usage_stats.input_tokens'), value: toNumber(safeBreakdown.input_cost_usd), color: TOKEN_COLORS.input.base, tokens: segmentTokens.input },
@@ -701,7 +716,7 @@ function CostBreakdownCard({ breakdown, rows, loading }: { breakdown: AnalysisCo
             </div>
             <div className={styles.costRateMetric}>
               <span>{t('usage_stats.analysis_cost_per_million_tokens')}</span>
-              <strong>{formatUsd(blendedRate)}</strong>
+              <strong>{blendedRate === null ? t('usage_stats.cost_need_price') : formatUsd(blendedRate)}</strong>
               <small>{t('usage_stats.analysis_blended_rate')}</small>
             </div>
             <div className={styles.costRateSparkline} aria-label={t('usage_stats.analysis_cost_per_million_tokens')}>
@@ -1028,12 +1043,16 @@ function ModelEfficiencyCard({ rows, loading, isDark, isMobile }: { rows: Analys
   );
 }
 
-function Heatmap({ cells, apiKeys, models, loading, isDark }: { cells: AnalysisHeatmapCell[]; apiKeys: string[]; models: string[]; loading: boolean; isDark: boolean }) {
+function Heatmap({ cells, apiKeys, apiKeyLabels, models, loading, isDark }: { cells: AnalysisHeatmapCell[]; apiKeys: string[]; apiKeyLabels: Record<string, string>; models: string[]; loading: boolean; isDark: boolean }) {
   const { t } = useTranslation();
   const [tooltip, setTooltip] = useState<FloatingTooltipState | null>(null);
   const cellMap = useMemo(() => new Map(cells.map((cell) => [`${cell.api_key}\0${cell.model}`, cell])), [cells]);
-  const maxHeatmapTokens = useMemo(() => Math.max(0, ...cells.map((cell) => toNumber(cell.total_tokens))), [cells]);
-  const buildTooltipLines = (model: string, cell: AnalysisHeatmapCell | undefined) => {
+  const maxHeatmapTokens = useMemo(
+    () => cells.reduce((max, cell) => Math.max(max, toNumber(cell.total_tokens)), 0),
+    [cells],
+  );
+  const getAPIKeyLabel = (apiKey: string) => apiKeyLabels[apiKey] || apiKey;
+  const buildTooltipLines = (apiKey: string, model: string, cell: AnalysisHeatmapCell | undefined) => {
     const requests = toNumber(cell?.requests);
     const input = toNumber(cell?.input_tokens);
     const output = toNumber(cell?.output_tokens);
@@ -1042,7 +1061,7 @@ function Heatmap({ cells, apiKeys, models, loading, isDark }: { cells: AnalysisH
     const total = toNumber(cell?.total_tokens);
     const cost = toNumber(cell?.cost_usd);
     return [
-      model,
+      `${getAPIKeyLabel(apiKey)} / ${model}`,
       `${t('usage_stats.requests_count')}: ${formatCompactNumber(requests)}`,
       `${t('usage_stats.input_tokens')}: ${formatCompactNumber(input)}`,
       `${t('usage_stats.output_tokens')}: ${formatCompactNumber(output)}`,
@@ -1105,42 +1124,45 @@ function Heatmap({ cells, apiKeys, models, loading, isDark }: { cells: AnalysisH
                     <span className={`${styles.heatmapTruncatedLabel} ${styles.heatmapModelLabel}`}>{model}</span>
                   </div>
                 ))}
-                {apiKeys.map((apiKey) => (
-                  <div key={apiKey} className={styles.heatmapRowContents}>
-                    <div className={`${styles.heatmapRowLabel} ${styles.heatmapTooltipTarget}`} data-full-name={apiKey}>
-                      <span className={styles.heatmapTruncatedLabel}>{apiKey}</span>
+                {apiKeys.map((apiKey) => {
+                  const apiKeyLabel = getAPIKeyLabel(apiKey);
+                  return (
+                    <div key={apiKey} className={styles.heatmapRowContents}>
+                      <div className={`${styles.heatmapRowLabel} ${styles.heatmapTooltipTarget}`} data-full-name={apiKeyLabel}>
+                        <span className={styles.heatmapTruncatedLabel}>{apiKeyLabel}</span>
+                      </div>
+                      {models.map((model) => {
+                        const cell = cellMap.get(`${apiKey}\0${model}`);
+                        const heatmapTokens = toNumber(cell?.total_tokens);
+                        const intensity = getHeatmapVisualIntensity(heatmapTokens, maxHeatmapTokens);
+                        const tooltipLines = buildTooltipLines(apiKey, model, cell);
+                        return (
+                          <div
+                            key={`${apiKey}-${model}`}
+                            className={styles.heatmapCell}
+                            style={{
+                              background: getHeatmapCellColor(intensity, isDark),
+                              color: getHeatmapCellTextColor(intensity, isDark),
+                              '--heatmap-flame-alpha': intensity.toFixed(3),
+                            } as CSSProperties}
+                            tabIndex={0}
+                            aria-label={tooltipLines.join(', ')}
+                            data-tooltip={tooltipLines.join('\n')}
+                            onMouseEnter={(event) => showTooltip(tooltipLines, event)}
+                            onMouseMove={(event) => showTooltip(tooltipLines, event)}
+                            onMouseLeave={hideTooltip}
+                            onFocus={(event) => showTooltip(tooltipLines, event)}
+                            onBlur={hideTooltip}
+                          >
+                            <span className={styles.heatmapCellTokenValue}>
+                              {formatCompactNumber(heatmapTokens)}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
-                    {models.map((model) => {
-                      const cell = cellMap.get(`${apiKey}\0${model}`);
-                      const heatmapTokens = toNumber(cell?.total_tokens);
-                      const intensity = getHeatmapVisualIntensity(heatmapTokens, maxHeatmapTokens);
-                      const tooltipLines = buildTooltipLines(model, cell);
-                      return (
-                        <div
-                          key={`${apiKey}-${model}`}
-                          className={styles.heatmapCell}
-                          style={{
-                            background: getHeatmapCellColor(intensity, isDark),
-                            color: getHeatmapCellTextColor(intensity, isDark),
-                            '--heatmap-flame-alpha': intensity.toFixed(3),
-                          } as CSSProperties}
-                          tabIndex={0}
-                          aria-label={tooltipLines.join(', ')}
-                          data-tooltip={tooltipLines.join('\n')}
-                          onMouseEnter={(event) => showTooltip(tooltipLines, event)}
-                          onMouseMove={(event) => showTooltip(tooltipLines, event)}
-                          onMouseLeave={hideTooltip}
-                          onFocus={(event) => showTooltip(tooltipLines, event)}
-                          onBlur={hideTooltip}
-                        >
-                          <span className={styles.heatmapCellTokenValue}>
-                            {formatCompactNumber(heatmapTokens)}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -1192,7 +1214,7 @@ export function AnalysisPanel({ analysis, loading, isDark, isMobile }: AnalysisP
         <ModelEfficiencyCard rows={analysis?.model_efficiency ?? []} loading={loading} isDark={isDark} isMobile={isMobile} />
       </div>
       <CompositionPanel tabs={compositionTabs} loading={loading} isDark={isDark} />
-      <Heatmap cells={analysis?.heatmap.cells ?? []} apiKeys={analysis?.heatmap.api_keys ?? []} models={analysis?.heatmap.models ?? []} loading={loading} isDark={isDark} />
+      <Heatmap cells={analysis?.heatmap.cells ?? []} apiKeys={analysis?.heatmap.api_keys ?? []} apiKeyLabels={analysis?.heatmap.api_key_labels ?? {}} models={analysis?.heatmap.models ?? []} loading={loading} isDark={isDark} />
     </div>
   );
 }

@@ -10,15 +10,17 @@ const (
 )
 
 type AnalysisTokenUsageBucket struct {
-	Bucket          time.Time
-	InputTokens     int64
-	OutputTokens    int64
-	CachedTokens    int64
-	ReasoningTokens int64
-	TotalTokens     int64
-	Requests        int64
-	CostUSD         float64
-	CostAvailable   bool
+	Bucket              time.Time
+	InputTokens         int64
+	OutputTokens        int64
+	CachedTokens        int64
+	CacheReadTokens     int64
+	CacheCreationTokens int64
+	ReasoningTokens     int64
+	TotalTokens         int64
+	Requests            int64
+	CostUSD             float64
+	CostAvailable       bool
 }
 
 type AnalysisCompositionItem struct {

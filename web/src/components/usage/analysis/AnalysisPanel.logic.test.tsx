@@ -244,6 +244,8 @@ describe('AnalysisPanel token chart data', () => {
         input_tokens: 1_000_000,
         output_tokens: 1_000_000,
         cached_tokens: 500_000,
+        cache_read_tokens: 500_000,
+        cache_creation_tokens: 200_000,
         reasoning_tokens: 100_000,
         total_tokens: 3_000_000,
         requests: 10,
@@ -274,8 +276,8 @@ describe('AnalysisPanel token chart data', () => {
     expect(markup).toContain('background-color:#d97706');
     expect(markup).not.toContain('filter:saturate');
     expect(markup).toContain('usage_stats.analysis_cost_share: 16.67%');
-    expect(markup).toContain('usage_stats.analysis_cost_per_million_tokens: $2.00');
-    expect(markup).toContain('usage_stats.total_tokens: 500.00K');
+    expect(markup).toContain('usage_stats.analysis_cost_per_million_tokens: $2.86');
+    expect(markup).toContain('usage_stats.total_tokens: 700.00K');
     expect(markup).toContain('$6.00');
     expect(markup).toContain('$2.00');
     expect(markup).toContain('16.67%');
@@ -486,6 +488,13 @@ describe('AnalysisPanel token chart data', () => {
         output_tokens_per_request: 33.33,
         cache_rate: 0,
       }],
+      cost_breakdown: {
+        input_cost_usd: 9,
+        output_cost_usd: 0,
+        cached_cost_usd: 0,
+        total_cost_usd: 9,
+        cost_available: false,
+      },
     };
 
     const markup = renderToStaticMarkup(<AnalysisPanel analysis={analysis} loading={false} isDark={false} isMobile={false} />);
@@ -494,6 +503,8 @@ describe('AnalysisPanel token chart data', () => {
     expect(costDataset?.data).toEqual([null]);
     expect(chartCapture.scatterData).toBeNull();
     expect(markup).toContain('usage_stats.cost_need_price');
+    expect(markup).toContain('usage_stats.analysis_cost_per_million_tokens</span><strong>usage_stats.cost_need_price</strong>');
+    expect(markup).not.toContain('$8,181.82');
   });
 
   it('shows compact heatmap cells with detailed tooltip data', () => {
