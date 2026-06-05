@@ -26,7 +26,7 @@ It relies on [CLIProxyAPI (CPA)](https://github.com/router-for-me/CLIProxyAPI) a
 - Credentials page for Auth File and AI Provider usage, with quota lookup, refresh, inspection, and sorting
 - Provider quota window usage and quota display across supported providers
 - Maintain model prices for cost estimation and reporting
-- Automatically sync CPA Auth Files, API Keys, AI Provider, and other metadata changes
+- Automatically sync CPA Auth Files, API Keys, AI Providers, and other metadata changes
 - Optional password login protection, SQLite backups, Docker/Docker Compose, and systemd deployment
 
 ## Quick Start

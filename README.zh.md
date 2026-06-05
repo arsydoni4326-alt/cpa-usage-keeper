@@ -26,7 +26,7 @@
 - 凭证页面展示 Auth File 与 AI Provider 使用情况，支持限额查询、刷新、巡检和排序
 - 支持多 Provider quota 窗口用量与限额展示
 - 可维护模型价格，用于成本估算和统计展示
-- 自动同步 CPA Auth Files、API Keys、AI Provider 等 metadata 变化
+- 自动同步 CPA Auth Files、API Keys、AI Providers 等 metadata 变化
 - 可选密码登录保护、SQLite 备份、Docker/Docker Compose 和 systemd 部署
 
 ## 快速开始
