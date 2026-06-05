@@ -149,21 +149,16 @@ func isGeminiCodexBackfillFamilyType(value string) bool {
 }
 
 func geminiCodexBackfillTokenDeltas(event entities.UsageEvent) (int64, int64) {
-	if event.ReasoningTokens <= 0 {
+	if event.ReasoningTokens <= 0 || event.TotalTokens <= 0 {
 		return 0, 0
 	}
-	if event.TotalTokens > 0 {
-		if event.InputTokens+event.OutputTokens == event.TotalTokens {
-			return 0, 0
-		}
-		if event.InputTokens+event.OutputTokens+event.ReasoningTokens != event.TotalTokens {
-			return 0, 0
-		}
-		return event.ReasoningTokens, 0
+	if event.InputTokens+event.OutputTokens == event.TotalTokens {
+		return 0, 0
 	}
-	// total 缺失时无法可靠区分 old Gemini output 和已 Codex 化 output；只补 total，避免二次折入 reasoning。
-	newTotalTokens := event.InputTokens + event.OutputTokens
-	return 0, newTotalTokens - event.TotalTokens
+	if event.InputTokens+event.OutputTokens+event.ReasoningTokens != event.TotalTokens {
+		return 0, 0
+	}
+	return event.ReasoningTokens, 0
 }
 
 func updateGeminiCodexBackfillUsageEvent(tx *gorm.DB, event entities.UsageEvent, outputDelta, totalDelta int64) error {

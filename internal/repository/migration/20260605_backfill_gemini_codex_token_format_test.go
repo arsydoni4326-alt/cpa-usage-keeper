@@ -96,7 +96,7 @@ func assertGeminiCodexTokenBackfillRows(t *testing.T, db *gorm.DB) {
 	assertGeminiBackfillEventTokens(t, db, "openai-untouched", 7, 3, 21)
 	assertGeminiBackfillEventTokens(t, db, "gemini-unaggregated", 6, 2, 16)
 	assertGeminiBackfillEventTokens(t, db, "openai-display-gemini", 4, 2, 16)
-	assertGeminiBackfillEventTokens(t, db, "gemini-missing-total-already-codex", 10, 3, 21)
+	assertGeminiBackfillEventTokens(t, db, "gemini-missing-total-already-codex", 10, 3, 0)
 
 	assertGeminiBackfillAggregateTokens(t, db, "usage_overview_hourly_stats", 1, 20, 6, 42)
 	assertGeminiBackfillAggregateTokens(t, db, "usage_overview_hourly_stats", 2, 3, 1, 8)
