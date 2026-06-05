@@ -112,6 +112,7 @@ const MODEL_EFFICIENCY_HOVER_RADIUS_DELTA = 4;
 const MODEL_EFFICIENCY_RADIUS_EASING = 0.75;
 const MODEL_EFFICIENCY_OUTLIER_RATIO = 8;
 const MODEL_EFFICIENCY_AXIS_PADDING_FACTOR = 2.5;
+const MODEL_EFFICIENCY_ZERO_RATE_FLOOR_DIVISOR = 10;
 const EMPTY_COMPOSITION_ITEMS: AnalysisCompositionItem[] = [];
 type TokenLabels = {
   input: string;
@@ -398,7 +399,7 @@ function buildAnalysisTokenChartData(rows: ChartRow[], labels: TokenLabels): Mix
       {
         type: 'line',
         label: labels.cost,
-        data: rows.map((row) => (row.costAvailable ? row.cost : null)),
+        data: rows.map((row) => row.cost),
         borderColor: tokenColors.cost,
         backgroundColor: tokenColors.cost,
         pointBackgroundColor: tokenColors.cost,
@@ -410,6 +411,22 @@ function buildAnalysisTokenChartData(rows: ChartRow[], labels: TokenLabels): Mix
       } as unknown as MixedTokenChartData['datasets'][number],
     ],
   };
+}
+
+function CostHeaderHint({ show, label }: { show: boolean; label: string }) {
+  return show ? <small className={styles.costHeaderHint}>{label}</small> : null;
+}
+
+function AnalysisCardHeader({ title, subtitle, showPricingHint, hint }: { title: string; subtitle: string; showPricingHint: boolean; hint: string }) {
+  return (
+    <div className={styles.cardHeader}>
+      <div className={styles.cardTitleLine}>
+        <h2>{title}</h2>
+        <CostHeaderHint show={showPricingHint} label={hint} />
+      </div>
+      <p>{subtitle}</p>
+    </div>
+  );
 }
 
 function buildCompositionChartData(items: AnalysisCompositionItem[]): ChartData<'doughnut', number[], string> {
@@ -468,14 +485,15 @@ function TokenUsageChart({ rows, loading, isDark, isMobile }: { rows: ChartRow[]
     totalLabel: tokenLabels.total,
   }), [chartTheme, isMobile, rows, tokenLabels.total]);
   const legendItems = useMemo(() => buildTokenLegendItems(tokenLabels), [tokenLabels]);
+  const hasUnavailableCost = rows.some((row) => !row.costAvailable);
   return (
     <section className={`${styles.analysisCard} ${styles.tokenUsageCard}`}>
-      <div className={styles.cardHeader}>
-        <div>
-          <h2>{t('usage_stats.analysis_token_usage_title')}</h2>
-          <p>{t('usage_stats.analysis_token_usage_subtitle')}</p>
-        </div>
-      </div>
+      <AnalysisCardHeader
+        title={t('usage_stats.analysis_token_usage_title')}
+        subtitle={t('usage_stats.analysis_token_usage_subtitle')}
+        showPricingHint={hasUnavailableCost}
+        hint={t('usage_stats.cost_need_price')}
+      />
       {loading ? (
         <div className={styles.emptyState}>{t('common.loading')}</div>
       ) : rows.length === 0 ? (
@@ -514,14 +532,15 @@ function CompositionPanel({ tabs, loading, isDark }: { tabs: CompositionTab[]; l
   const chartTheme = useMemo(() => getChartTheme(isDark), [isDark]);
   const chartData = useMemo(() => buildCompositionChartData(items), [items]);
   const chartOptions = useMemo(() => buildCompositionChartOptions(chartTheme), [chartTheme]);
+  const hasUnavailableCost = items.some((item) => item.cost_available === false);
   return (
     <section className={`${styles.analysisCard} ${styles.compositionCard}`}>
-      <div className={styles.cardHeader}>
-        <div>
-          <h2>{t('usage_stats.analysis_composition_title')}</h2>
-          <p>{t('usage_stats.analysis_composition_subtitle')}</p>
-        </div>
-      </div>
+      <AnalysisCardHeader
+        title={t('usage_stats.analysis_composition_title')}
+        subtitle={t('usage_stats.analysis_composition_subtitle')}
+        showPricingHint={hasUnavailableCost}
+        hint={t('usage_stats.cost_need_price')}
+      />
       <div className={styles.compositionTabs} role="tablist" aria-label={t('usage_stats.analysis_composition_title')}>
         {tabs.map((tab) => (
           <button
@@ -566,7 +585,7 @@ function CompositionPanel({ tabs, loading, isDark }: { tabs: CompositionTab[]; l
                       </td>
                       <td>{formatCompactNumber(toNumber(item.total_tokens))}</td>
                       <td>{formatPercent(toNumber(item.percent))}</td>
-                      <td>{item.cost_available === false ? t('usage_stats.cost_need_price') : formatUsd(toNumber(item.cost_usd))}</td>
+                      <td>{formatUsd(toNumber(item.cost_usd))}</td>
                       <td>{formatCompactNumber(toNumber(item.requests))}</td>
                     </tr>
                   ))}
@@ -603,19 +622,17 @@ function CostBreakdownCard({ breakdown, rows, loading }: { breakdown: AnalysisCo
   const totalTokens = rows.reduce((sum, row) => sum + row.total, 0);
   const segmentTokens = getCostSegmentTokens(rows);
   const costAvailable = safeBreakdown.cost_available !== false;
-  const blendedRate = costAvailable ? getCostRatePerMillion(totalCost, totalTokens) : null;
-  const ratePoints = costAvailable
-    ? rows
-      .filter((row) => row.costAvailable && row.total > 0)
-      .map((row) => getCostRatePerMillion(row.cost, row.total))
-    : [];
+  const blendedRate = getCostRatePerMillion(totalCost, totalTokens);
+  const ratePoints = rows
+    .filter((row) => row.total > 0)
+    .map((row) => getCostRatePerMillion(row.cost, row.total));
   const rateMax = Math.max(0, ...ratePoints);
   const segments: CostBreakdownSegment[] = [
     { key: 'input', label: t('usage_stats.input_tokens'), value: toNumber(safeBreakdown.input_cost_usd), color: TOKEN_COLORS.input.base, tokens: segmentTokens.input },
     { key: 'output', label: t('usage_stats.output_tokens'), value: toNumber(safeBreakdown.output_cost_usd), color: TOKEN_COLORS.output.base, tokens: segmentTokens.output },
     { key: 'cached', label: t('usage_stats.cached_tokens'), value: toNumber(safeBreakdown.cached_cost_usd), color: TOKEN_COLORS.cached.base, tokens: segmentTokens.cached },
   ];
-  const hasData = totalCost > 0 || segments.some((segment) => segment.value > 0);
+  const hasData = rows.length > 0 || totalCost > 0 || segments.some((segment) => segment.value > 0);
   const buildCostTooltipLines = (segment: CostBreakdownSegment, percent: number) => [
     segment.label,
     `${t('usage_stats.total_cost')}: ${formatUsd(segment.value)}`,
@@ -643,19 +660,18 @@ function CostBreakdownCard({ breakdown, rows, loading }: { breakdown: AnalysisCo
   const hideCostTooltip = () => setCostTooltip(null);
   return (
     <section className={`${styles.analysisCard} ${styles.costBreakdownCard}`}>
-      <div className={styles.cardHeader}>
-        <div>
-          <h2>{t('usage_stats.analysis_cost_breakdown_title')}</h2>
-          <p>{t('usage_stats.analysis_cost_breakdown_subtitle')}</p>
-        </div>
-      </div>
+      <AnalysisCardHeader
+        title={t('usage_stats.analysis_cost_breakdown_title')}
+        subtitle={t('usage_stats.analysis_cost_breakdown_subtitle')}
+        showPricingHint={!costAvailable}
+        hint={t('usage_stats.cost_need_price')}
+      />
       {loading ? (
         <div className={styles.emptyState}>{t('common.loading')}</div>
       ) : !hasData ? (
-        <div className={styles.emptyState}>{safeBreakdown.cost_available === false ? t('usage_stats.cost_need_price') : t('usage_stats.no_data')}</div>
+        <div className={styles.emptyState}>{t('usage_stats.no_data')}</div>
       ) : (
         <div className={styles.costBreakdownBody}>
-          {safeBreakdown.cost_available === false ? <div className={styles.costWarning}>{t('usage_stats.cost_need_price')}</div> : null}
           <div className={styles.costStack} aria-label={t('usage_stats.analysis_cost_breakdown_title')}>
             {segments.map((segment) => {
               const percent = totalCost > 0 ? (segment.value / totalCost) * 100 : 0;
@@ -699,11 +715,11 @@ function CostBreakdownCard({ breakdown, rows, loading }: { breakdown: AnalysisCo
           <div className={styles.costRatePanel}>
             <div className={styles.costRateMetric}>
               <span>{t('usage_stats.total_cost')}</span>
-              <strong>{safeBreakdown.cost_available === false ? t('usage_stats.cost_need_price') : formatUsd(totalCost)}</strong>
+              <strong>{formatUsd(totalCost)}</strong>
             </div>
             <div className={styles.costRateMetric}>
               <span>{t('usage_stats.analysis_cost_per_million_tokens')}</span>
-              <strong>{blendedRate === null ? t('usage_stats.cost_need_price') : formatUsd(blendedRate)}</strong>
+              <strong>{formatUsd(blendedRate)}</strong>
               <small>{t('usage_stats.analysis_blended_rate')}</small>
             </div>
             <div className={styles.costRateSparkline} aria-label={t('usage_stats.analysis_cost_per_million_tokens')}>
@@ -741,6 +757,7 @@ type EfficiencyPoint = {
   model: string;
   requests: number;
   cost: number;
+  costPerMillion: number;
   totalTokens: number;
   cacheRate: number;
 };
@@ -919,7 +936,17 @@ function createModelEfficiencyTooltipHandler({
 function ModelEfficiencyCard({ rows, loading, isDark, isMobile }: { rows: AnalysisModelEfficiencyItem[]; loading: boolean; isDark: boolean; isMobile: boolean }) {
   const { t } = useTranslation();
   const chartTheme = useMemo(() => getChartTheme(isDark), [isDark]);
-  const pricedRows = useMemo(() => rows.filter((row) => row.cost_available !== false && toNumber(row.total_tokens) > 0 && getModelEfficiencyRate(row) > 0), [rows]);
+  const pricedRows = useMemo(() => rows.filter((row) => toNumber(row.total_tokens) > 0), [rows]);
+  const efficiencyRates = useMemo(() => pricedRows.map((row) => getModelEfficiencyRate(row)), [pricedRows]);
+  const positiveEfficiencyRates = useMemo(() => efficiencyRates.filter((rate) => Number.isFinite(rate) && rate > 0), [efficiencyRates]);
+  const zeroRateFloor = positiveEfficiencyRates.length > 0
+    ? Math.max(Math.min(...positiveEfficiencyRates) / MODEL_EFFICIENCY_ZERO_RATE_FLOOR_DIVISOR, Number.EPSILON)
+    : 0;
+  const plotEfficiencyRates = useMemo(
+    () => efficiencyRates.map((rate) => (Number.isFinite(rate) && rate > 0 ? rate : zeroRateFloor)),
+    [efficiencyRates, zeroRateFloor],
+  );
+  const useLinearCostScale = positiveEfficiencyRates.length === 0;
   const tooltipLabels = useMemo(() => ({
     totalTokens: t('usage_stats.total_tokens'),
     costPerMillion: t('usage_stats.analysis_cost_per_million_tokens'),
@@ -930,12 +957,13 @@ function ModelEfficiencyCard({ rows, loading, isDark, isMobile }: { rows: Analys
     labels: pricedRows.map((row) => row.model),
     datasets: [{
       label: t('usage_stats.analysis_model_efficiency_title'),
-      data: pricedRows.map((row) => ({
+      data: pricedRows.map((row, index) => ({
         x: toNumber(row.total_tokens),
-        y: getModelEfficiencyRate(row),
+        y: plotEfficiencyRates[index] ?? 0,
         model: row.model,
         requests: toNumber(row.requests),
         cost: toNumber(row.cost_usd),
+        costPerMillion: efficiencyRates[index] ?? 0,
         totalTokens: toNumber(row.total_tokens),
         cacheRate: toNumber(row.cache_rate),
       })),
@@ -946,7 +974,7 @@ function ModelEfficiencyCard({ rows, loading, isDark, isMobile }: { rows: Analys
       borderWidth: 1,
       clip: false,
     }],
-  }), [pointRadii, pricedRows, t]);
+  }), [efficiencyRates, plotEfficiencyRates, pointRadii, pricedRows, t]);
   const chartOptions = useMemo<ChartOptions<'scatter'>>(() => ({
     responsive: true,
     maintainAspectRatio: false,
@@ -984,15 +1012,24 @@ function ModelEfficiencyCard({ rows, loading, isDark, isMobile }: { rows: Analys
         border: { color: chartTheme.axis },
         ticks: { color: chartTheme.textSecondary, font: { size: 10 }, maxTicksLimit: isMobile ? 4 : 5, callback: (value) => formatCompactNumber(Number(value)) },
       },
-      y: {
-        type: 'logarithmic',
-        ...getLogScaleBounds(pricedRows.map((row) => getModelEfficiencyRate(row))),
-        grid: { color: chartTheme.grid },
-        border: { color: chartTheme.axis },
-        ticks: { color: chartTheme.textSecondary, font: { size: 10 }, maxTicksLimit: isMobile ? 4 : 5, callback: (value) => formatUsd(Number(value)) },
-      },
+      y: useLinearCostScale
+        ? {
+          type: 'linear',
+          beginAtZero: true,
+          suggestedMax: Math.max(1, ...efficiencyRates.filter((rate) => Number.isFinite(rate))) * MODEL_EFFICIENCY_AXIS_PADDING_FACTOR,
+          grid: { color: chartTheme.grid },
+          border: { color: chartTheme.axis },
+          ticks: { color: chartTheme.textSecondary, font: { size: 10 }, maxTicksLimit: isMobile ? 4 : 5, callback: (value) => formatUsd(Number(value)) },
+        }
+        : {
+          type: 'logarithmic',
+          ...getLogScaleBounds(plotEfficiencyRates),
+          grid: { color: chartTheme.grid },
+          border: { color: chartTheme.axis },
+          ticks: { color: chartTheme.textSecondary, font: { size: 10 }, maxTicksLimit: isMobile ? 4 : 5, callback: (value) => formatUsd(Number(value)) },
+        },
     },
-  }), [chartTheme, isMobile, pricedRows, t, tooltipLabels]);
+  }), [chartTheme, efficiencyRates, isMobile, plotEfficiencyRates, pricedRows, t, tooltipLabels, useLinearCostScale]);
   useEffect(() => {
     removeModelEfficiencyTooltip();
   }, [pricedRows]);
@@ -1004,25 +1041,24 @@ function ModelEfficiencyCard({ rows, loading, isDark, isMobile }: { rows: Analys
   const hasUnavailableCost = rows.some((row) => row.cost_available === false);
   return (
     <section className={`${styles.analysisCard} ${styles.modelEfficiencyCard}`}>
-      <div className={styles.cardHeader}>
-        <div>
-          <h2>{t('usage_stats.analysis_model_efficiency_title')}</h2>
-          <p>{t('usage_stats.analysis_model_efficiency_subtitle')}</p>
-        </div>
-      </div>
+      <AnalysisCardHeader
+        title={t('usage_stats.analysis_model_efficiency_title')}
+        subtitle={t('usage_stats.analysis_model_efficiency_subtitle')}
+        showPricingHint={hasUnavailableCost}
+        hint={t('usage_stats.cost_need_price')}
+      />
       {loading ? (
         <div className={styles.emptyState}>{t('common.loading')}</div>
       ) : !hasData ? (
         <div className={styles.emptyState}>{t('usage_stats.no_data')}</div>
       ) : (
         <div className={styles.modelEfficiencyBody}>
-          {hasUnavailableCost ? <div className={styles.costWarning}>{t('usage_stats.cost_need_price')}</div> : null}
           {hasPricedData ? (
             <div className={styles.efficiencyChartFrame}>
               <Scatter data={chartData} options={chartOptions} />
             </div>
           ) : (
-            <div className={styles.emptyState}>{t('usage_stats.cost_need_price')}</div>
+            <div className={styles.emptyState}>{t('usage_stats.no_data')}</div>
           )}
         </div>
       )}
@@ -1034,6 +1070,7 @@ function Heatmap({ cells, apiKeys, apiKeyLabels, models, loading, isDark }: { ce
   const { t } = useTranslation();
   const [tooltip, setTooltip] = useState<FloatingTooltipState | null>(null);
   const cellMap = useMemo(() => new Map(cells.map((cell) => [`${cell.api_key}\0${cell.model}`, cell])), [cells]);
+  const hasUnavailableCost = useMemo(() => cells.some((cell) => cell.cost_available === false), [cells]);
   const maxHeatmapTokens = useMemo(
     () => cells.reduce((max, cell) => Math.max(max, toNumber(cell.total_tokens)), 0),
     [cells],
@@ -1055,7 +1092,7 @@ function Heatmap({ cells, apiKeys, apiKeyLabels, models, loading, isDark }: { ce
       `${t('usage_stats.reasoning_tokens')}: ${formatCompactNumber(reasoning)}`,
       `${t('usage_stats.cached_tokens')}: ${formatCompactNumber(cached)}`,
       `${t('usage_stats.total_tokens')}: ${formatCompactNumber(total)}`,
-      `${t('usage_stats.total_cost')}: ${cell?.cost_available === false ? t('usage_stats.cost_need_price') : formatUsd(cost)}`,
+      `${t('usage_stats.total_cost')}: ${formatUsd(cost)}`,
     ];
   };
   const showTooltip = (
@@ -1078,12 +1115,12 @@ function Heatmap({ cells, apiKeys, apiKeyLabels, models, loading, isDark }: { ce
   const hideTooltip = () => setTooltip(null);
   return (
     <section className={`${styles.analysisCard} ${styles.heatmapCard} ${isDark ? styles.heatmapCardDark : styles.heatmapCardLight}`}>
-      <div className={styles.cardHeader}>
-        <div>
-          <h2>{t('usage_stats.analysis_heatmap_title')}</h2>
-          <p>{t('usage_stats.analysis_heatmap_subtitle')}</p>
-        </div>
-      </div>
+      <AnalysisCardHeader
+        title={t('usage_stats.analysis_heatmap_title')}
+        subtitle={t('usage_stats.analysis_heatmap_subtitle')}
+        showPricingHint={hasUnavailableCost}
+        hint={t('usage_stats.cost_need_price')}
+      />
       {loading ? (
         <div className={styles.emptyState}>{t('common.loading')}</div>
       ) : cells.length === 0 ? (

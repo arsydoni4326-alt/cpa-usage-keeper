@@ -379,6 +379,52 @@ describe('AnalysisPanel token chart data', () => {
     expect(typeof chartCapture.scatterOptions?.plugins?.tooltip?.external).toBe('function');
   });
 
+  it('keeps the model efficiency y-axis logarithmic when zero and positive costs are mixed', () => {
+    const analysis: AnalysisResponse = {
+      ...emptyAnalysis,
+      model_efficiency: [
+        {
+          model: 'unpriced-model',
+          requests: 3,
+          input_tokens: 1000,
+          output_tokens: 100,
+          cached_tokens: 0,
+          reasoning_tokens: 0,
+          total_tokens: 1_000_000,
+          cost_usd: 0,
+          cost_available: false,
+          cost_per_request_usd: 0,
+          output_tokens_per_request: 33.33,
+          cache_rate: 0,
+        },
+        {
+          model: 'priced-model',
+          requests: 4,
+          input_tokens: 1200,
+          output_tokens: 300,
+          cached_tokens: 100,
+          reasoning_tokens: 20,
+          total_tokens: 2_000_000,
+          cost_usd: 2,
+          cost_available: true,
+          cost_per_request_usd: 0.5,
+          output_tokens_per_request: 80,
+          cache_rate: 0.1,
+        },
+      ],
+    };
+
+    renderToStaticMarkup(<AnalysisPanel analysis={analysis} loading={false} isDark={false} isMobile={false} />);
+
+    const points = chartCapture.scatterData?.datasets[0]?.data as Array<{ y: number; cost: number; costPerMillion: number }> | undefined;
+    expect(points).toHaveLength(2);
+    expect(points?.[0]).toMatchObject({ cost: 0, costPerMillion: 0 });
+    expect(points?.[0]?.y).toBeGreaterThan(0);
+    expect(points?.[0]?.y).toBeLessThan(points?.[1]?.y ?? 0);
+    expect(chartCapture.scatterOptions?.scales?.y?.type).toBe('logarithmic');
+    expect(chartCapture.scatterOptions?.scales?.y).not.toHaveProperty('beginAtZero');
+  });
+
   it('keeps each overlapped model name grouped with its own model efficiency values', () => {
     const analysis: AnalysisResponse = {
       ...emptyAnalysis,
@@ -459,7 +505,7 @@ describe('AnalysisPanel token chart data', () => {
     ]);
   });
 
-  it('does not plot unavailable cost as zero in token and model efficiency charts', () => {
+  it('keeps partial cost values visible and shows pricing hints near analysis charts', () => {
     const analysis: AnalysisResponse = {
       ...emptyAnalysis,
       token_usage: [{
@@ -470,7 +516,20 @@ describe('AnalysisPanel token chart data', () => {
         reasoning_tokens: 0,
         total_tokens: 1100,
         requests: 3,
-        cost_usd: 9,
+        cost_usd: 0,
+        cost_available: false,
+      }],
+      api_key_composition: [{
+        key: 'unpriced-key',
+        label: 'Unpriced Key',
+        requests: 3,
+        input_tokens: 1000,
+        output_tokens: 100,
+        cached_tokens: 0,
+        reasoning_tokens: 0,
+        total_tokens: 1100,
+        percent: 100,
+        cost_usd: 0,
         cost_available: false,
       }],
       model_efficiency: [{
@@ -480,7 +539,7 @@ describe('AnalysisPanel token chart data', () => {
         output_tokens: 100,
         cached_tokens: 0,
         reasoning_tokens: 0,
-        total_tokens: 1100,
+        total_tokens: 1_000_000,
         cost_usd: 0,
         cost_available: false,
         cost_per_request_usd: 0,
@@ -488,22 +547,49 @@ describe('AnalysisPanel token chart data', () => {
         cache_rate: 0,
       }],
       cost_breakdown: {
-        input_cost_usd: 9,
+        input_cost_usd: 0,
         output_cost_usd: 0,
         cached_cost_usd: 0,
-        total_cost_usd: 9,
+        total_cost_usd: 0,
         cost_available: false,
+      },
+      heatmap: {
+        api_keys: ['unpriced-key'],
+        api_key_labels: { 'unpriced-key': 'Unpriced Key' },
+        models: ['unpriced-model'],
+        cells: [{
+          api_key: 'unpriced-key',
+          model: 'unpriced-model',
+          input_tokens: 1000,
+          output_tokens: 100,
+          cached_tokens: 0,
+          reasoning_tokens: 0,
+          total_tokens: 1100,
+          requests: 3,
+          cost_usd: 0,
+          cost_available: false,
+          intensity: 1,
+        }],
       },
     };
 
     const markup = renderToStaticMarkup(<AnalysisPanel analysis={analysis} loading={false} isDark={false} isMobile={false} />);
 
     const costDataset = chartCapture.barData?.datasets.find((dataset) => dataset.label === 'usage_stats.total_cost');
-    expect(costDataset?.data).toEqual([null]);
-    expect(chartCapture.scatterData).toBeNull();
+    expect(costDataset?.data).toEqual([0]);
+    expect(chartCapture.scatterData?.datasets[0]?.data[0]).toMatchObject({ x: 1_000_000, y: 0 });
+    expect(chartCapture.scatterOptions?.scales?.y?.type).toBe('linear');
+    expect(chartCapture.scatterOptions?.scales?.y).toHaveProperty('beginAtZero', true);
+    expect(markup).toMatch(/Unpriced Key[\s\S]*\$0\.0000/);
     expect(markup).toContain('usage_stats.cost_need_price');
-    expect(markup).toContain('usage_stats.analysis_cost_per_million_tokens</span><strong>usage_stats.cost_need_price</strong>');
-    expect(markup).not.toContain('$8,181.82');
+    expect(markup).toContain('<div class="_cardTitleLine_');
+    expect(markup).toContain('<h2>usage_stats.analysis_token_usage_title</h2><small class="_costHeaderHint_');
+    expect(markup).toContain('</small></div><p>usage_stats.analysis_token_usage_subtitle</p>');
+    expect(markup).not.toContain('usage_stats.analysis_token_usage_subtitle (usage_stats.cost_need_price)');
+    expect(markup.match(/costHeaderHint/g)?.length).toBe(5);
+    expect(markup).not.toContain('costWarning');
+    expect(markup).toContain('usage_stats.analysis_cost_per_million_tokens</span><strong>$0.0000</strong>');
+    expect(markup).toContain('usage_stats.total_cost: $0.0000');
   });
 
   it('shows compact heatmap cells with id keys and display labels', () => {
