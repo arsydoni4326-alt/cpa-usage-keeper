@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildCustomDateRangeQuery, getBackToCPALinkURL, getCredentialSectionVisibility, getCustomDateRangeBounds, getOverviewChartEndMs, getOverviewDisplayLoading, getOverviewHourWindowHours, getPreferredOverviewChartPeriod, getTimeRangeOptions, getUsageTabOptions, isCustomDateWithinBounds, isUsagePageVisible, loadRequestEventsPreferences, normalizeRequestEventsPreferences, normalizeUsageTabValue, openDateInputPicker, refreshPageData, REQUEST_EVENTS_PREFERENCES_STORAGE_KEY, sanitizeRequestEventFilters, saveRequestEventsPreferences, scheduleOverviewAutoRefresh, scheduleStatusActiveHeartbeat, shouldAutoRefreshUsageTab, shouldShowApiKeyFilter, shouldShowRangeControls, shouldShowUpdateCheckButton, STATUS_ACTIVE_HEARTBEAT_INTERVAL_MS, getUpdateCheckToastDuration } from './UsagePage';
+import { REQUEST_EVENT_COLUMN_IDS } from '@/components/usage/RequestEventsDetailsCard';
 import type { StatusResponse, UsageFilterWindow } from '@/lib/types';
 
 const createAutoRefreshTestDocument = (visibilityState: DocumentVisibilityState = 'visible') => {
@@ -468,6 +469,47 @@ describe('UsagePage request event preferences', () => {
     });
     expect(preferences.visibleColumnIds[0]).toBe('timestamp');
     expect(preferences.visibleColumnIds.length).toBeGreaterThan(1);
+  });
+
+  it('keeps persisted request event columns unchanged when Speed is absent', () => {
+    const columnIdsWithoutSpeed = REQUEST_EVENT_COLUMN_IDS.filter((columnId) => columnId !== 'speed');
+    const preferences = normalizeRequestEventsPreferences({
+      version: 1,
+      pageSize: 100,
+      visibleColumnIds: columnIdsWithoutSpeed,
+    });
+
+    expect(preferences.visibleColumnIds).toEqual(columnIdsWithoutSpeed);
+    expect(preferences.visibleColumnIds).not.toContain('speed');
+  });
+
+  it('preserves a saved preference that intentionally hides Speed', () => {
+    const storage = createMemoryStorage();
+    const hiddenSpeedColumnIds = REQUEST_EVENT_COLUMN_IDS.filter((columnId) => columnId !== 'speed');
+
+    saveRequestEventsPreferences({
+      version: 1,
+      pageSize: 100,
+      filters: {
+        model: '__all__',
+        source: '__all__',
+        result: '__all__',
+      },
+      visibleColumnIds: hiddenSpeedColumnIds,
+    }, storage);
+
+    const stored = JSON.parse(storage.value(REQUEST_EVENTS_PREFERENCES_STORAGE_KEY) ?? '');
+    expect(stored).toEqual({
+      version: 1,
+      pageSize: 100,
+      filters: {
+        model: '__all__',
+        source: '__all__',
+        result: '__all__',
+      },
+      visibleColumnIds: hiddenSpeedColumnIds,
+    });
+    expect(loadRequestEventsPreferences(storage).visibleColumnIds).toEqual(hiddenSpeedColumnIds);
   });
 
   it('loads defaults from invalid JSON and persists normalized request event preferences', () => {

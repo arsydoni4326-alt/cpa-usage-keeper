@@ -36,10 +36,11 @@ export const REQUEST_EVENT_COLUMN_IDS = [
   'model',
   'reasoning_effort',
   'result',
-  'ttft',
-  'latency',
   'request_type',
   'endpoint',
+  'ttft',
+  'latency',
+  'speed',
   'input_tokens',
   'output_tokens',
   'reasoning_tokens',
@@ -119,6 +120,7 @@ type RequestEventRow = {
   failed: boolean;
   latencyMs: number | null;
   ttftMs: number | null;
+  speedTPS: number | null;
   inputTokens: number;
   outputTokens: number;
   reasoningTokens: number;
@@ -181,6 +183,13 @@ const formatTTFTMs = (ttftMs: number | null): string => {
     return '-';
   }
   return formatDurationMs(ttftMs);
+};
+
+const formatSpeedTPS = (speedTPS: number | null): string => {
+  if (speedTPS === null || speedTPS <= 0) {
+    return '-';
+  }
+  return `${speedTPS.toFixed(1)} t/s`;
 };
 
 const parseRequestEndpoint = (rawEndpoint: unknown): { requestType: string; endpoint: string } => {
@@ -492,6 +501,7 @@ export function RequestEventsDetailsCard({
     unit: t('usage_stats.duration_unit_ms'),
   });
   const ttftHint = t('usage_stats.ttft_hint');
+  const speedHint = t('usage_stats.speed_hint');
 
   const rows = useMemo<RequestEventRow[]>(() => {
     return events.map((event, index) => {
@@ -516,6 +526,7 @@ export function RequestEventsDetailsCard({
       const totalTokens = Math.max(toNumber(event.tokens?.total_tokens), 0);
       const latencyMs = Number.isFinite(event.latency_ms) ? event.latency_ms : null;
       const ttftMs = Number.isFinite(event.ttft_ms) ? event.ttft_ms as number : null;
+      const speedTPS = Number.isFinite(event.speed_tps) ? event.speed_tps as number : null;
       // 费用由后端按当前价格配置运行时计算，前端只负责展示可用/不可用状态。
       const costAvailable = event.cost_available === true;
       const cost = costAvailable ? Math.max(toNumber(event.cost_usd), 0) : null;
@@ -538,6 +549,7 @@ export function RequestEventsDetailsCard({
         failed: event.failed === true,
         latencyMs,
         ttftMs,
+        speedTPS,
         inputTokens,
         outputTokens,
         reasoningTokens,
@@ -689,6 +701,18 @@ export function RequestEventsDetailsCard({
         ),
       },
       {
+        id: 'request_type',
+        label: t('usage_stats.request_type'),
+        header: <th>{t('usage_stats.request_type')}</th>,
+        renderCell: (row) => <td>{row.requestType}</td>,
+      },
+      {
+        id: 'endpoint',
+        label: t('usage_stats.request_endpoint'),
+        header: <th>{t('usage_stats.request_endpoint')}</th>,
+        renderCell: (row) => <td className={styles.requestEventsEndpointCell} title={row.endpoint}>{row.endpoint}</td>,
+      },
+      {
         id: 'ttft',
         label: t('usage_stats.ttft'),
         header: <th title={ttftHint}>{t('usage_stats.ttft')}</th>,
@@ -701,16 +725,10 @@ export function RequestEventsDetailsCard({
         renderCell: (row) => <td className={styles.durationCell}>{formatDurationMs(row.latencyMs)}</td>,
       },
       {
-        id: 'request_type',
-        label: t('usage_stats.request_type'),
-        header: <th>{t('usage_stats.request_type')}</th>,
-        renderCell: (row) => <td>{row.requestType}</td>,
-      },
-      {
-        id: 'endpoint',
-        label: t('usage_stats.request_endpoint'),
-        header: <th>{t('usage_stats.request_endpoint')}</th>,
-        renderCell: (row) => <td className={styles.requestEventsEndpointCell} title={row.endpoint}>{row.endpoint}</td>,
+        id: 'speed',
+        label: t('usage_stats.speed'),
+        header: <th title={speedHint}>{t('usage_stats.speed')}</th>,
+        renderCell: (row) => <td>{formatSpeedTPS(row.speedTPS)}</td>,
       },
       {
         id: 'input_tokens',
@@ -761,7 +779,7 @@ export function RequestEventsDetailsCard({
     ];
 
     return definitions;
-  }, [latencyHint, t, ttftHint]);
+  }, [latencyHint, speedHint, t, ttftHint]);
 
   const visibleColumns = useMemo(
     () => columnDefinitions.filter((definition) => effectiveVisibleColumnIdSet.has(definition.id)),
