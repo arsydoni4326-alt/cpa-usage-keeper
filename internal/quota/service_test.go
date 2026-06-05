@@ -486,6 +486,32 @@ func TestInspectionStatusSummarizesActiveAuthFileCache(t *testing.T) {
 	}
 }
 
+func TestInspectionStatusNormalizesIdentityBeforeReadingRefreshTask(t *testing.T) {
+	db := openQuotaTestDatabase(t)
+	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: " auth-1 ", Name: "Claude Account", Provider: "claude", Type: "claude", AuthType: entities.UsageIdentityAuthTypeAuthFile})
+	service := NewServiceWithRegistry(db, NewProviderRegistry(nil))
+	now := time.Date(2026, 6, 3, 10, 30, 0, 0, time.UTC)
+	service.refreshTasks = map[string]*RefreshTaskRecord{
+		"auth-1": {
+			AuthIndex:   "auth-1",
+			Status:      RefreshTaskStatusCompleted,
+			Quota:       &CheckResponse{ID: "auth-1", Quota: []QuotaRow{{Key: "rate_limit.primary_window", Label: "5h"}}},
+			RefreshedAt: now,
+		},
+	}
+
+	status, err := service.GetInspectionStatus(context.Background())
+	if err != nil {
+		t.Fatalf("GetInspectionStatus returned error: %v", err)
+	}
+	if status.Total != 1 || status.Cached != 1 || status.Unknown != 0 || status.Normal != 1 {
+		t.Fatalf("expected trimmed auth_index to match refresh task cache, got %+v", status)
+	}
+	if len(status.Results) != 1 || status.Results[0].AuthIndex != "auth-1" {
+		t.Fatalf("expected inspection result to expose normalized auth_index, got %+v", status.Results)
+	}
+}
+
 func TestManualRefreshDoesNotMarkInspectionCompleted(t *testing.T) {
 	db := openQuotaTestDatabase(t)
 	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-1", Provider: "claude", Type: "auth-file", AuthType: entities.UsageIdentityAuthTypeAuthFile})

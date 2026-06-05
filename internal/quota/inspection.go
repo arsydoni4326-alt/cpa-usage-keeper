@@ -113,15 +113,22 @@ func (s *Service) GetInspectionStatus(ctx context.Context) (InspectionStatus, er
 	activeInspectionTasks := 0
 	// 逐个 Auth File 身份对照共享刷新缓存；没有缓存的身份最后会落到 unknown。
 	for _, identity := range identities {
-		// 刷新缓存以 auth_index 为 key；identity.Identity 是唯一匹配字段。
-		task, ok := s.refreshTasks[identity.Identity]
+		// 刷新任务在入队时会 trim auth_index；状态读取也必须使用同一口径，否则旧数据或绕过写入层的数据会查不到缓存。
+		authIndex := strings.TrimSpace(identity.Identity)
+		if authIndex == "" {
+			// 空 identity 属于异常身份数据，仍保留在 Total 中，最终由 unknown 暴露出来。
+			continue
+		}
+		// identity 是 range 副本，改成归一化值只影响本次结果组装，不会反写数据库。
+		identity.Identity = authIndex
+		task, ok := s.refreshTasks[authIndex]
 		if !ok {
 			// 没有任何缓存或任务时暂不计数，统一由 unknown 兜底。
 			continue
 		}
 		if task.isActive() {
 			// running 只表示用户显式启动的巡检轮次仍有任务在跑；手动/自动刷新不污染巡检状态。
-			if s.inspectionRoundActiveTaskLocked(identity.Identity, task) {
+			if s.inspectionRoundActiveTaskLocked(authIndex, task) {
 				// 参与当前巡检的 active task 已经是“处理中”，不能再算 unknown。
 				activeInspectionTasks++
 			}
