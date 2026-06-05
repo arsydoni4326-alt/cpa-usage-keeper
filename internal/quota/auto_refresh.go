@@ -120,7 +120,10 @@ func (s *Service) queueAuthFileRefreshRound(ctx context.Context, now time.Time, 
 		} else if task != nil && task.isActive() {
 			// queued/running 已经代表这个 auth_index 在队列里，同一轮不能重复入队。
 			summary.skippedRunning++
-			summary.roundAuthIndexes = append(summary.roundAuthIndexes, task.AuthIndex)
+			if task.Source == options.source {
+				// 只有同来源的 active task 才能被当前轮次收养；巡检不能把手动/自动刷新算成巡检 running。
+				summary.roundAuthIndexes = append(summary.roundAuthIndexes, task.AuthIndex)
+			}
 		}
 	}
 	return summary, nil

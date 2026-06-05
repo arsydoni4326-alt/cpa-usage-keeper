@@ -197,21 +197,40 @@ function isRowRefreshing(row: AuthFileCredentialRow): boolean {
   return row.refreshStatus === 'queued' || row.refreshStatus === 'running'
 }
 
-export function formatInspectionProgressPercent(status: Pick<UsageQuotaInspectionStatusResponse, 'total' | 'cached'> | null): number {
-  if (!status || status.total <= 0) {
+export function inspectionProgressTotal(status: Pick<UsageQuotaInspectionStatusResponse, 'total' | 'unknown'> | null): number {
+  // 弹框进度条展示的是“巡检刷新任务进度”，不是 Auth Files 总账号覆盖率。
+  if (!status) {
     return 0
   }
-  return Math.max(0, Math.min(100, Math.round((status.cached / status.total) * 100)))
+  // unknown 代表未参与刷新或没有可解析缓存的账号，不参与进度百分比分母。
+  return Math.max(0, status.total - status.unknown)
+}
+
+export function formatInspectionProgressPercent(status: Pick<UsageQuotaInspectionStatusResponse, 'total' | 'cached' | 'unknown'> | null): number {
+  // 初始加载或接口失败时没有状态，进度保持 0，避免前端自行 fallback total。
+  if (!status) {
+    return 0
+  }
+  // 分母统一走 inspectionProgressTotal，保证显示文本和进度条使用同一口径。
+  const progressTotal = inspectionProgressTotal(status)
+  if (progressTotal <= 0) {
+    return 0
+  }
+  // cached 可能因为缓存恢复或并发刷新短暂超过分母，最终百分比要钳制在 0-100。
+  return Math.max(0, Math.min(100, Math.round((status.cached / progressTotal) * 100)))
 }
 
 export function isInspectionStartDisabled({ quotaAutoRefreshEnabled, starting, total, running }: { quotaAutoRefreshEnabled: boolean; starting: boolean; total: number; running: boolean }): boolean {
+  // 自动刷新开启时共用刷新结果，按钮不可手动启动巡检；running 只代表显式巡检轮次。
   return quotaAutoRefreshEnabled || starting || running || total <= 0
 }
 
 export function inspectionIndicatorTone(status: Pick<UsageQuotaInspectionStatusResponse, 'running' | 'completed' | 'completed_at'> | null): InspectionIndicatorTone {
+  // 黄色点只看显式巡检 running，不响应普通手动刷新/自动刷新。
   if (status?.running) {
     return 'running'
   }
+  // 绿色点必须有 completed_at；completed 没有时间时不展示完成态，避免共享缓存误点亮。
   if (status?.completed_at) {
     return 'completed'
   }
@@ -238,9 +257,14 @@ function QuotaInspectionModal({
   onStart: () => Promise<void>
 }) {
   const { t } = useTranslation()
+  // total 由后端 Auth Files 身份统计提供，不用页面分页总数替代。
   const total = status?.total ?? 0
+  // cached 是已经能解析出最近巡检结果的账号数。
   const cached = status?.cached ?? 0
+  // progressTotal 排除 unknown，使进度条只描述实际刷新任务完成度。
+  const progressTotal = inspectionProgressTotal(status)
   const progress = formatInspectionProgressPercent(status)
+  // startDisabled 只依赖后端巡检 running 和自动刷新开关，不被普通行刷新状态牵连。
   const startDisabled = isInspectionStartDisabled({
     quotaAutoRefreshEnabled,
     starting,
@@ -265,7 +289,7 @@ function QuotaInspectionModal({
           <div className={styles.credentialInspectionProgressBlock}>
             <div className={styles.credentialInspectionProgressHeader}>
               <span>{t('usage_stats.credentials_inspection_progress')}</span>
-              <strong>{cached} / {total} ({progress}%)</strong>
+              <strong>{cached} / {progressTotal} ({progress}%)</strong>
             </div>
             <div
               className={styles.credentialInspectionProgressTrack}
