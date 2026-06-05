@@ -65,6 +65,12 @@ type CostBreakdownSegment = {
   color: string;
   tokens: number;
 };
+type CostRatePoint = {
+  label: string;
+  rate: number;
+  cost: number;
+  tokens: number;
+};
 type ModelEfficiencyColor = {
   base: string;
   light: string;
@@ -622,10 +628,15 @@ function CostBreakdownCard({ breakdown, rows, loading }: { breakdown: AnalysisCo
   const segmentTokens = getCostSegmentTokens(rows);
   const costAvailable = safeBreakdown.cost_available !== false;
   const blendedRate = getCostRatePerMillion(totalCost, totalTokens);
-  const ratePoints = rows
+  const ratePoints: CostRatePoint[] = rows
     .filter((row) => row.total > 0)
-    .map((row) => getCostRatePerMillion(row.cost, row.total));
-  const rateMax = Math.max(0, ...ratePoints);
+    .map((row) => ({
+      label: row.label,
+      rate: getCostRatePerMillion(row.cost, row.total),
+      cost: row.cost,
+      tokens: row.total,
+    }));
+  const rateMax = Math.max(0, ...ratePoints.map((point) => point.rate));
   const segments: CostBreakdownSegment[] = [
     { key: 'input', label: t('usage_stats.input_tokens'), value: toNumber(safeBreakdown.input_cost_usd), color: TOKEN_COLORS.input.base, tokens: segmentTokens.input },
     { key: 'output', label: t('usage_stats.output_tokens'), value: toNumber(safeBreakdown.output_cost_usd), color: TOKEN_COLORS.output.base, tokens: segmentTokens.output },
@@ -633,12 +644,19 @@ function CostBreakdownCard({ breakdown, rows, loading }: { breakdown: AnalysisCo
   ];
   const hasData = rows.length > 0 || totalCost > 0 || segments.some((segment) => segment.value > 0);
   const buildCostTooltipLines = (segment: CostBreakdownSegment, percent: number) => [
-    segment.label,
+    `${segment.label} · ${t('usage_stats.analysis_cost_share')}`,
     `${t('usage_stats.total_cost')}: ${formatUsd(segment.value)}`,
     `${t('usage_stats.analysis_cost_share')}: ${formatPercent(percent)}`,
     `${t('usage_stats.total_tokens')}: ${formatCompactNumber(segment.tokens)}`,
     `${t('usage_stats.analysis_cost_per_million_tokens')}: ${formatUsd(getCostRatePerMillion(segment.value, segment.tokens))}`,
   ];
+  const buildRateTooltipLines = (point: CostRatePoint) => [
+    point.label,
+    `${t('usage_stats.analysis_cost_per_million_tokens')}: ${formatUsd(point.rate)}`,
+    `${t('usage_stats.total_cost')}: ${formatUsd(point.cost)}`,
+    `${t('usage_stats.total_tokens')}: ${formatCompactNumber(point.tokens)}`,
+  ];
+  const sparklineHint = t('usage_stats.analysis_cost_rate_sparkline_hint');
   const showCostTooltip = (
     lines: string[],
     event: MouseEvent<HTMLSpanElement> | FocusEvent<HTMLSpanElement>,
@@ -721,17 +739,21 @@ function CostBreakdownCard({ breakdown, rows, loading }: { breakdown: AnalysisCo
               <strong>{formatUsd(blendedRate)}</strong>
               <small>{t('usage_stats.analysis_blended_rate')}</small>
             </div>
-            <div className={styles.costRateSparkline} aria-label={t('usage_stats.analysis_cost_per_million_tokens')}>
+            <div className={styles.costRateSparkline} aria-label={sparklineHint} title={sparklineHint}>
               {ratePoints.length === 0 ? (
                 <span className={styles.costRateSparkEmpty} />
-              ) : ratePoints.slice(-12).map((point, index) => (
-                <span
-                  key={`${index}-${point}`}
-                  className={styles.costRateSparkBar}
-                  style={{ height: `${Math.max(12, rateMax > 0 ? (point / rateMax) * 100 : 0)}%` }}
-                  title={formatUsd(point)}
-                />
-              ))}
+              ) : ratePoints.slice(-12).map((point, index) => {
+                const tooltip = buildRateTooltipLines(point).join('\n');
+                return (
+                  <span
+                    key={`${index}-${point.label}-${point.rate}`}
+                    className={styles.costRateSparkBar}
+                    style={{ height: `${Math.max(12, rateMax > 0 ? (point.rate / rateMax) * 100 : 0)}%` }}
+                    title={tooltip}
+                    aria-label={tooltip}
+                  />
+                );
+              })}
             </div>
           </div>
           <div className={styles.costMetricGrid}>
@@ -1114,7 +1136,6 @@ function Heatmap({ cells, apiKeys, apiKeyLabels, models, loading, isDark }: { ce
                     key={model}
                     className={`${styles.heatmapHeaderCell} ${styles.heatmapModelHeaderCell}`}
                     data-full-name={model}
-                    title={model}
                     tabIndex={0}
                     aria-label={model}
                     onMouseEnter={(event) => showTooltip([model], event)}
