@@ -11,6 +11,14 @@ import (
 )
 
 func TestBackfillGeminiCodexTokenFormatMigrationNormalizesEventsAndAggregates(t *testing.T) {
+	previousLocal := time.Local
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatalf("load location: %v", err)
+	}
+	time.Local = location
+	t.Cleanup(func() { time.Local = previousLocal })
+
 	db := openGeminiCodexTokenBackfillTestDatabase(t)
 	seedGeminiCodexTokenBackfillRows(t, db)
 
