@@ -544,6 +544,41 @@ describe('AnalysisPanel token chart data', () => {
     expect(markup).toContain('usage_stats.total_cost: $0.0000');
   });
 
+  it('keeps partially priced cost breakdown rates visible under the card-level pricing hint', () => {
+    const analysis: AnalysisResponse = {
+      ...emptyAnalysis,
+      token_usage: [{
+        bucket: '2026-05-28T01:00:00Z',
+        input_tokens: 1000,
+        output_tokens: 100,
+        cached_tokens: 0,
+        reasoning_tokens: 0,
+        total_tokens: 1100,
+        requests: 3,
+        cost_usd: 9,
+        cost_available: false,
+      }],
+      cost_breakdown: {
+        input_cost_usd: 9,
+        output_cost_usd: 0,
+        cached_cost_usd: 0,
+        total_cost_usd: 9,
+        cost_available: false,
+      },
+    };
+
+    const markup = renderToStaticMarkup(<AnalysisPanel analysis={analysis} loading={false} isDark={false} isMobile={false} />);
+
+    const costDataset = chartCapture.barData?.datasets.find((dataset) => dataset.label === 'usage_stats.total_cost');
+    expect(costDataset?.data).toEqual([9]);
+    expect(markup).toContain('<h2>usage_stats.analysis_cost_breakdown_title</h2><small class="_costHeaderHint_');
+    expect(markup).toContain('usage_stats.cost_need_price');
+    expect(markup).toContain('usage_stats.total_cost</span><strong>$9.00</strong>');
+    expect(markup).toContain('usage_stats.analysis_cost_per_million_tokens</span><strong>$8,181.82</strong>');
+    expect(markup).not.toContain('usage_stats.analysis_cost_per_million_tokens</span><strong>usage_stats.cost_need_price</strong>');
+    expect(markup).not.toContain('costWarning');
+  });
+
   it('shows compact heatmap cells with id keys and display labels', () => {
     const responseKey = '9007199254740993';
     const analysis: AnalysisResponse = {
