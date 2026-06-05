@@ -112,7 +112,6 @@ const MODEL_EFFICIENCY_HOVER_RADIUS_DELTA = 4;
 const MODEL_EFFICIENCY_RADIUS_EASING = 0.75;
 const MODEL_EFFICIENCY_OUTLIER_RATIO = 8;
 const MODEL_EFFICIENCY_AXIS_PADDING_FACTOR = 2.5;
-const MODEL_EFFICIENCY_ZERO_RATE_FLOOR_DIVISOR = 10;
 const EMPTY_COMPOSITION_ITEMS: AnalysisCompositionItem[] = [];
 type TokenLabels = {
   input: string;
@@ -757,7 +756,6 @@ type EfficiencyPoint = {
   model: string;
   requests: number;
   cost: number;
-  costPerMillion: number;
   totalTokens: number;
   cacheRate: number;
 };
@@ -936,17 +934,7 @@ function createModelEfficiencyTooltipHandler({
 function ModelEfficiencyCard({ rows, loading, isDark, isMobile }: { rows: AnalysisModelEfficiencyItem[]; loading: boolean; isDark: boolean; isMobile: boolean }) {
   const { t } = useTranslation();
   const chartTheme = useMemo(() => getChartTheme(isDark), [isDark]);
-  const pricedRows = useMemo(() => rows.filter((row) => toNumber(row.total_tokens) > 0), [rows]);
-  const efficiencyRates = useMemo(() => pricedRows.map((row) => getModelEfficiencyRate(row)), [pricedRows]);
-  const positiveEfficiencyRates = useMemo(() => efficiencyRates.filter((rate) => Number.isFinite(rate) && rate > 0), [efficiencyRates]);
-  const zeroRateFloor = positiveEfficiencyRates.length > 0
-    ? Math.max(Math.min(...positiveEfficiencyRates) / MODEL_EFFICIENCY_ZERO_RATE_FLOOR_DIVISOR, Number.EPSILON)
-    : 0;
-  const plotEfficiencyRates = useMemo(
-    () => efficiencyRates.map((rate) => (Number.isFinite(rate) && rate > 0 ? rate : zeroRateFloor)),
-    [efficiencyRates, zeroRateFloor],
-  );
-  const useLinearCostScale = positiveEfficiencyRates.length === 0;
+  const pricedRows = useMemo(() => rows.filter((row) => row.cost_available !== false && toNumber(row.total_tokens) > 0 && getModelEfficiencyRate(row) > 0), [rows]);
   const tooltipLabels = useMemo(() => ({
     totalTokens: t('usage_stats.total_tokens'),
     costPerMillion: t('usage_stats.analysis_cost_per_million_tokens'),
@@ -957,13 +945,12 @@ function ModelEfficiencyCard({ rows, loading, isDark, isMobile }: { rows: Analys
     labels: pricedRows.map((row) => row.model),
     datasets: [{
       label: t('usage_stats.analysis_model_efficiency_title'),
-      data: pricedRows.map((row, index) => ({
+      data: pricedRows.map((row) => ({
         x: toNumber(row.total_tokens),
-        y: plotEfficiencyRates[index] ?? 0,
+        y: getModelEfficiencyRate(row),
         model: row.model,
         requests: toNumber(row.requests),
         cost: toNumber(row.cost_usd),
-        costPerMillion: efficiencyRates[index] ?? 0,
         totalTokens: toNumber(row.total_tokens),
         cacheRate: toNumber(row.cache_rate),
       })),
@@ -974,7 +961,7 @@ function ModelEfficiencyCard({ rows, loading, isDark, isMobile }: { rows: Analys
       borderWidth: 1,
       clip: false,
     }],
-  }), [efficiencyRates, plotEfficiencyRates, pointRadii, pricedRows, t]);
+  }), [pointRadii, pricedRows, t]);
   const chartOptions = useMemo<ChartOptions<'scatter'>>(() => ({
     responsive: true,
     maintainAspectRatio: false,
@@ -1012,24 +999,15 @@ function ModelEfficiencyCard({ rows, loading, isDark, isMobile }: { rows: Analys
         border: { color: chartTheme.axis },
         ticks: { color: chartTheme.textSecondary, font: { size: 10 }, maxTicksLimit: isMobile ? 4 : 5, callback: (value) => formatCompactNumber(Number(value)) },
       },
-      y: useLinearCostScale
-        ? {
-          type: 'linear',
-          beginAtZero: true,
-          suggestedMax: Math.max(1, ...efficiencyRates.filter((rate) => Number.isFinite(rate))) * MODEL_EFFICIENCY_AXIS_PADDING_FACTOR,
-          grid: { color: chartTheme.grid },
-          border: { color: chartTheme.axis },
-          ticks: { color: chartTheme.textSecondary, font: { size: 10 }, maxTicksLimit: isMobile ? 4 : 5, callback: (value) => formatUsd(Number(value)) },
-        }
-        : {
-          type: 'logarithmic',
-          ...getLogScaleBounds(plotEfficiencyRates),
-          grid: { color: chartTheme.grid },
-          border: { color: chartTheme.axis },
-          ticks: { color: chartTheme.textSecondary, font: { size: 10 }, maxTicksLimit: isMobile ? 4 : 5, callback: (value) => formatUsd(Number(value)) },
-        },
+      y: {
+        type: 'logarithmic',
+        ...getLogScaleBounds(pricedRows.map((row) => getModelEfficiencyRate(row))),
+        grid: { color: chartTheme.grid },
+        border: { color: chartTheme.axis },
+        ticks: { color: chartTheme.textSecondary, font: { size: 10 }, maxTicksLimit: isMobile ? 4 : 5, callback: (value) => formatUsd(Number(value)) },
+      },
     },
-  }), [chartTheme, efficiencyRates, isMobile, plotEfficiencyRates, pricedRows, t, tooltipLabels, useLinearCostScale]);
+  }), [chartTheme, isMobile, pricedRows, t, tooltipLabels]);
   useEffect(() => {
     removeModelEfficiencyTooltip();
   }, [pricedRows]);

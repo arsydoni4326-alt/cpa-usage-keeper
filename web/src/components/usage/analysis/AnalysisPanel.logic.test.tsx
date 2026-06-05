@@ -379,52 +379,6 @@ describe('AnalysisPanel token chart data', () => {
     expect(typeof chartCapture.scatterOptions?.plugins?.tooltip?.external).toBe('function');
   });
 
-  it('keeps the model efficiency y-axis logarithmic when zero and positive costs are mixed', () => {
-    const analysis: AnalysisResponse = {
-      ...emptyAnalysis,
-      model_efficiency: [
-        {
-          model: 'unpriced-model',
-          requests: 3,
-          input_tokens: 1000,
-          output_tokens: 100,
-          cached_tokens: 0,
-          reasoning_tokens: 0,
-          total_tokens: 1_000_000,
-          cost_usd: 0,
-          cost_available: false,
-          cost_per_request_usd: 0,
-          output_tokens_per_request: 33.33,
-          cache_rate: 0,
-        },
-        {
-          model: 'priced-model',
-          requests: 4,
-          input_tokens: 1200,
-          output_tokens: 300,
-          cached_tokens: 100,
-          reasoning_tokens: 20,
-          total_tokens: 2_000_000,
-          cost_usd: 2,
-          cost_available: true,
-          cost_per_request_usd: 0.5,
-          output_tokens_per_request: 80,
-          cache_rate: 0.1,
-        },
-      ],
-    };
-
-    renderToStaticMarkup(<AnalysisPanel analysis={analysis} loading={false} isDark={false} isMobile={false} />);
-
-    const points = chartCapture.scatterData?.datasets[0]?.data as Array<{ y: number; cost: number; costPerMillion: number }> | undefined;
-    expect(points).toHaveLength(2);
-    expect(points?.[0]).toMatchObject({ cost: 0, costPerMillion: 0 });
-    expect(points?.[0]?.y).toBeGreaterThan(0);
-    expect(points?.[0]?.y).toBeLessThan(points?.[1]?.y ?? 0);
-    expect(chartCapture.scatterOptions?.scales?.y?.type).toBe('logarithmic');
-    expect(chartCapture.scatterOptions?.scales?.y).not.toHaveProperty('beginAtZero');
-  });
-
   it('keeps each overlapped model name grouped with its own model efficiency values', () => {
     const analysis: AnalysisResponse = {
       ...emptyAnalysis,
@@ -577,9 +531,7 @@ describe('AnalysisPanel token chart data', () => {
 
     const costDataset = chartCapture.barData?.datasets.find((dataset) => dataset.label === 'usage_stats.total_cost');
     expect(costDataset?.data).toEqual([0]);
-    expect(chartCapture.scatterData?.datasets[0]?.data[0]).toMatchObject({ x: 1_000_000, y: 0 });
-    expect(chartCapture.scatterOptions?.scales?.y?.type).toBe('linear');
-    expect(chartCapture.scatterOptions?.scales?.y).toHaveProperty('beginAtZero', true);
+    expect(chartCapture.scatterData).toBeNull();
     expect(markup).toMatch(/Unpriced Key[\s\S]*\$0\.0000/);
     expect(markup).toContain('usage_stats.cost_need_price');
     expect(markup).toContain('<div class="_cardTitleLine_');
