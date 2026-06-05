@@ -743,14 +743,17 @@ function CostBreakdownCard({ breakdown, rows, loading }: { breakdown: AnalysisCo
               {ratePoints.length === 0 ? (
                 <span className={styles.costRateSparkEmpty} />
               ) : ratePoints.slice(-12).map((point, index) => {
-                const tooltip = buildRateTooltipLines(point).join('\n');
+                const tooltipLines = buildRateTooltipLines(point);
+                const tooltip = tooltipLines.join('\n');
+                const ariaLabel = tooltipLines.join(', ');
                 return (
                   <span
                     key={`${index}-${point.label}-${point.rate}`}
                     className={styles.costRateSparkBar}
                     style={{ height: `${Math.max(12, rateMax > 0 ? (point.rate / rateMax) * 100 : 0)}%` }}
                     title={tooltip}
-                    aria-label={tooltip}
+                    aria-label={ariaLabel}
+                    tabIndex={0}
                   />
                 );
               })}
