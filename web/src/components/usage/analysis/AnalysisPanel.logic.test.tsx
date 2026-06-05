@@ -240,6 +240,7 @@ describe('AnalysisPanel token chart data', () => {
   it('renders cost breakdown with total beside blended rate, segment percentages and sparkline', () => {
     const analysis: AnalysisResponse = {
       ...emptyAnalysis,
+      timezone: 'Asia/Shanghai',
       token_usage: [{
         bucket: '2026-05-28T01:00:00Z',
         input_tokens: 1_000_000,
@@ -283,6 +284,7 @@ describe('AnalysisPanel token chart data', () => {
     expect(markup).toContain('usage_stats.analysis_cost_per_million_tokens: $2.00');
     expect(markup).toContain('usage_stats.total_cost: $6.00');
     expect(markup).toContain('usage_stats.total_tokens: 3.00M');
+    expect(chartCapture.barData?.labels).toEqual(['09:00']);
     expect(markup).toContain('aria-label="09:00, usage_stats.analysis_cost_per_million_tokens: $2.00, usage_stats.total_cost: $6.00, usage_stats.total_tokens: 3.00M"');
     expect(markup).toContain('class="_costRateSparkBar_');
     expect(markup).toContain('tabindex="0"');
