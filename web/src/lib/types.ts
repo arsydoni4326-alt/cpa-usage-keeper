@@ -127,6 +127,7 @@ export interface UsageEvent {
   failed: boolean
   latency_ms: number
   ttft_ms?: number
+  speed_tps?: number
   tokens: UsageEventTokens
   cost_usd?: number
   cost_available?: boolean

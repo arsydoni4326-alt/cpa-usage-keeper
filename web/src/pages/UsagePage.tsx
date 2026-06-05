@@ -228,6 +228,9 @@ export type RequestEventsPreferences = {
 };
 
 type RequestEventsPreferenceStorage = Pick<Storage, 'getItem' | 'setItem'>;
+type RequestEventsPreferenceNormalizeOptions = {
+  migrateLegacyAllColumns?: boolean;
+};
 
 const DEFAULT_REQUEST_EVENT_FILTERS: RequestEventFilterState = {
   model: ALL_REQUEST_EVENTS_FILTER,
@@ -241,6 +244,8 @@ const buildDefaultRequestEventsPreferences = (): RequestEventsPreferences => ({
   filters: { ...DEFAULT_REQUEST_EVENT_FILTERS },
   visibleColumnIds: [...REQUEST_EVENT_COLUMN_IDS],
 });
+
+const REQUEST_EVENT_COLUMN_IDS_BEFORE_SPEED = REQUEST_EVENT_COLUMN_IDS.filter((columnId) => columnId !== 'speed');
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -271,20 +276,32 @@ const normalizeRequestEventPreferenceFilters = (value: unknown): RequestEventFil
   };
 };
 
-const normalizeRequestEventPreferenceColumnIds = (value: unknown): RequestEventColumnId[] => {
+const normalizeRequestEventPreferenceColumnIds = (
+  value: unknown,
+  options: RequestEventsPreferenceNormalizeOptions = {}
+): RequestEventColumnId[] => {
   if (!Array.isArray(value)) {
     return [...REQUEST_EVENT_COLUMN_IDS];
   }
-  return normalizeRequestEventVisibleColumnIds(value.filter(isRequestEventColumnId));
+  const normalized = normalizeRequestEventVisibleColumnIds(value.filter(isRequestEventColumnId));
+  const normalizedSet = new Set<RequestEventColumnId>(normalized);
+  // 旧版全列偏好没有 speed；这里仅补齐全列场景，避免覆盖用户主动隐藏列的选择。
+  if (options.migrateLegacyAllColumns !== false && !normalizedSet.has('speed') && REQUEST_EVENT_COLUMN_IDS_BEFORE_SPEED.every((columnId) => normalizedSet.has(columnId))) {
+    return [...REQUEST_EVENT_COLUMN_IDS];
+  }
+  return normalized;
 };
 
-export const normalizeRequestEventsPreferences = (value: unknown): RequestEventsPreferences => {
+export const normalizeRequestEventsPreferences = (
+  value: unknown,
+  options: RequestEventsPreferenceNormalizeOptions = {}
+): RequestEventsPreferences => {
   const preferences = isRecord(value) ? value : {};
   return {
     version: 1,
     pageSize: isRequestEventPageSize(preferences.pageSize) ? preferences.pageSize : REQUEST_EVENTS_DEFAULT_PAGE_SIZE,
     filters: normalizeRequestEventPreferenceFilters(preferences.filters),
-    visibleColumnIds: normalizeRequestEventPreferenceColumnIds(preferences.visibleColumnIds),
+    visibleColumnIds: normalizeRequestEventPreferenceColumnIds(preferences.visibleColumnIds, options),
   };
 };
 
@@ -318,7 +335,10 @@ export const saveRequestEventsPreferences = (
   storage: RequestEventsPreferenceStorage | null = getRequestEventsPreferenceStorage(),
 ) => {
   try {
-    storage?.setItem(REQUEST_EVENTS_PREFERENCES_STORAGE_KEY, JSON.stringify(normalizeRequestEventsPreferences(preferences)));
+    storage?.setItem(
+      REQUEST_EVENTS_PREFERENCES_STORAGE_KEY,
+      JSON.stringify(normalizeRequestEventsPreferences(preferences, { migrateLegacyAllColumns: false }))
+    );
   } catch {
     // Ignore storage errors.
   }

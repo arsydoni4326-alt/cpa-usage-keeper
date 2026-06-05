@@ -25,6 +25,7 @@ const events: UsageEvent[] = [
     failed: false,
     latency_ms: 120,
     ttft_ms: 45,
+    speed_tps: 30,
     tokens: {
       input_tokens: 100,
       output_tokens: 60,
@@ -78,14 +79,18 @@ describe('RequestEventsDetailsCard pagination', () => {
     expect(html.indexOf('<th>API Key</th>')).toBeLessThan(html.indexOf('<th>Source</th>'));
     expect(html.indexOf('<th>Source</th>')).toBeLessThan(html.indexOf('<th>Model</th>'));
     expect(html.indexOf('<th>Model</th>')).toBeLessThan(html.indexOf('<th title="Reasoning Effort">Effort</th>'));
-    expect(html.indexOf('<th title="Time to First Token">TTFT</th>')).toBeLessThan(html.indexOf('<th title="Using latency_ms in ms">Latency</th>'));
-    expect(html.indexOf('<th title="Using latency_ms in ms">Latency</th>')).toBeLessThan(html.indexOf('<th>Type</th>'));
+    expect(html.indexOf('<th>Result</th>')).toBeLessThan(html.indexOf('<th>Type</th>'));
     expect(html.indexOf('<th>Type</th>')).toBeLessThan(html.indexOf('<th>Endpoint</th>'));
+    expect(html.indexOf('<th>Endpoint</th>')).toBeLessThan(html.indexOf('<th title="Time to First Token">TTFT</th>'));
+    expect(html.indexOf('<th title="Time to First Token">TTFT</th>')).toBeLessThan(html.indexOf('<th title="Using latency_ms in ms">Latency</th>'));
+    expect(html.indexOf('<th title="Using latency_ms in ms">Latency</th>')).toBeLessThan(html.indexOf('<th title="Average visible output tokens per second after TTFT">Speed</th>'));
+    expect(html.indexOf('<th title="Average visible output tokens per second after TTFT">Speed</th>')).toBeLessThan(html.indexOf('<th>Input</th>'));
     expect(html).toContain('class="_requestEventsAPIKeyCell_');
     expect(html).toContain('title="Production Key">Production Key</td>');
     expect(html).toContain('<td>medium</td>');
     expect(html).toMatch(/<td>SSE<\/td><td class="[^"]*requestEventsEndpointCell[^"]*" title="\/messages">\/messages<\/td>/);
     expect(html.indexOf('>45ms</td>')).toBeLessThan(html.indexOf('>120ms</td>'));
+    expect(html).toContain('<td>30.0 t/s</td>');
     expect(html).toContain('1 / 6');
     expect(html).toContain('20');
     expect(html).toContain('50');
@@ -108,29 +113,29 @@ describe('RequestEventsDetailsCard pagination', () => {
 
   it('keeps the TTFT column visible when TTFT is missing', () => {
     const html = renderCard({
-      events: [{ ...events[0], ttft_ms: undefined }],
+      events: [{ ...events[0], ttft_ms: undefined, speed_tps: undefined }],
     });
 
     expect(html.indexOf('<th title="Time to First Token">TTFT</th>')).toBeLessThan(html.indexOf('<th title="Using latency_ms in ms">Latency</th>'));
-    expect(html).toMatch(/Success<\/span><\/td><td class="[^"]*durationCell[^"]*">-<\/td><td class="[^"]*durationCell[^"]*">120ms<\/td>/);
+    expect(html).toMatch(/Success<\/span><\/td><td>SSE<\/td><td class="[^"]*requestEventsEndpointCell[^"]*" title="\/messages">\/messages<\/td><td class="[^"]*durationCell[^"]*">-<\/td><td class="[^"]*durationCell[^"]*">120ms<\/td><td>-<\/td>/);
   });
 
   it('keeps the Latency column visible when latency is missing', () => {
     const html = renderCard({
-      events: [{ ...events[0], latency_ms: undefined }],
+      events: [{ ...events[0], latency_ms: undefined, speed_tps: undefined }],
     });
 
     expect(html.indexOf('<th title="Time to First Token">TTFT</th>')).toBeLessThan(html.indexOf('<th title="Using latency_ms in ms">Latency</th>'));
-    expect(html.indexOf('<th title="Using latency_ms in ms">Latency</th>')).toBeLessThan(html.indexOf('<th>Type</th>'));
-    expect(html).toMatch(/45ms<\/td><td class="[^"]*durationCell[^"]*">--<\/td><td>SSE<\/td>/);
+    expect(html.indexOf('<th title="Using latency_ms in ms">Latency</th>')).toBeLessThan(html.indexOf('<th title="Average visible output tokens per second after TTFT">Speed</th>'));
+    expect(html).toMatch(/45ms<\/td><td class="[^"]*durationCell[^"]*">--<\/td><td>-<\/td>/);
   });
 
   it('shows a dash for zero TTFT values', () => {
     const html = renderCard({
-      events: [{ ...events[0], ttft_ms: 0 }],
+      events: [{ ...events[0], ttft_ms: 0, speed_tps: undefined }],
     });
 
-    expect(html).toMatch(/Success<\/span><\/td><td class="[^"]*durationCell[^"]*">-<\/td><td class="[^"]*durationCell[^"]*">120ms<\/td>/);
+    expect(html).toMatch(/Success<\/span><\/td><td>SSE<\/td><td class="[^"]*requestEventsEndpointCell[^"]*" title="\/messages">\/messages<\/td><td class="[^"]*durationCell[^"]*">-<\/td><td class="[^"]*durationCell[^"]*">120ms<\/td><td>-<\/td>/);
   });
 
   it('maps GET endpoints to WS and strips the v1 prefix', () => {
