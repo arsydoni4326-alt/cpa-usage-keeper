@@ -64,8 +64,8 @@ func TestAuthFilesManagementServiceDisablesWithFiveWorkers(t *testing.T) {
 	if response.Affected != len(names) {
 		t.Fatalf("expected affected=%d, got %+v", len(names), response)
 	}
-	if client.maxActive > 5 {
-		t.Fatalf("expected at most 5 concurrent status updates, got %d", client.maxActive)
+	if client.maxActive > 10 {
+		t.Fatalf("expected at most 10 concurrent status updates, got %d", client.maxActive)
 	}
 	if client.maxActive <= 1 {
 		t.Fatalf("expected status updates to run concurrently, got maxActive=%d", client.maxActive)
@@ -116,5 +116,19 @@ func TestAuthFilesManagementServiceReturnsStatusUpdateErrors(t *testing.T) {
 	_, err := service.SetAuthFilesDisabled(context.Background(), []string{"a.json", "b.json"}, true)
 	if err == nil || !strings.Contains(err.Error(), "b.json") {
 		t.Fatalf("expected named status update error, got %v", err)
+	}
+}
+
+func TestJoinAuthFilesManagementErrorDedupesContextCancellation(t *testing.T) {
+	var joined error
+
+	joined = joinAuthFilesManagementError(joined, context.Canceled)
+	joined = joinAuthFilesManagementError(joined, context.Canceled)
+
+	if !errors.Is(joined, context.Canceled) {
+		t.Fatalf("expected joined error to contain context cancellation, got %v", joined)
+	}
+	if strings.Count(joined.Error(), context.Canceled.Error()) != 1 {
+		t.Fatalf("expected context cancellation to appear once, got %q", joined.Error())
 	}
 }

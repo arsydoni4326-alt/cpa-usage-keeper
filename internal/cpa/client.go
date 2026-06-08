@@ -67,13 +67,17 @@ func (c *Client) doJSONRequestWithBody(ctx context.Context, method string, path 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return resp.StatusCode, responseBody, fmt.Errorf("%s request returned status %d", kind, resp.StatusCode)
 	}
-	if target == nil || strings.TrimSpace(string(responseBody)) == "" {
+	if target == nil || isBlankJSONResponseBody(responseBody) {
 		return resp.StatusCode, responseBody, nil
 	}
 	if err := json.Unmarshal(responseBody, target); err != nil {
 		return resp.StatusCode, responseBody, fmt.Errorf("decode %s json: %w", kind, err)
 	}
 	return resp.StatusCode, responseBody, nil
+}
+
+func isBlankJSONResponseBody(body []byte) bool {
+	return len(bytes.TrimSpace(body)) == 0
 }
 
 func (c *Client) doManagementJSONRequest(ctx context.Context, path string, target any, kind string) (int, []byte, error) {

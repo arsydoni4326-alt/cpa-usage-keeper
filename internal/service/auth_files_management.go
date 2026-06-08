@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-const authFilesStatusWorkerLimit = 5
+const authFilesStatusWorkerLimit = 10
 
 var ErrAuthFilesManagementValidation = errors.New("auth files management request validation failed")
 
@@ -59,13 +59,13 @@ func (s *authFilesManagementService) SetAuthFilesDisabled(ctx context.Context, n
 				defer func() { <-sem }()
 			case <-ctx.Done():
 				mu.Lock()
-				updateErr = errors.Join(updateErr, ctx.Err())
+				updateErr = joinAuthFilesManagementError(updateErr, ctx.Err())
 				mu.Unlock()
 				return
 			}
 			if err := s.client.UpdateAuthFileStatus(ctx, name, disabled); err != nil {
 				mu.Lock()
-				updateErr = errors.Join(updateErr, fmt.Errorf("%s: %w", name, err))
+				updateErr = joinAuthFilesManagementError(updateErr, fmt.Errorf("%s: %w", name, err))
 				mu.Unlock()
 			}
 		}()
@@ -89,6 +89,19 @@ func (s *authFilesManagementService) DeleteAuthFiles(ctx context.Context, names 
 		return AuthFilesManagementResponse{}, err
 	}
 	return AuthFilesManagementResponse{Names: cleanNames, Affected: len(cleanNames)}, nil
+}
+
+func joinAuthFilesManagementError(joined error, err error) error {
+	if err == nil {
+		return joined
+	}
+	if errors.Is(joined, context.Canceled) && errors.Is(err, context.Canceled) {
+		return joined
+	}
+	if errors.Is(joined, context.DeadlineExceeded) && errors.Is(err, context.DeadlineExceeded) {
+		return joined
+	}
+	return errors.Join(joined, err)
 }
 
 func cleanAuthFileNames(names []string) ([]string, error) {

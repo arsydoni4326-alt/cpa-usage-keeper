@@ -15,6 +15,19 @@ import (
 	"cpa-usage-keeper/internal/cpa/dto/response"
 )
 
+func TestBlankJSONResponseBodyCheckDoesNotAllocate(t *testing.T) {
+	body := []byte(" \n\t ")
+
+	allocs := testing.AllocsPerRun(1000, func() {
+		if !isBlankJSONResponseBody(body) {
+			t.Fatalf("expected whitespace-only response body to be blank")
+		}
+	})
+	if allocs != 0 {
+		t.Fatalf("expected blank response check to allocate 0 times, got %f", allocs)
+	}
+}
+
 func TestFetchManagementAPIKeysSendsBearerTokenAndParsesKeys(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != cpaManagementAPIKeysEndpoint {

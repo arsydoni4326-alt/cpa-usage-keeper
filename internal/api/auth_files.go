@@ -3,7 +3,6 @@ package api
 import (
 	"errors"
 	"net/http"
-	"strings"
 
 	"cpa-usage-keeper/internal/service"
 	"github.com/gin-gonic/gin"
@@ -30,13 +29,8 @@ func registerAuthFileManagementRoutes(router gin.IRoutes, provider service.AuthF
 			c.JSON(http.StatusBadRequest, gin.H{"error": "names are required"})
 			return
 		}
-		names, ok := cleanAuthFilesRequestNames(request.Names)
-		if !ok {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "names are required"})
-			return
-		}
 
-		response, err := provider.SetAuthFilesDisabled(c.Request.Context(), names, request.Disabled)
+		response, err := provider.SetAuthFilesDisabled(c.Request.Context(), request.Names, request.Disabled)
 		if err != nil {
 			if errors.Is(err, service.ErrAuthFilesManagementValidation) {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "names are required"})
@@ -59,13 +53,8 @@ func registerAuthFileManagementRoutes(router gin.IRoutes, provider service.AuthF
 			c.JSON(http.StatusBadRequest, gin.H{"error": "names are required"})
 			return
 		}
-		names, ok := cleanAuthFilesRequestNames(request.Names)
-		if !ok {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "names are required"})
-			return
-		}
 
-		response, err := provider.DeleteAuthFiles(c.Request.Context(), names)
+		response, err := provider.DeleteAuthFiles(c.Request.Context(), request.Names)
 		if err != nil {
 			if errors.Is(err, service.ErrAuthFilesManagementValidation) {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "names are required"})
@@ -76,21 +65,4 @@ func registerAuthFileManagementRoutes(router gin.IRoutes, provider service.AuthF
 		}
 		c.JSON(http.StatusOK, response)
 	})
-}
-
-func cleanAuthFilesRequestNames(names []string) ([]string, bool) {
-	seen := make(map[string]struct{}, len(names))
-	cleanNames := make([]string, 0, len(names))
-	for _, name := range names {
-		trimmed := strings.TrimSpace(name)
-		if trimmed == "" {
-			continue
-		}
-		if _, ok := seen[trimmed]; ok {
-			continue
-		}
-		seen[trimmed] = struct{}{}
-		cleanNames = append(cleanNames, trimmed)
-	}
-	return cleanNames, len(cleanNames) > 0
 }

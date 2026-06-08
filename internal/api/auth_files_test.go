@@ -50,7 +50,7 @@ func TestAuthFilesStatusRouteDisablesSelectedNames(t *testing.T) {
 	if resp.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d body=%s", resp.Code, resp.Body.String())
 	}
-	if strings.Join(provider.statusNames, ",") != "a.json,b.json" || !provider.statusDisabled {
+	if strings.Join(provider.statusNames, ",") != " a.json ,b.json" || !provider.statusDisabled {
 		t.Fatalf("unexpected provider request: names=%+v disabled=%v", provider.statusNames, provider.statusDisabled)
 	}
 	body := resp.Body.String()
@@ -71,7 +71,7 @@ func TestAuthFilesDeleteRouteDeletesSelectedNames(t *testing.T) {
 	if resp.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d body=%s", resp.Code, resp.Body.String())
 	}
-	if strings.Join(provider.deleteNames, ",") != "a.json,b.json" {
+	if strings.Join(provider.deleteNames, ",") != "a.json, b.json " {
 		t.Fatalf("unexpected provider request: names=%+v", provider.deleteNames)
 	}
 	if body := resp.Body.String(); !contains(body, `"affected":2`) || !contains(body, `"b.json"`) {
@@ -80,7 +80,10 @@ func TestAuthFilesDeleteRouteDeletesSelectedNames(t *testing.T) {
 }
 
 func TestAuthFilesManagementRoutesRejectEmptyNames(t *testing.T) {
-	provider := &authFileManagementProviderStub{}
+	provider := &authFileManagementProviderStub{
+		statusErr: service.ErrAuthFilesManagementValidation,
+		deleteErr: service.ErrAuthFilesManagementValidation,
+	}
 	router := NewRouter(nil, nil, nil, nil, AuthConfig{}, nil, "", OptionalProviders{AuthFiles: provider})
 
 	for _, tc := range []struct {
