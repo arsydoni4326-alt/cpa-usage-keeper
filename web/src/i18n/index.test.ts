@@ -84,6 +84,24 @@ describe('i18n resources', () => {
     }
   });
 
+  it('localizes realtime overview fallback errors', () => {
+    expect(i18n.getResource('en', 'translation', 'usage_stats.overview_realtime_load_failed')).toBe('Failed to load realtime overview');
+    expect(i18n.getResource('zh', 'translation', 'usage_stats.overview_realtime_load_failed')).toBe('实时概览加载失败');
+    expect(i18n.getResource('zh-TW', 'translation', 'usage_stats.overview_realtime_load_failed')).toBe('即時概覽載入失敗');
+  });
+
+  it('uses a token share label for the realtime current-usage card', () => {
+    expect(i18n.getResource('en', 'translation', 'usage_stats.overview_realtime_current_usage')).toBe('Token Share');
+    expect(i18n.getResource('zh', 'translation', 'usage_stats.overview_realtime_current_usage')).toBe('Token 占比');
+    expect(i18n.getResource('zh-TW', 'translation', 'usage_stats.overview_realtime_current_usage')).toBe('Token 占比');
+  });
+
+  it('labels realtime window deltas as trend instead of period-over-period change', () => {
+    expect(i18n.getResource('en', 'translation', 'usage_stats.overview_realtime_trend')).toBe('Trend');
+    expect(i18n.getResource('zh', 'translation', 'usage_stats.overview_realtime_trend')).toBe('趋势');
+    expect(i18n.getResource('zh-TW', 'translation', 'usage_stats.overview_realtime_trend')).toBe('趨勢');
+  });
+
   it('uses natural Chinese and Traditional Chinese copy for API Key viewer text', () => {
     const zh = i18n.getResourceBundle('zh', 'translation');
     const zhTW = i18n.getResourceBundle('zh-TW', 'translation');
