@@ -137,6 +137,87 @@ describe('OverviewRealtimePanel', () => {
     expect(chartCapture.lineCalls[2].data.datasets[0].data).toEqual([25, 50]);
   });
 
+  it('shows metric-specific empty states while keeping valid zero lines visible', () => {
+    const html = renderToStaticMarkup(
+      <OverviewRealtimePanel
+        realtime={{
+          ...realtime,
+          token_velocity: [
+            { bucket: '2026-06-09T11:55:00Z', tokens_per_minute: 0, tokens: 0 },
+            { bucket: '2026-06-09T11:55:30Z', tokens_per_minute: 0, tokens: 0 },
+          ],
+          response_level: [],
+          response_distribution: {
+            ttft: { average_line: [], particles: [] },
+            latency: { average_line: [], particles: [] },
+          },
+          current_usage: {
+            models: [],
+            api_keys: [],
+            auth_files: [],
+            ai_providers: [],
+          },
+          request_level: [
+            { bucket: '2026-06-09T11:55:00Z', requests_per_minute: 0, requests: 0 },
+            { bucket: '2026-06-09T11:55:30Z', requests_per_minute: 0, requests: 0 },
+          ],
+          cache_level: [
+            { bucket: '2026-06-09T11:55:00Z', cache_rate: null, cached_tokens: 0, input_tokens: 0 },
+            { bucket: '2026-06-09T11:55:30Z', cache_rate: null, cached_tokens: 0, input_tokens: 0 },
+          ],
+        }}
+        loading={false}
+        window="15m"
+        onWindowChange={() => {}}
+        isDark={false}
+        isMobile={false}
+      />
+    );
+
+    expect(html).not.toContain('usage_stats.overview_realtime_token_empty');
+    expect(html).not.toContain('usage_stats.overview_realtime_request_empty');
+    expect(html).toContain('usage_stats.overview_realtime_ttft_empty');
+    expect(html).toContain('usage_stats.overview_realtime_latency_empty');
+    expect(html).toContain('usage_stats.overview_realtime_cache_empty');
+    expect(html).toContain('usage_stats.overview_realtime_usage_empty');
+    expect(chartCapture.lineCalls).toHaveLength(3);
+    expect(chartCapture.chartCalls).toHaveLength(2);
+  });
+
+  it('labels realtime metric chips as rolling values with localized tooltip text', () => {
+    const html = renderToStaticMarkup(
+      <OverviewRealtimePanel
+        realtime={realtime}
+        loading={false}
+        window="15m"
+        onWindowChange={() => {}}
+        isDark={false}
+        isMobile={false}
+      />
+    );
+
+    expect(html).toContain('title="usage_stats.overview_realtime_rolling_metric_hint"');
+    expect(html).toContain('aria-label="usage_stats.overview_realtime_latest usage_stats.overview_realtime_rolling_metric_hint"');
+  });
+
+  it('renders token share metadata as labeled compact chips', () => {
+    const html = renderToStaticMarkup(
+      <OverviewRealtimePanel
+        realtime={realtime}
+        loading={false}
+        window="15m"
+        onWindowChange={() => {}}
+        isDark={false}
+        isMobile={false}
+      />
+    );
+
+    expect(html).toContain('usage_stats.overview_realtime_tokens_label');
+    expect(html).toContain('usage_stats.overview_realtime_requests_label');
+    expect(html).toContain('usage_stats.overview_realtime_cost_label');
+    expect(html).toContain('overviewRealtimeUsageMetaPill');
+  });
+
   it('renders response level as separate TTFT and latency distribution cards', () => {
     const html = renderToStaticMarkup(
       <OverviewRealtimePanel

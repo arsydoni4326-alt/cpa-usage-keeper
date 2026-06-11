@@ -462,6 +462,10 @@ func (c *UsageRecentEventCache) pruneLocked(now time.Time) {
 		// 未过期事件保留原投影对象。
 		kept = append(kept, event)
 	}
+	// 复用底层数组时，len 之外的旧槽位仍会持有字符串/指针引用；必须清零才能让 GC 回收。
+	for index := len(kept); index < len(c.events); index++ {
+		c.events[index] = RecentUsageEvent{}
+	}
 	// 重新指向保留后的窗口数据。
 	c.events = kept
 }

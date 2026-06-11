@@ -11,7 +11,9 @@ import (
 	"cpa-usage-keeper/internal/auth"
 	"cpa-usage-keeper/internal/entities"
 	"cpa-usage-keeper/internal/repository/dto"
+	"cpa-usage-keeper/internal/service"
 	servicedto "cpa-usage-keeper/internal/service/dto"
+	"gorm.io/gorm"
 )
 
 type usageFilterStub struct {
@@ -410,6 +412,41 @@ func TestUsageOverviewRejectsInvalidAPIKeyID(t *testing.T) {
 
 	if provider.overviewCalls != 0 || provider.realtimeCalls != 0 {
 		t.Fatalf("expected invalid api_key_id not to call usage provider, got overview=%d realtime=%d", provider.overviewCalls, provider.realtimeCalls)
+	}
+}
+
+func TestUsageOverviewMapsAPIKeyLookupErrors(t *testing.T) {
+	tests := []struct {
+		name       string
+		provider   *usageFilterStub
+		wantStatus int
+	}{
+		{name: "invalid service id", provider: &usageFilterStub{err: service.ErrInvalidID}, wantStatus: http.StatusBadRequest},
+		{name: "missing active api key", provider: &usageFilterStub{err: gorm.ErrRecordNotFound}, wantStatus: http.StatusNotFound},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name+"/overview", func(t *testing.T) {
+			router := NewRouter(nil, nil, tc.provider, nil, AuthConfig{}, nil, "")
+			resp := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/usage/overview?range=24h&api_key_id=123", nil)
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != tc.wantStatus {
+				t.Fatalf("expected overview status %d, got %d %s", tc.wantStatus, resp.Code, resp.Body.String())
+			}
+		})
+
+		t.Run(tc.name+"/realtime", func(t *testing.T) {
+			router := NewRouter(nil, nil, tc.provider, nil, AuthConfig{}, nil, "")
+			resp := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/usage/overview/realtime?window=60m&api_key_id=123", nil)
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != tc.wantStatus {
+				t.Fatalf("expected realtime status %d, got %d %s", tc.wantStatus, resp.Code, resp.Body.String())
+			}
+		})
 	}
 }
 

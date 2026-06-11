@@ -178,6 +178,35 @@ func TestUsageRecentEventCacheTryAppendDoesNotBlockWhenQueueIsFull(t *testing.T)
 	}
 }
 
+func TestUsageRecentEventCachePruneClearsRemovedBackingSlots(t *testing.T) {
+	now := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
+	cache := newEmptyUsageRecentEventCache(UsageRecentEventCacheOptions{
+		Now:    func() time.Time { return now },
+		Window: 10 * time.Minute,
+	})
+	t.Cleanup(cache.Close)
+
+	activeTTFT := int64(120)
+	expiredTTFT := int64(900)
+	cache.appendEvents([]entities.UsageEvent{
+		{APIGroupKey: "active-key-a", AuthType: "oauth", Source: "active-a@example.com", AuthIndex: "active-a", Model: "gpt-5", Timestamp: now.Add(-2 * time.Minute), TTFTMS: &activeTTFT},
+		{APIGroupKey: "active-key-b", AuthType: "apikey", Provider: "Active Provider", AuthIndex: "active-b", Model: "claude-sonnet", Timestamp: now.Add(-1 * time.Minute)},
+		{APIGroupKey: "expired-key", AuthType: "oauth", Source: "expired@example.com", AuthIndex: "expired-auth", Model: "expired-model", Timestamp: now.Add(-20 * time.Minute), TTFTMS: &expiredTTFT},
+	})
+
+	if len(cache.events) != 2 {
+		t.Fatalf("expected 2 active events after pruning, got %d: %+v", len(cache.events), cache.events)
+	}
+	for index, event := range cache.events[:cap(cache.events)] {
+		if index < len(cache.events) {
+			continue
+		}
+		if event.APIGroupKey == "expired-key" || event.Model == "expired-model" || event.AuthIndex == "expired-auth" || event.IdentityFallbackLabel == "expired@example.com" || event.TTFTMS != nil {
+			t.Fatalf("expected pruned backing slot %d to be cleared, got %+v", index, event)
+		}
+	}
+}
+
 func TestUsageRecentEventCacheCloseIsConcurrentSafe(t *testing.T) {
 	now := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
 

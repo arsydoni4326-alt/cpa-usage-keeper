@@ -60,6 +60,20 @@ describe('UsagePage toolbar styles', () => {
     expect(keyOverviewPageSource).not.toContain("value === '5m'")
   })
 
+  it('keeps realtime overview empty and metadata states explicit without stale legend styles', () => {
+    expect(overviewRealtimePanelSource).toContain('overview_realtime_rolling_metric_hint')
+    expect(overviewRealtimePanelSource).toContain('overview_realtime_ttft_empty')
+    expect(overviewRealtimePanelSource).toContain('overview_realtime_latency_empty')
+    expect(overviewRealtimePanelSource).toContain('overview_realtime_cache_empty')
+    expect(overviewRealtimePanelSource).toContain('overviewRealtimeUsageMetaPill')
+    expect(usagePageStyles).toContain('.overviewRealtimeEmptyOverlay')
+    expect(usagePageStyles).toContain('.overviewRealtimeUsageMetaPill')
+    expect(usagePageStyles).not.toContain('.overviewRealtimeLegend')
+    expect(i18nSource).not.toContain('overview_realtime_response_level')
+    expect(i18nSource).not.toContain('overview_realtime_ttft_p95')
+    expect(i18nSource).not.toContain('overview_realtime_latency_p95')
+  })
+
   it('keeps refresh controls outside the query filter layout', () => {
     expect(usagePageSource).toContain('{showRangeControls && (\n                  <div className={styles.usageFilterBar}>')
     expect(usagePageSource).toContain('className={styles.usageRefreshSlot}')

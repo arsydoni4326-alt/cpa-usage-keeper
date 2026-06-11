@@ -165,6 +165,8 @@ const averageNumber = (values: Array<number | null>): number | null => {
   return finiteValues.reduce((sum, value) => sum + value, 0) / finiteValues.length;
 };
 
+const hasFiniteNumber = (values: Array<number | null>): boolean => values.some((value) => typeof value === 'number' && Number.isFinite(value));
+
 const trendMetric = (
   values: Array<number | null>,
   formatter: (value: number) => string,
@@ -393,6 +395,7 @@ function RealtimeCard({
   full = false,
   compact = false,
   className,
+  metricsTooltip,
 }: {
   title: string;
   metrics?: RealtimeMetric[];
@@ -400,6 +403,7 @@ function RealtimeCard({
   full?: boolean;
   compact?: boolean;
   className?: string;
+  metricsTooltip?: string;
 }) {
   const cardClassName = [
     styles.overviewRealtimeCard,
@@ -414,7 +418,12 @@ function RealtimeCard({
         {metrics && metrics.length > 0 && (
           <div className={styles.overviewRealtimeMetrics}>
             {metrics.map((metric) => (
-              <span key={metric.label} className={`${styles.overviewRealtimeMetric} ${metric.tone === 'up' ? styles.overviewRealtimeMetricUp : metric.tone === 'down' ? styles.overviewRealtimeMetricDown : metric.tone === 'flat' ? styles.overviewRealtimeMetricFlat : ''}`.trim()}>
+              <span
+                key={metric.label}
+                className={`${styles.overviewRealtimeMetric} ${metric.tone === 'up' ? styles.overviewRealtimeMetricUp : metric.tone === 'down' ? styles.overviewRealtimeMetricDown : metric.tone === 'flat' ? styles.overviewRealtimeMetricFlat : ''}`.trim()}
+                title={metricsTooltip}
+                aria-label={metricsTooltip ? `${metric.label} ${metricsTooltip}` : undefined}
+              >
                 <span className={styles.overviewRealtimeMetricLabel}>{metric.label}</span>
                 <span className={styles.overviewRealtimeMetricValue}>{metric.value}</span>
               </span>
@@ -424,6 +433,28 @@ function RealtimeCard({
       </div>
       {children}
     </section>
+  );
+}
+
+function RealtimeChartFrame({ loading, emptyLabel, children }: { loading: boolean; emptyLabel?: string; children: ReactNode }) {
+  return (
+    <div className={styles.overviewRealtimeChartFrame} aria-busy={loading}>
+      {children}
+      {emptyLabel && (
+        <div className={styles.overviewRealtimeEmptyOverlay} role="status">
+          <span>{emptyLabel}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UsageMetaPill({ label, value }: { label: string; value: string }) {
+  return (
+    <span className={styles.overviewRealtimeUsageMetaPill}>
+      <span className={styles.overviewRealtimeUsageMetaLabel}>{label}</span>
+      <span className={styles.overviewRealtimeUsageMetaValue}>{value}</span>
+    </span>
   );
 }
 
@@ -455,6 +486,11 @@ export function OverviewRealtimePanel({ realtime, loading, error, window, onWind
   const latencyAverageValues = useMemo(() => responseDistributionValues(latencyAveragePoints), [latencyAveragePoints]);
   const ttftParticleValues = useMemo(() => responseDistributionParticleData(data.response_distribution.ttft.particles, responseTimezone), [data.response_distribution.ttft.particles, responseTimezone]);
   const latencyParticleValues = useMemo(() => responseDistributionParticleData(data.response_distribution.latency.particles, responseTimezone), [data.response_distribution.latency.particles, responseTimezone]);
+  const tokenEmptyLabel = data.token_velocity.length === 0 ? t('usage_stats.overview_realtime_token_empty') : undefined;
+  const requestEmptyLabel = data.request_level.length === 0 ? t('usage_stats.overview_realtime_request_empty') : undefined;
+  const ttftEmptyLabel = !hasFiniteNumber(ttftAverageValues) && ttftParticleValues.length === 0 ? t('usage_stats.overview_realtime_ttft_empty') : undefined;
+  const latencyEmptyLabel = !hasFiniteNumber(latencyAverageValues) && latencyParticleValues.length === 0 ? t('usage_stats.overview_realtime_latency_empty') : undefined;
+  const cacheEmptyLabel = !hasFiniteNumber(cacheValues) ? t('usage_stats.overview_realtime_cache_empty') : undefined;
 
   const lineOptions = useMemo(() => buildRealtimeLineOptions(isDark, isMobile, formatCompactNumber), [isDark, isMobile]);
   const percentLineOptions = useMemo(() => buildRealtimeLineOptions(isDark, isMobile, (value) => `${formatFixedTwoDecimals(value)}%`, { yMaxTicksLimit: 5 }), [isDark, isMobile]);
@@ -462,6 +498,7 @@ export function OverviewRealtimePanel({ realtime, loading, error, window, onWind
   const latestLabel = t('usage_stats.overview_realtime_latest');
   const averageLabel = t('usage_stats.overview_realtime_average');
   const trendLabel = t('usage_stats.overview_realtime_trend');
+  const rollingMetricHint = t('usage_stats.overview_realtime_rolling_metric_hint');
 
   const tokenChartData = useMemo(() => buildSingleLineData(labels, t('usage_stats.overview_realtime_tpm'), tokenValues, CHART_COLORS.token), [labels, t, tokenValues]);
   const requestChartData = useMemo(() => buildSingleLineData(labels, t('usage_stats.overview_realtime_rpm'), requestValues, CHART_COLORS.request), [labels, requestValues, t]);
@@ -538,11 +575,12 @@ export function OverviewRealtimePanel({ realtime, loading, error, window, onWind
           <RealtimeCard
             title={t('usage_stats.overview_realtime_token_velocity')}
             metrics={metricChips(tokenValues, formatRealtimeTokenRate, averageLabel, latestLabel, trendLabel)}
+            metricsTooltip={rollingMetricHint}
             full
           >
-            <div className={styles.overviewRealtimeChartFrame} aria-busy={loading}>
+            <RealtimeChartFrame loading={loading} emptyLabel={tokenEmptyLabel}>
               <Line data={tokenChartData} options={lineOptions} />
-            </div>
+            </RealtimeChartFrame>
           </RealtimeCard>
 
           <div className={styles.overviewRealtimeResponseUsageRow}>
@@ -550,21 +588,23 @@ export function OverviewRealtimePanel({ realtime, loading, error, window, onWind
               <RealtimeCard
                 title={t('usage_stats.overview_realtime_ttft_distribution')}
                 metrics={ttftMetrics}
+                metricsTooltip={rollingMetricHint}
                 compact
               >
-                <div className={styles.overviewRealtimeChartFrame} aria-busy={loading}>
+                <RealtimeChartFrame loading={loading} emptyLabel={ttftEmptyLabel}>
                   <Chart type="line" data={ttftDistributionChartData} options={responseDistributionOptions} />
-                </div>
+                </RealtimeChartFrame>
               </RealtimeCard>
 
               <RealtimeCard
                 title={t('usage_stats.overview_realtime_latency_distribution')}
                 metrics={latencyMetrics}
+                metricsTooltip={rollingMetricHint}
                 compact
               >
-                <div className={styles.overviewRealtimeChartFrame} aria-busy={loading}>
+                <RealtimeChartFrame loading={loading} emptyLabel={latencyEmptyLabel}>
                   <Chart type="line" data={latencyDistributionChartData} options={responseDistributionOptions} />
-                </div>
+                </RealtimeChartFrame>
               </RealtimeCard>
             </div>
 
@@ -584,7 +624,7 @@ export function OverviewRealtimePanel({ realtime, loading, error, window, onWind
               </div>
               <div className={styles.overviewRealtimeUsageList} aria-busy={loading}>
                 {(visibleDimension?.items ?? []).length === 0 ? (
-                  <div className={styles.overviewRealtimeEmpty}>{t('usage_stats.overview_realtime_empty')}</div>
+                  <div className={styles.overviewRealtimeEmpty}>{t('usage_stats.overview_realtime_usage_empty')}</div>
                 ) : (
                   visibleDimension?.items.map((item) => (
                     <div key={item.key} className={styles.overviewRealtimeUsageItem}>
@@ -598,9 +638,9 @@ export function OverviewRealtimePanel({ realtime, loading, error, window, onWind
                         )}
                       </div>
                       <div className={styles.overviewRealtimeUsageMeta}>
-                        <span>{formatCompactNumber(item.tokens)}</span>
-                        <span>{item.requests.toLocaleString()}</span>
-                        {typeof item.cost === 'number' && <span>{formatUsd(item.cost)}</span>}
+                        <UsageMetaPill label={t('usage_stats.overview_realtime_tokens_label')} value={formatCompactNumber(item.tokens)} />
+                        <UsageMetaPill label={t('usage_stats.overview_realtime_requests_label')} value={item.requests.toLocaleString()} />
+                        {typeof item.cost === 'number' && <UsageMetaPill label={t('usage_stats.overview_realtime_cost_label')} value={formatUsd(item.cost)} />}
                       </div>
                     </div>
                   ))
@@ -612,19 +652,21 @@ export function OverviewRealtimePanel({ realtime, loading, error, window, onWind
           <RealtimeCard
             title={t('usage_stats.overview_realtime_request_level')}
             metrics={metricChips(requestValues, formatPerMinuteValue, averageLabel, latestLabel, trendLabel)}
+            metricsTooltip={rollingMetricHint}
           >
-            <div className={styles.overviewRealtimeChartFrame} aria-busy={loading}>
+            <RealtimeChartFrame loading={loading} emptyLabel={requestEmptyLabel}>
               <Line data={requestChartData} options={lineOptions} />
-            </div>
+            </RealtimeChartFrame>
           </RealtimeCard>
 
           <RealtimeCard
             title={t('usage_stats.overview_realtime_cache_level')}
             metrics={metricChips(cacheValues, (value) => `${formatFixedTwoDecimals(value)}%`, averageLabel, latestLabel, trendLabel)}
+            metricsTooltip={rollingMetricHint}
           >
-            <div className={styles.overviewRealtimeChartFrame} aria-busy={loading}>
+            <RealtimeChartFrame loading={loading} emptyLabel={cacheEmptyLabel}>
               <Line data={cacheChartData} options={percentLineOptions} />
-            </div>
+            </RealtimeChartFrame>
           </RealtimeCard>
           </div>
         </>

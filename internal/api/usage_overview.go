@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -12,6 +13,7 @@ import (
 	servicedto "cpa-usage-keeper/internal/service/dto"
 	"cpa-usage-keeper/internal/timeutil"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type usageOverviewResponse struct {
@@ -299,7 +301,7 @@ func writeUsageOverviewResponse(c *gin.Context, usageProvider service.UsageProvi
 
 	overview, err := usageProvider.GetUsageOverview(c.Request.Context(), filter)
 	if err != nil {
-		writeInternalError(c, "get usage overview failed", err)
+		writeUsageOverviewProviderError(c, "get usage overview failed", err)
 		return
 	}
 
@@ -325,7 +327,7 @@ func writeUsageOverviewRealtimeResponse(c *gin.Context, usageProvider service.Us
 	}
 	realtime, err := usageProvider.GetUsageOverviewRealtime(c.Request.Context(), filter)
 	if err != nil {
-		writeInternalError(c, "get usage overview realtime failed", err)
+		writeUsageOverviewProviderError(c, "get usage overview realtime failed", err)
 		return
 	}
 	c.JSON(http.StatusOK, buildUsageOverviewRealtime(realtime, filter.RealtimeWindow))
@@ -338,10 +340,22 @@ func writeKeyUsageOverviewRealtimeResponse(c *gin.Context, usageProvider service
 	}
 	realtime, err := usageProvider.GetUsageOverviewRealtime(c.Request.Context(), filter)
 	if err != nil {
-		writeInternalError(c, "get usage overview realtime failed", err)
+		writeUsageOverviewProviderError(c, "get usage overview realtime failed", err)
 		return
 	}
 	c.JSON(http.StatusOK, buildKeyUsageOverviewRealtime(realtime, filter.RealtimeWindow))
+}
+
+func writeUsageOverviewProviderError(c *gin.Context, message string, err error) {
+	if errors.Is(err, service.ErrInvalidID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid api_key_id"})
+		return
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "api key not found"})
+		return
+	}
+	writeInternalError(c, message, err)
 }
 
 func buildUsageOverviewPayload(snapshot *repodto.StatisticsSnapshot) usageOverviewPayload {
