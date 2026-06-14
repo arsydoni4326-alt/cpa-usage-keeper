@@ -469,9 +469,10 @@ func stripPricingModelPrefix(model string) string {
 
 func normalizePricingModelKey(value string) string {
 	var builder strings.Builder
-	for _, r := range strings.ToLower(strings.TrimSpace(value)) {
+	builder.Grow(len(value))
+	for _, r := range value {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			builder.WriteRune(r)
+			builder.WriteRune(unicode.ToLower(r))
 		}
 	}
 	return builder.String()
