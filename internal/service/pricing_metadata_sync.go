@@ -526,8 +526,9 @@ func buildPricingSyncMatch(model string, metadataModel modelsDevModel, matchType
 }
 
 func pricingStyleForModelsDevModel(model modelsDevModel) string {
-	combined := strings.ToLower(strings.Join([]string{model.ID, model.Name, model.Family}, " "))
-	if strings.Contains(combined, "claude") {
+	if strings.Contains(strings.ToLower(model.ID), "claude") ||
+		strings.Contains(strings.ToLower(model.Name), "claude") ||
+		strings.Contains(strings.ToLower(model.Family), "claude") {
 		return entities.ModelPricingStyleClaude
 	}
 	return entities.ModelPricingStyleOpenAI
