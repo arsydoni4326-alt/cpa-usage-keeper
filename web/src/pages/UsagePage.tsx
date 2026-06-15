@@ -717,6 +717,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     error: pricingError,
     loadPricing,
     setModelPrices,
+    syncModelPrices,
     previewPricingSync,
   } = usePricingData({
     onAuthRequired,
@@ -1827,6 +1828,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                   modelNames={modelNames}
                   modelPrices={modelPrices}
                   onPricesChange={setModelPrices}
+                  onSyncPricesChange={syncModelPrices}
                   onSyncPreview={previewPricingSync}
                   onNotice={showTopNotice}
                   loading={pricingLoading}

@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Select, type SelectOption } from '@/components/ui/Select';
-import { IconCheck, IconRefreshCw } from '@/components/ui/icons';
-import type { ModelPrice, PricingStyle, PricingSyncMatch, PricingSyncPreviewResponse } from '@/lib/types';
+import { IconCheck, IconCircleAlert, IconRefreshCw } from '@/components/ui/icons';
+import type { ModelPrice, PricingSaveResult, PricingStyle, PricingSyncMatch, PricingSyncPreviewResponse } from '@/lib/types';
 import styles from '@/pages/UsagePage.module.scss';
 
 const formatDisplayName = (value: string): string => {
@@ -19,12 +19,13 @@ export interface PriceSettingsCardProps {
   modelNames: string[];
   modelPrices: Record<string, ModelPrice>;
   onPricesChange: (prices: Record<string, ModelPrice>) => void | Promise<void>;
+  onSyncPricesChange?: (prices: Record<string, ModelPrice>) => Promise<PricingSaveResult>;
   onSyncPreview?: () => Promise<PricingSyncPreviewResponse>;
   onNotice?: (kind: 'success' | 'info' | 'error', message: string) => void;
   loading?: boolean;
 }
 
-interface PricingSyncDraft {
+export interface PricingSyncDraft {
   model: string;
   matchedModel: string;
   matchType: string;
@@ -36,6 +37,8 @@ interface PricingSyncDraft {
   completion: string;
   cache: string;
   cacheCreation: string;
+  saveStatus?: 'failed';
+  saveError?: string;
 }
 
 function PriceSettingsTitle({ title, subtitle }: { title: string; subtitle: string }) {
@@ -100,6 +103,50 @@ const syncDraftToModelPrice = (draft: PricingSyncDraft): ModelPrice | null => {
   };
 };
 
+export const markPricingSyncFailures = (
+  drafts: PricingSyncDraft[],
+  result: PricingSaveResult,
+): PricingSyncDraft[] => {
+  const failedByModel = new Map(result.failures.map((failure) => [failure.model, failure.message]));
+  const successModels = new Set(result.successModels);
+  return drafts.map((draft) => {
+    const failureMessage = failedByModel.get(draft.model);
+    if (failureMessage !== undefined) {
+      return {
+        ...draft,
+        selected: true,
+        saveStatus: 'failed',
+        saveError: failureMessage,
+      };
+    }
+    if (successModels.has(draft.model)) {
+      return {
+        ...draft,
+        selected: false,
+        saveStatus: undefined,
+        saveError: undefined,
+      };
+    }
+    return {
+      ...draft,
+      saveStatus: undefined,
+      saveError: undefined,
+    };
+  });
+};
+
+export const notifyPricingSyncUnexpectedError = (
+  error: unknown,
+  t: (key: string) => string,
+  onNotice: PriceSettingsCardProps['onNotice'],
+) => {
+  const message = error instanceof Error ? error.message : '';
+  onNotice?.(
+    'error',
+    `${t('usage_stats.model_price_sync_failed')}${message ? `: ${message}` : ''}`,
+  );
+};
+
 const pricingStyleOptions = (t: (key: string) => string): SelectOption[] => [
   { value: 'openai', label: t('usage_stats.model_price_style_openai') },
   { value: 'claude', label: t('usage_stats.model_price_style_claude') },
@@ -134,6 +181,7 @@ export function PriceSettingsCard({
   modelNames,
   modelPrices,
   onPricesChange,
+  onSyncPricesChange,
   onSyncPreview,
   onNotice,
   loading = false
@@ -268,8 +316,15 @@ export function PriceSettingsCard({
   };
 
   const handleUpdateSyncDraft = (index: number, patch: Partial<PricingSyncDraft>) => {
+    const clearsFailure = Object.keys(patch).some((key) => key !== 'selected');
     setSyncDrafts((current) => current.map((draft, draftIndex) => (
-      draftIndex === index ? { ...draft, ...patch } : draft
+      draftIndex === index
+        ? {
+          ...draft,
+          ...patch,
+          ...(clearsFailure ? { saveStatus: undefined, saveError: undefined } : {}),
+        }
+        : draft
     )));
   };
 
@@ -284,21 +339,42 @@ export function PriceSettingsCard({
       return;
     }
 
-    const newPrices = { ...modelPrices };
+    const syncPrices: Record<string, ModelPrice> = {};
     for (const draft of selectedDrafts) {
       const price = syncDraftToModelPrice(draft);
       if (!price) {
         onNotice?.('error', t('usage_stats.model_price_sync_invalid', { model: formatDisplayName(draft.model) }));
         return;
       }
-      newPrices[draft.model] = price;
+      syncPrices[draft.model] = price;
     }
 
     setSyncApplying(true);
     try {
-      await Promise.resolve(onPricesChange(newPrices));
-      onNotice?.('success', t('usage_stats.model_price_sync_apply_success', { count: selectedDrafts.length }));
-      setSyncOpen(false);
+      if (!onSyncPricesChange) {
+        await Promise.resolve(onPricesChange({ ...modelPrices, ...syncPrices }));
+        onNotice?.('success', t('usage_stats.model_price_sync_apply_success', { count: selectedDrafts.length }));
+        setSyncOpen(false);
+        return;
+      }
+
+      const result = await onSyncPricesChange(syncPrices);
+      setSyncDrafts((current) => markPricingSyncFailures(current, result));
+      if (result.failures.length === 0) {
+        onNotice?.('success', t('usage_stats.model_price_sync_apply_success', { count: result.successModels.length }));
+        setSyncOpen(false);
+        return;
+      }
+
+      onNotice?.(
+        result.successModels.length > 0 ? 'info' : 'error',
+        t('usage_stats.model_price_sync_apply_partial', {
+          success: result.successModels.length,
+          failed: result.failures.length,
+        }),
+      );
+    } catch (error) {
+      notifyPricingSyncUnexpectedError(error, t, onNotice);
     } finally {
       setSyncApplying(false);
     }
@@ -619,8 +695,13 @@ export function PriceSettingsCard({
               <div className={styles.syncDraftList}>
                 {syncDrafts.map((draft, index) => {
                   const existing = Boolean(modelPrices[draft.model]);
+                  const failed = draft.saveStatus === 'failed';
+                  const failureLabel = t('usage_stats.model_price_sync_failed_label', { model: formatDisplayName(draft.model) });
                   return (
-                    <div key={`${draft.model}-${draft.matchedModel}`} className={styles.syncDraftItem}>
+                    <div
+                      key={`${draft.model}-${draft.matchedModel}`}
+                      className={`${styles.syncDraftItem} ${failed ? styles.syncDraftItemFailed : ''}`}
+                    >
                       <label className={styles.syncDraftCheck}>
                         <input
                           type="checkbox"
@@ -645,6 +726,16 @@ export function PriceSettingsCard({
                             </span>
                           </div>
                           <div className={styles.syncDraftBadges}>
+                            {failed && (
+                              <span
+                                className={styles.syncDraftFailureIcon}
+                                role="img"
+                                aria-label={failureLabel}
+                                title={draft.saveError || failureLabel}
+                              >
+                                <IconCircleAlert size={13} />
+                              </span>
+                            )}
                             <span>{draft.matchType}</span>
                             {existing && <span>{t('usage_stats.model_price_sync_existing')}</span>}
                           </div>
