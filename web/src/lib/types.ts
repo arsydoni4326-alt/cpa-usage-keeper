@@ -540,6 +540,17 @@ export interface ModelPrice {
   cacheCreation: number
 }
 
+export interface PricingSaveFailure {
+  model: string
+  message: string
+  error?: unknown
+}
+
+export interface PricingSaveResult {
+  successModels: string[]
+  failures: PricingSaveFailure[]
+}
+
 export interface PricingEntry {
   model: string
   pricing_style: PricingStyle
