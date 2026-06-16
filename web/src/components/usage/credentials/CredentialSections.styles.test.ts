@@ -98,6 +98,7 @@ describe('Credential section styles', () => {
     expect(credentialHealthSource).toMatch(/<span[\s\S]*?role="listitem"[\s\S]*?className=\{`\$\{styles\.credentialHealthCell/)
     expect(credentialStyles).toMatch(/\.credentialHealthCell\s*\{[\s\S]*?position:\s*relative;/)
     expect(credentialStyles).toMatch(/\.credentialHealthCell\s*\{[\s\S]*?border:\s*0;/)
+    expect(cssBlock('.credentialHealthCell')).toContain('cursor: help;')
     expect(credentialStyles).toMatch(/\.credentialHealthCell\s*\{[\s\S]*?transition:\s*transform 0\.16s ease/)
     expect(credentialStyles).toMatch(/\.credentialHealthCell\s*\{[\s\S]*?border-radius:\s*3px;/)
     expect(credentialStyles).toMatch(/\.credentialHealthCell:hover[\s\S]*?transform:\s*translateY\(-2px\) scale\(1\.2\);/)

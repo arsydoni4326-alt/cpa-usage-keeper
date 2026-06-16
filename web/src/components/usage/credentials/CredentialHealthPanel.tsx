@@ -94,6 +94,7 @@ export function CredentialHealthPanel({ displayName, health, lastUsedAt, statsUp
                         : ''
                   }`.trim()}
                   role="tooltip"
+                  aria-hidden="true"
                 >
                   <span className={styles.credentialHealthTooltipTime}>{timeRange}</span>
                   <span className={styles.credentialHealthTooltipStats}>

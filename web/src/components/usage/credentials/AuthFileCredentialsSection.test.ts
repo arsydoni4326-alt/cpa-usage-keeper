@@ -135,6 +135,58 @@ describe('AuthFileCredentialsSection title', () => {
     expect(html).toContain('1.23K')
     expect(html).toContain('97.24%')
   })
+
+  it('keeps Auth Files metric cells aligned when values are unavailable', () => {
+    const row = {
+      identity: { id: '1', identity: 'auth-1', is_deleted: false },
+      displayName: 'Sparse Auth File',
+      maskedIdentity: 'auth-1',
+      providerLabel: 'Codex',
+      typeLabel: 'codex',
+      authTypeLabel: 'oauth',
+      totalRequests: 0,
+      successCount: 0,
+      failureCount: 0,
+      successRate: null,
+      totalTokens: 0,
+      cacheRate: null,
+      quota: [],
+      quotaLoading: false,
+      displayQuotas: [],
+    } as AuthFileCredentialRow
+
+    const html = renderToStaticMarkup(createElement(AuthFileCredentialsSection, {
+      rows: [row],
+      total: 1,
+      page: 1,
+      totalPages: 1,
+      pageSize: 10,
+      activeOnly: false,
+      sort: 'priority',
+      loading: false,
+      quotaRefreshing: false,
+      quotaRefreshError: '',
+      quotaAutoRefreshEnabled: false,
+      quotaInspectionStatus: null,
+      quotaInspectionLoading: false,
+      quotaInspectionStarting: false,
+      quotaInspectionError: '',
+      onPageChange: () => undefined,
+      onPageSizeChange: () => undefined,
+      onActiveOnlyChange: () => undefined,
+      onSortChange: () => undefined,
+      onRefreshQuota: async () => undefined,
+      onRefreshQuotaForAuthIndex: async () => undefined,
+      onRefreshInspectionStatus: async () => undefined,
+      onStartInspection: async () => undefined,
+    }))
+
+    expect(html.match(/credentialMetricValueCell/g)).toHaveLength(4)
+    expect(html).toContain('usage_stats.total_requests')
+    expect(html).toContain('usage_stats.success_rate')
+    expect(html).toContain('usage_stats.total_tokens')
+    expect(html).toContain('usage_stats.cache_rate')
+  })
 })
 
 describe('AuthFileCredentialsSection display mode persistence', () => {
