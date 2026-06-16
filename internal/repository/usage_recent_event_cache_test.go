@@ -235,6 +235,105 @@ func TestUsageRecentEventCacheBuildsCredentialHealthFromStartupAndAppend(t *test
 	}
 }
 
+func TestUsageRecentEventCacheCredentialHealthUsesExactIdentityMatch(t *testing.T) {
+	withRepositoryTestLocation(t, "Asia/Shanghai")
+	db, err := OpenDatabase(config.Config{SQLitePath: filepath.Join(t.TempDir(), "credential-health-exact-match.db")})
+	if err != nil {
+		t.Fatalf("OpenDatabase returned error: %v", err)
+	}
+	closeTestDatabase(t, db)
+
+	now := time.Date(2026, 6, 10, 12, 34, 0, 0, time.FixedZone("CST", 8*60*60))
+	events := []entities.UsageEvent{
+		{EventKey: "exact-auth", AuthType: "oauth", AuthIndex: "shared-auth", Timestamp: now.Add(-3 * time.Minute), Failed: false},
+		{EventKey: "trimmed-auth", AuthType: "oauth", AuthIndex: " shared-auth ", Timestamp: now.Add(-3 * time.Minute), Failed: false},
+		{EventKey: "api-key-alias", AuthType: "api_key", AuthIndex: "shared-auth", Timestamp: now.Add(-3 * time.Minute), Failed: true},
+	}
+	if _, _, err := InsertUsageEvents(db, events); err != nil {
+		t.Fatalf("InsertUsageEvents returned error: %v", err)
+	}
+
+	cache, err := NewUsageRecentEventCache(db, UsageRecentEventCacheOptions{Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatalf("NewUsageRecentEventCache returned error: %v", err)
+	}
+	t.Cleanup(cache.Close)
+
+	authFileHealth, ok := cache.CredentialHealth("oauth", "shared-auth", now)
+	if !ok {
+		t.Fatal("expected credential health cache to be available")
+	}
+	if authFileHealth.TotalSuccess != 1 || authFileHealth.TotalFailure != 0 {
+		t.Fatalf("expected only exact oauth shared-auth event to count, got %+v", authFileHealth)
+	}
+
+	providerHealth, ok := cache.CredentialHealth("apikey", "shared-auth", now)
+	if !ok {
+		t.Fatal("expected provider credential health cache to be available")
+	}
+	if providerHealth.TotalSuccess != 0 || providerHealth.TotalFailure != 0 {
+		t.Fatalf("expected alias and trimmed rows not to match apikey shared-auth, got %+v", providerHealth)
+	}
+}
+
+func TestCredentialHealthStartupLoadStreamsRowsInBatches(t *testing.T) {
+	withRepositoryTestLocation(t, "UTC")
+	db, err := OpenDatabase(config.Config{SQLitePath: filepath.Join(t.TempDir(), "credential-health-stream.db")})
+	if err != nil {
+		t.Fatalf("OpenDatabase returned error: %v", err)
+	}
+	closeTestDatabase(t, db)
+
+	now := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
+	events := make([]entities.UsageEvent, 0, 25)
+	for index := 0; index < 25; index++ {
+		events = append(events, entities.UsageEvent{
+			EventKey:  "health-stream",
+			AuthType:  "oauth",
+			AuthIndex: "streamed-auth",
+			Timestamp: now.Add(-time.Duration(index) * time.Minute),
+			Failed:    index%3 == 0,
+		})
+	}
+	if _, _, err := InsertUsageEvents(db, events); err != nil {
+		t.Fatalf("InsertUsageEvents returned error: %v", err)
+	}
+
+	var batchCount int
+	var maxBatchSize int
+	var totalRows int
+	var failures int
+	err = loadCredentialHealthCacheRowsBatched(db, now.Add(-credentialHealthWindow), 10, func(rows []credentialHealthLoadRow) error {
+		batchCount++
+		if len(rows) > maxBatchSize {
+			maxBatchSize = len(rows)
+		}
+		totalRows += len(rows)
+		for _, row := range rows {
+			if row.Failed {
+				failures++
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("loadCredentialHealthCacheRowsBatched returned error: %v", err)
+	}
+
+	if batchCount != 3 {
+		t.Fatalf("expected 25 rows to load in 3 batches, got %d", batchCount)
+	}
+	if maxBatchSize > 10 {
+		t.Fatalf("expected startup load batch size to stay <= 10, got %d", maxBatchSize)
+	}
+	if totalRows != 25 {
+		t.Fatalf("expected all 25 rows to be streamed, got %d", totalRows)
+	}
+	if failures != 9 {
+		t.Fatalf("expected 9 failed rows, got %d", failures)
+	}
+}
+
 func TestUsageRecentEventCachePrunesInactiveCredentialHealthKeys(t *testing.T) {
 	withRepositoryTestLocation(t, "UTC")
 	db, err := OpenDatabase(config.Config{SQLitePath: filepath.Join(t.TempDir(), "credential-health-prune.db")})

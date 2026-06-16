@@ -2,7 +2,6 @@ package repository
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"cpa-usage-keeper/internal/entities"
@@ -14,6 +13,8 @@ const (
 	credentialHealthWindow      = 5 * time.Hour
 	credentialHealthBucketSpan  = 10 * time.Minute
 	credentialHealthBucketCount = int(credentialHealthWindow / credentialHealthBucketSpan)
+	// 启动加载按批次把健康数据灌入内存，避免 5h 内高流量场景一次性持有百万行切片。
+	credentialHealthStartupBatchSize = 10000
 )
 
 // CredentialHealthSnapshot 是单个 credential 最近 5h 的固定 30 桶健康快照。
@@ -78,16 +79,46 @@ func (c *UsageRecentEventCache) CredentialHealth(authType, authIndex string, now
 	return snapshot, true
 }
 
-func loadCredentialHealthCacheRows(db *gorm.DB, start time.Time) ([]credentialHealthLoadRow, error) {
-	var rows []credentialHealthLoadRow
-	if err := db.Model(&entities.UsageEvent{}).
+func loadCredentialHealthCacheRowsBatched(db *gorm.DB, start time.Time, batchSize int, handle func([]credentialHealthLoadRow) error) error {
+	if batchSize <= 0 {
+		batchSize = credentialHealthStartupBatchSize
+	}
+	rows, err := db.Model(&entities.UsageEvent{}).
 		Select("auth_type, auth_index, timestamp, failed").
 		Where("timestamp >= ?", timeutil.FormatStorageTime(start)).
-		Order("timestamp asc").
-		Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("load credential health cache rows: %w", err)
+		Order("timestamp asc, id asc").
+		Rows()
+	if err != nil {
+		return fmt.Errorf("load credential health cache rows: %w", err)
 	}
-	return rows, nil
+	defer rows.Close()
+
+	batch := make([]credentialHealthLoadRow, 0, batchSize)
+	for rows.Next() {
+		var row credentialHealthLoadRow
+		if err := db.ScanRows(rows, &row); err != nil {
+			return fmt.Errorf("scan credential health cache row: %w", err)
+		}
+		batch = append(batch, row)
+		if len(batch) < batchSize {
+			continue
+		}
+		// flush 后重新分配小批次切片，避免回调方误持有时被后续扫描覆盖。
+		if err := handle(batch); err != nil {
+			return fmt.Errorf("handle credential health cache batch: %w", err)
+		}
+		batch = make([]credentialHealthLoadRow, 0, batchSize)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate credential health cache rows: %w", err)
+	}
+	if len(batch) == 0 {
+		return nil
+	}
+	if err := handle(batch); err != nil {
+		return fmt.Errorf("handle credential health cache batch: %w", err)
+	}
+	return nil
 }
 
 func credentialHealthRowsFromUsageEvents(events []entities.UsageEvent) []credentialHealthLoadRow {
@@ -170,8 +201,8 @@ func (c *UsageRecentEventCache) pruneCredentialHealthKeyLocked(key credentialHea
 
 func newCredentialHealthKey(authType, authIndex string) (credentialHealthKey, bool) {
 	key := credentialHealthKey{
-		authType:  normalizeRecentUsageAuthType(authType),
-		authIndex: strings.TrimSpace(authIndex),
+		authType:  authType,
+		authIndex: authIndex,
 	}
 	return key, key.authType != "" && key.authIndex != ""
 }

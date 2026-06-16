@@ -150,20 +150,26 @@ func NewUsageRecentEventCache(db *gorm.DB, opts UsageRecentEventCacheOptions) (*
 		cache.Close()
 		return nil, err
 	}
-	healthRows, err := loadCredentialHealthCacheRows(db, now.Add(-credentialHealthWindow))
-	if err != nil {
-		cache.Close()
-		return nil, err
-	}
 	// 初始化写入 events 和字符串池需要独占锁，避免 worker 同时追加。
 	cache.mu.Lock()
 	// 将 DB row 转成缓存投影，同时做字符串池复用和身份 fallback 预计算。
 	cache.appendRecentEventsLocked(rows)
-	cache.appendCredentialHealthRowsLocked(healthRows)
 	// 再剪一次窗口，防止初始化查询和当前时间之间有极小漂移。
 	cache.pruneLocked(now)
-	cache.pruneCredentialHealthLocked(now, nil)
 	// 初始化完成后释放锁，后续读写正常并发。
+	cache.mu.Unlock()
+	// 健康图保留 5h，可能覆盖高流量账号的百万级请求；按批流式加载，避免启动峰值内存跟行数线性增长。
+	if err := loadCredentialHealthCacheRowsBatched(db, now.Add(-credentialHealthWindow), credentialHealthStartupBatchSize, func(rows []credentialHealthLoadRow) error {
+		cache.mu.Lock()
+		cache.appendCredentialHealthRowsLocked(rows)
+		cache.mu.Unlock()
+		return nil
+	}); err != nil {
+		cache.Close()
+		return nil, err
+	}
+	cache.mu.Lock()
+	cache.pruneCredentialHealthLocked(now, nil)
 	cache.mu.Unlock()
 	return cache, nil
 }
