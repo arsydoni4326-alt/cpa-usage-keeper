@@ -171,10 +171,10 @@ export function AuthFileCredentialsSection({ rows, total, page, totalPages, page
             badges={null}
             metrics={(
               <>
-                <MetricPill label={t('usage_stats.total_requests')} value={<RequestMetric total={row.totalRequests} success={row.successCount} failure={row.failureCount} />} />
-                <MetricPill label={t('usage_stats.success_rate')} value={<TonePercent value={row.successRate} tone={successRateTone(row.successRate)} />} />
-                <MetricPill label={t('usage_stats.total_tokens')} value={formatCredentialNumber(row.totalTokens)} />
-                <MetricPill label={t('usage_stats.cache_rate')} value={<TonePercent value={row.cacheRate} tone={cacheRateTone(row.cacheRate)} />} />
+                <MetricPill value={<RequestMetric total={row.totalRequests} success={row.successCount} failure={row.failureCount} />} />
+                <MetricPill value={<TonePercent value={row.successRate} tone={successRateTone(row.successRate)} />} />
+                <MetricPill value={formatCredentialNumber(row.totalTokens)} />
+                <MetricPill value={<TonePercent value={row.cacheRate} tone={cacheRateTone(row.cacheRate)} />} />
               </>
             )}
             rowClassName={styles.authFileCredentialRow}
