@@ -152,6 +152,128 @@ func TestUsageRecentEventCacheFiltersByWindowAndAPIGroupKey(t *testing.T) {
 	}
 }
 
+func TestUsageRecentEventCacheBuildsCredentialHealthFromStartupAndAppend(t *testing.T) {
+	withRepositoryTestLocation(t, "Asia/Shanghai")
+	db, err := OpenDatabase(config.Config{SQLitePath: filepath.Join(t.TempDir(), "credential-health-cache.db")})
+	if err != nil {
+		t.Fatalf("OpenDatabase returned error: %v", err)
+	}
+	closeTestDatabase(t, db)
+
+	now := time.Date(2026, 6, 10, 12, 34, 0, 0, time.FixedZone("CST", 8*60*60))
+	events := []entities.UsageEvent{
+		{EventKey: "auth-success", AuthType: "oauth", AuthIndex: "shared-auth", Timestamp: now.Add(-23 * time.Minute), Failed: false},
+		{EventKey: "auth-failure", AuthType: "oauth", AuthIndex: "shared-auth", Timestamp: now.Add(-24 * time.Minute), Failed: true},
+		{EventKey: "provider-success", AuthType: "apikey", AuthIndex: "shared-auth", Timestamp: now.Add(-24 * time.Minute), Failed: false},
+		{EventKey: "too-old", AuthType: "oauth", AuthIndex: "shared-auth", Timestamp: now.Add(-5*time.Hour - time.Minute), Failed: true},
+		{EventKey: "blank-auth", AuthType: "oauth", AuthIndex: " ", Timestamp: now.Add(-10 * time.Minute), Failed: true},
+	}
+	if _, _, err := InsertUsageEvents(db, events); err != nil {
+		t.Fatalf("InsertUsageEvents returned error: %v", err)
+	}
+
+	cache, err := NewUsageRecentEventCache(db, UsageRecentEventCacheOptions{Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatalf("NewUsageRecentEventCache returned error: %v", err)
+	}
+	t.Cleanup(cache.Close)
+
+	cache.appendEvents([]entities.UsageEvent{
+		{EventKey: "auth-latest", AuthType: "oauth", AuthIndex: "shared-auth", Timestamp: now.Add(-3 * time.Minute), Failed: false},
+	})
+
+	authFileHealth, ok := cache.CredentialHealth("oauth", "shared-auth", now)
+	if !ok {
+		t.Fatal("expected credential health cache to be available")
+	}
+	if authFileHealth.WindowSeconds != int64(5*time.Hour/time.Second) || authFileHealth.BucketSeconds != int64(10*time.Minute/time.Second) {
+		t.Fatalf("unexpected health window settings: %+v", authFileHealth)
+	}
+	if len(authFileHealth.Buckets) != 30 {
+		t.Fatalf("expected 30 health buckets, got %d", len(authFileHealth.Buckets))
+	}
+	if !authFileHealth.WindowStart.Equal(time.Date(2026, 6, 10, 7, 40, 0, 0, now.Location())) ||
+		!authFileHealth.WindowEnd.Equal(time.Date(2026, 6, 10, 12, 40, 0, 0, now.Location())) {
+		t.Fatalf("unexpected health window: start=%s end=%s", authFileHealth.WindowStart, authFileHealth.WindowEnd)
+	}
+
+	bucket1210 := findCredentialHealthBucket(t, authFileHealth.Buckets, time.Date(2026, 6, 10, 12, 10, 0, 0, now.Location()))
+	if bucket1210.Success != 1 || bucket1210.Failure != 1 {
+		t.Fatalf("expected oauth shared-auth 12:10 bucket to have 1 success and 1 failure, got %+v", bucket1210)
+	}
+	bucket1230 := findCredentialHealthBucket(t, authFileHealth.Buckets, time.Date(2026, 6, 10, 12, 30, 0, 0, now.Location()))
+	if bucket1230.Success != 1 || bucket1230.Failure != 0 {
+		t.Fatalf("expected oauth shared-auth 12:30 bucket to include appended success, got %+v", bucket1230)
+	}
+	if authFileHealth.TotalSuccess != 2 || authFileHealth.TotalFailure != 1 {
+		t.Fatalf("unexpected oauth shared-auth totals: %+v", authFileHealth)
+	}
+
+	providerHealth, ok := cache.CredentialHealth("apikey", "shared-auth", now)
+	if !ok {
+		t.Fatal("expected provider credential health cache to be available")
+	}
+	providerBucket := findCredentialHealthBucket(t, providerHealth.Buckets, time.Date(2026, 6, 10, 12, 10, 0, 0, now.Location()))
+	if providerBucket.Success != 1 || providerBucket.Failure != 0 {
+		t.Fatalf("expected apikey shared-auth to be isolated from oauth shared-auth, got %+v", providerBucket)
+	}
+	if providerHealth.TotalSuccess != 1 || providerHealth.TotalFailure != 0 {
+		t.Fatalf("unexpected apikey shared-auth totals: %+v", providerHealth)
+	}
+
+	emptyHealth, ok := cache.CredentialHealth("oauth", "missing-auth", now)
+	if !ok {
+		t.Fatal("expected missing credential health to still return an empty placeholder")
+	}
+	if len(emptyHealth.Buckets) != 30 || emptyHealth.TotalSuccess != 0 || emptyHealth.TotalFailure != 0 {
+		t.Fatalf("expected empty placeholder health, got %+v", emptyHealth)
+	}
+	for _, bucket := range emptyHealth.Buckets {
+		if bucket.Success != 0 || bucket.Failure != 0 {
+			t.Fatalf("expected empty bucket counts, got %+v", bucket)
+		}
+	}
+}
+
+func TestUsageRecentEventCachePrunesInactiveCredentialHealthKeys(t *testing.T) {
+	withRepositoryTestLocation(t, "UTC")
+	db, err := OpenDatabase(config.Config{SQLitePath: filepath.Join(t.TempDir(), "credential-health-prune.db")})
+	if err != nil {
+		t.Fatalf("OpenDatabase returned error: %v", err)
+	}
+	closeTestDatabase(t, db)
+
+	baseNow := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
+	currentNow := baseNow
+	if _, _, err := InsertUsageEvents(db, []entities.UsageEvent{
+		{EventKey: "stale-auth", AuthType: "oauth", AuthIndex: "stale-auth", Timestamp: baseNow.Add(-20 * time.Minute), Failed: false},
+	}); err != nil {
+		t.Fatalf("InsertUsageEvents returned error: %v", err)
+	}
+	cache, err := NewUsageRecentEventCache(db, UsageRecentEventCacheOptions{Now: func() time.Time { return currentNow }})
+	if err != nil {
+		t.Fatalf("NewUsageRecentEventCache returned error: %v", err)
+	}
+	t.Cleanup(cache.Close)
+
+	staleKey, ok := newCredentialHealthKey("oauth", "stale-auth")
+	if !ok {
+		t.Fatal("expected stale credential key to be valid")
+	}
+	if _, ok := cache.credentialHealth.bucketsByCredential[staleKey]; !ok {
+		t.Fatalf("expected stale credential to be present before prune, got %+v", cache.credentialHealth.bucketsByCredential)
+	}
+
+	currentNow = baseNow.Add(5*time.Hour + 20*time.Minute)
+	cache.appendEvents([]entities.UsageEvent{
+		{EventKey: "fresh-auth", AuthType: "oauth", AuthIndex: "fresh-auth", Timestamp: currentNow.Add(-time.Minute), Failed: false},
+	})
+
+	if _, ok := cache.credentialHealth.bucketsByCredential[staleKey]; ok {
+		t.Fatalf("expected inactive stale credential to be pruned after full prune, got %+v", cache.credentialHealth.bucketsByCredential)
+	}
+}
+
 func TestUsageRecentEventCacheDefaultQueueSizeAllowsShortBursts(t *testing.T) {
 	if usageRecentEventCacheDefaultQueueSize != 100 {
 		t.Fatalf("expected recent cache default queue size 100, got %d", usageRecentEventCacheDefaultQueueSize)
@@ -229,4 +351,15 @@ func TestUsageRecentEventCacheCloseIsConcurrentSafe(t *testing.T) {
 			t.Fatal("expected append after Close to be rejected")
 		}
 	}
+}
+
+func findCredentialHealthBucket(t *testing.T, buckets []CredentialHealthBucket, start time.Time) CredentialHealthBucket {
+	t.Helper()
+	for _, bucket := range buckets {
+		if bucket.StartTime.Equal(start) {
+			return bucket
+		}
+	}
+	t.Fatalf("missing credential health bucket starting at %s in %+v", start, buckets)
+	return CredentialHealthBucket{}
 }
