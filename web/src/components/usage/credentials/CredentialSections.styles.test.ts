@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const credentialStyles = readFileSync(new URL('./CredentialSections.module.scss', import.meta.url), 'utf8')
+const themeStyles = readFileSync(new URL('../../../styles/themes.scss', import.meta.url), 'utf8')
 const credentialShellSource = readFileSync(new URL('./CredentialSectionShell.tsx', import.meta.url), 'utf8')
 const credentialHealthSource = readFileSync(new URL('./CredentialHealthPanel.tsx', import.meta.url), 'utf8')
 const aiProviderSectionSource = readFileSync(new URL('./AiProviderCredentialsSection.tsx', import.meta.url), 'utf8')
@@ -98,7 +99,10 @@ describe('Credential section styles', () => {
     expect(credentialStyles).toMatch(/\.credentialActiveOnlySwitch\s*\{[\s\S]*?padding:\s*4px 5px 4px 10px;/)
     expect(credentialStyles).toMatch(/\.credentialActiveOnlySwitch\s*\{[\s\S]*?border:\s*1px solid var\(--border-color\);/)
     expect(credentialStyles).toMatch(/\.credentialActiveOnlySwitch\s*\{[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-secondary\) 78%, transparent\);/)
-    expect(credentialStyles).toMatch(/\.credentialActiveOnlySwitch\s*\{[\s\S]*?color:\s*#2d2a26;/)
+    expect(cssBlock('.credentialActiveOnlySwitch')).toContain('color: var(--text-primary);')
+    expect(cssBlock('.credentialActiveOnlySwitch')).not.toContain('color: #2d2a26;')
+    expect(themeStyles).toMatch(/:root\s*\{[\s\S]*?--text-primary:\s*#2d2a26;/)
+    expect(themeStyles).toMatch(/\[data-theme='white'\]\s*\{[\s\S]*?--text-primary:\s*#2d2a26;/)
     expect(cssBlock('.credentialActiveOnlySwitch')).toContain('font-size: 11px;')
     expect(cssBlock('.credentialActiveOnlySwitch')).not.toContain('font-size: 12px;')
     expect(credentialStyles).toMatch(/\.credentialActiveOnlySwitch\s*\{[\s\S]*?box-shadow:\s*inset 0 1px 0 rgba\(255, 255, 255, 0\.06\);/)
