@@ -180,6 +180,22 @@ describe('runQuotaResetForAuthIndex', () => {
     expect(calls).toEqual(['reset', 'refresh'])
   })
 
+  it('keeps reset successful when the follow-up quota refresh fails', async () => {
+    const calls: string[] = []
+    const outcome = await runQuotaResetForAuthIndex('auth-1', {
+      resetUsageQuota: async () => {
+        calls.push('reset')
+      },
+      refreshQuotaForAuthIndex: async () => {
+        calls.push('refresh')
+        throw new Error('refresh failed')
+      },
+    })
+
+    expect(outcome).toEqual({ kind: 'success' })
+    expect(calls).toEqual(['reset', 'refresh'])
+  })
+
   it('does not refresh quota when reset fails', async () => {
     const refreshCalls: string[] = []
     const outcome = await runQuotaResetForAuthIndex('auth-1', {

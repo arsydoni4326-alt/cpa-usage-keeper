@@ -241,7 +241,7 @@ describe('Credential section styles', () => {
     expect(credentialStyles).toMatch(/\.credentialQuotaResetTooltip\s*\{[\s\S]*?position:\s*absolute;/)
     expect(credentialStyles).toMatch(/\.credentialQuotaResetTooltip\s*\{[\s\S]*?right:\s*calc\(100% \+ 8px\);/)
     expect(credentialStyles).toMatch(/\.credentialQuotaResetAction:hover \.credentialQuotaResetTooltip[\s\S]*?opacity:\s*1;/)
-    expect(credentialStyles).toMatch(/\.credentialQuotaResetAction:focus-within \.credentialQuotaResetTooltip[\s\S]*?opacity:\s*1;/)
+    expect(credentialStyles).not.toContain('.credentialQuotaResetAction:focus-within .credentialQuotaResetTooltip')
     expect(credentialStyles).toMatch(/\.credentialQuotaResetCount\s*\{[\s\S]*?color:\s*var\(--primary-active\);/)
     expect(credentialStyles).toMatch(/\.credentialQuotaResetCount\s*\{[\s\S]*?font-weight:\s*700;/)
     expect(credentialStyles).toMatch(/\.credentialQuotaResetConfirmButton\s*\{[\s\S]*?background:\s*var\(--primary-color\);/)

@@ -112,6 +112,21 @@ func TestResetRejectsEmptyAuthIndex(t *testing.T) {
 	}
 }
 
+func TestResetRejectsNilServiceWithoutInProgressError(t *testing.T) {
+	var service *Service
+
+	_, err := service.Reset(context.Background(), ResetRequest{AuthIndex: "codex-auth"})
+	if err == nil {
+		t.Fatal("expected nil service error")
+	}
+	if errors.Is(err, ErrResetInProgress) {
+		t.Fatalf("expected nil service error to avoid in-progress semantics, got %v", err)
+	}
+	if err.Error() != "quota service is nil" {
+		t.Fatalf("expected quota service nil error, got %v", err)
+	}
+}
+
 func TestResetReturnsNotFoundForMissingAuthIndex(t *testing.T) {
 	service := NewServiceWithRegistry(openQuotaTestDatabase(t), NewProviderRegistry(nil))
 

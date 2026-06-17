@@ -200,17 +200,22 @@ export async function runQuotaResetForAuthIndex(
   },
 ): Promise<QuotaResetOutcome> {
   try {
-    // reset 只负责消费官方次数；成功后复用现有单行刷新，让缓存继续以官方刷新结果为准。
+    // reset 只负责消费官方次数；失败时不写行内限额缓存，也不触发刷新任务。
     await deps.resetUsageQuota(authIndex)
-    await deps.refreshQuotaForAuthIndex(authIndex)
-    return { kind: 'success' }
   } catch {
-    // reset 失败不写行内限额缓存，也不触发刷新任务，统一用顶部提示反馈给用户。
     return {
       kind: 'error',
       message: quotaResetDisplayError(),
     }
   }
+
+  try {
+    // reset 成功后复用现有单行刷新，让缓存继续以官方刷新结果为准；刷新失败走原有行内错误链路。
+    await deps.refreshQuotaForAuthIndex(authIndex)
+  } catch {
+    // reset 已成功消费官方次数，后续刷新失败不影响本次 reset 的成功提示。
+  }
+  return { kind: 'success' }
 }
 
 export function quotaResetDisplayError(): string {

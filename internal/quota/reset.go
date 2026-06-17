@@ -23,6 +23,9 @@ type ResetResponse struct {
 }
 
 func (s *Service) Reset(ctx context.Context, request ResetRequest) (ResetResponse, error) {
+	if s == nil {
+		return ResetResponse{}, errors.New("quota service is nil")
+	}
 	authIndex := strings.TrimSpace(request.AuthIndex)
 	if authIndex == "" {
 		return ResetResponse{}, fmt.Errorf("%w: auth_index is required", ErrValidation)
