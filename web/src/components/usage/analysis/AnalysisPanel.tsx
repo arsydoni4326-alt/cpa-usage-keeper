@@ -633,6 +633,7 @@ function buildAnalysisTokenChartOptions({ chartTheme, isMobile, totalTokens, tot
         backgroundColor: chartTheme.tooltipBg,
         titleColor: chartTheme.textPrimary,
         bodyColor: chartTheme.tooltipBody,
+        footerColor: chartTheme.tooltipBody,
         borderColor: chartTheme.tooltipBorder,
         borderWidth: 1,
         padding: 10,

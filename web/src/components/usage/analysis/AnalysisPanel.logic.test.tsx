@@ -209,6 +209,7 @@ describe('AnalysisPanel token chart data', () => {
     const tooltipFooter = chartCapture.barOptions?.plugins?.tooltip?.callbacks?.footer;
     expect(typeof tooltipFooter).toBe('function');
     expect(tooltipFooter?.([{ dataIndex: 0 }] as never)).toBe('usage_stats.total_tokens: 1.15K');
+    expect(chartCapture.barOptions?.plugins?.tooltip?.footerColor).toBe('#374151');
   });
 
   it('shows the average total token value as a legend chip while keeping the chart reference line label-free', () => {
