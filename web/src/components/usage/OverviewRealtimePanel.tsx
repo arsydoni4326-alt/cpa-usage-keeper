@@ -283,35 +283,40 @@ function buildSingleLineData(labels: string[], label: string, values: Array<numb
 }
 
 function responseDistributionAveragePoints(
-  points: RealtimeResponseAveragePoint[],
+  points: RealtimeResponseAveragePoint[] | null | undefined,
   fallbackPoints: Array<{ bucket: string; value?: number | null }>,
 ): RealtimeResponseAveragePoint[] {
-  if (points.length > 0) return points;
+  if (points && points.length > 0) return points;
   return fallbackPoints.map((point) => ({
     bucket: point.bucket,
     avg_ms: point.value ?? null,
   }));
 }
 
-function responseDistributionLabels(points: RealtimeResponseAveragePoint[], timezone?: string): string[] {
-  return points.map((point) => formatBucketLabel(point.bucket, timezone));
+function responseDistributionLabels(points: RealtimeResponseAveragePoint[] | null | undefined, timezone?: string): string[] {
+  return (points ?? []).map((point) => formatBucketLabel(point.bucket, timezone));
 }
 
-function responseDistributionValues(points: RealtimeResponseAveragePoint[]): Array<number | null> {
-  return points.map((point) => point.avg_ms == null ? null : safeNumber(point.avg_ms));
-}
-
-function sampleResponseDistributionParticles(particles: RealtimeResponseParticle[]): RealtimeResponseParticle[] {
-  if (particles.length <= RESPONSE_DISTRIBUTION_MAX_PARTICLES) return particles;
-  const lastIndex = particles.length - 1;
-  const lastSampleIndex = RESPONSE_DISTRIBUTION_MAX_PARTICLES - 1;
-  return Array.from({ length: RESPONSE_DISTRIBUTION_MAX_PARTICLES }, (_, index) => {
-    const sourceIndex = index === lastSampleIndex ? lastIndex : Math.floor((index * lastIndex) / lastSampleIndex);
-    return particles[sourceIndex];
+function responseDistributionValues(points: RealtimeResponseAveragePoint[] | null | undefined): Array<number | null> {
+  return (points ?? []).map((point) => {
+    if (point.avg_ms == null) return null;
+    const value = safeNumber(point.avg_ms);
+    return value > 0 ? value : null;
   });
 }
 
-function responseDistributionParticleData(particles: RealtimeResponseParticle[], timezone?: string): ResponseDistributionParticleDatum[] {
+function sampleResponseDistributionParticles(particles: RealtimeResponseParticle[] | null | undefined): RealtimeResponseParticle[] {
+  const safeParticles = (particles ?? []).filter(Boolean);
+  if (safeParticles.length <= RESPONSE_DISTRIBUTION_MAX_PARTICLES) return safeParticles;
+  const lastIndex = safeParticles.length - 1;
+  const lastSampleIndex = RESPONSE_DISTRIBUTION_MAX_PARTICLES - 1;
+  return Array.from({ length: RESPONSE_DISTRIBUTION_MAX_PARTICLES }, (_, index) => {
+    const sourceIndex = index === lastSampleIndex ? lastIndex : Math.floor((index * lastIndex) / lastSampleIndex);
+    return safeParticles[sourceIndex];
+  });
+}
+
+function responseDistributionParticleData(particles: RealtimeResponseParticle[] | null | undefined, timezone?: string): ResponseDistributionParticleDatum[] {
   return sampleResponseDistributionParticles(particles).map((point) => ({
     x: formatBucketLabel(point.bucket, timezone),
     y: safeNumber(point.ms),
@@ -376,7 +381,7 @@ function buildResponseDistributionOptions(
   isDark: boolean,
   isMobile: boolean,
   averageValues: Array<number | null>,
-  particles: RealtimeResponseParticle[],
+  particles: RealtimeResponseParticle[] | null | undefined,
 ): ChartOptions<'line'> {
   const options = buildRealtimeLineOptions(isDark, isMobile, formatRealtimeDuration, { yMaxTicksLimit: 5 });
   const yBounds = responseDistributionLogAxisBounds(averageValues, particles);
@@ -417,15 +422,16 @@ function buildResponseDistributionOptions(
   };
 }
 
-function responseDistributionLogAxisBounds(averageValues: Array<number | null>, particles: RealtimeResponseParticle[]): { min: number; max: number } {
+function responseDistributionLogAxisBounds(averageValues: Array<number | null> | null | undefined, particles: RealtimeResponseParticle[] | null | undefined): { min: number; max: number } {
   let minValue = Number.POSITIVE_INFINITY;
   let maxValue = 0;
-  for (const value of averageValues) {
+  for (const value of averageValues ?? []) {
     if (value == null || !Number.isFinite(value) || value <= 0) continue;
     minValue = Math.min(minValue, value);
     maxValue = Math.max(maxValue, value);
   }
-  for (const particle of particles) {
+  for (const particle of particles ?? []) {
+    if (!particle) continue;
     const value = safeNumber(particle.ms);
     if (!Number.isFinite(value) || value <= 0) continue;
     minValue = Math.min(minValue, value);

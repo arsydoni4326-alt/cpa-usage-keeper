@@ -1611,8 +1611,8 @@ func buildUsageOverviewRealtime(db *gorm.DB, filter dto.UsageQueryFilter, pricin
 			// current usage 的请求数同样包含成功和失败，token 后续只由成功请求累计。
 			applyUsageOverviewRealtimeRequest(realtimeEvent, modelUsage, apiKeyUsage, authFileUsage, aiProviderUsage, identityLookup)
 		}
-		// TTFT 缺失时不补 0，避免 percentile 被无样本 bucket 拉低。
-		if event.TTFTMS != nil {
+		// TTFT 缺失或非正数时不补 0，避免 log 分布和 percentile 被无效样本拉低。
+		if event.TTFTMS != nil && *event.TTFTMS > 0 {
 			bucket.ttftSamples = append(bucket.ttftSamples, *event.TTFTMS)
 		}
 		// Latency 只有正数才作为样本。
@@ -1979,12 +1979,12 @@ func finalizeUsageOverviewRealtime(window, span time.Duration, buckets []usageOv
 			Bucket: bucketKey,
 			AvgMS:  usageOverviewRealtimeAverage(rollingBucket.ttftSamples),
 		})
-		responseDistribution.TTFT.Particles = append(responseDistribution.TTFT.Particles, usageOverviewRealtimeDistributionParticles(bucketKey, rawBucket.ttftSamples)...)
+		responseDistribution.TTFT.Particles = appendUsageOverviewRealtimeDistributionParticles(responseDistribution.TTFT.Particles, bucketKey, rawBucket.ttftSamples)
 		responseDistribution.Latency.AverageLine = append(responseDistribution.Latency.AverageLine, dto.RealtimeResponseAveragePointRecord{
 			Bucket: bucketKey,
 			AvgMS:  usageOverviewRealtimeAverage(rollingBucket.latencySamples),
 		})
-		responseDistribution.Latency.Particles = append(responseDistribution.Latency.Particles, usageOverviewRealtimeDistributionParticles(bucketKey, rawBucket.latencySamples)...)
+		responseDistribution.Latency.Particles = appendUsageOverviewRealtimeDistributionParticles(responseDistribution.Latency.Particles, bucketKey, rawBucket.latencySamples)
 		requestLevel = append(requestLevel, dto.RealtimeRequestLevelPointRecord{
 			Bucket:            bucketKey,
 			RequestsPerMinute: float64(rollingBucket.requests) / aggregationMinutes,
@@ -2026,19 +2026,15 @@ func usageOverviewRealtimeAverage(samples []int64) *float64 {
 	return &value
 }
 
-func usageOverviewRealtimeDistributionParticles(bucket string, samples []int64) []dto.RealtimeResponseParticleRecord {
-	if len(samples) == 0 {
-		return []dto.RealtimeResponseParticleRecord{}
-	}
-	particles := make([]dto.RealtimeResponseParticleRecord, 0, len(samples))
+func appendUsageOverviewRealtimeDistributionParticles(dst []dto.RealtimeResponseParticleRecord, bucket string, samples []int64) []dto.RealtimeResponseParticleRecord {
 	for _, sample := range samples {
-		particles = append(particles, dto.RealtimeResponseParticleRecord{
+		dst = append(dst, dto.RealtimeResponseParticleRecord{
 			Bucket: bucket,
 			MS:     sample,
 			Count:  1,
 		})
 	}
-	return particles
+	return dst
 }
 
 func usageOverviewRealtimeCostPtr(cost float64, available bool) *float64 {

@@ -298,6 +298,51 @@ describe('OverviewRealtimePanel', () => {
     expect(latencyYAxis.max).toBeLessThan(2_000);
   });
 
+  it('omits non-positive response values from logarithmic distribution charts', () => {
+    const malformedRealtime = {
+      ...realtime,
+      response_distribution: {
+        ttft: {
+          average_line: [
+            { bucket: '2026-06-09T11:55:00Z', avg_ms: 0 },
+            { bucket: '2026-06-09T11:55:30Z', avg_ms: -5 },
+            { bucket: '2026-06-09T11:56:00Z', avg_ms: 120 },
+          ],
+          particles: undefined,
+        },
+        latency: {
+          average_line: [
+            { bucket: '2026-06-09T11:55:00Z', avg_ms: 0 },
+            { bucket: '2026-06-09T11:55:30Z', avg_ms: 800 },
+          ],
+          particles: [
+            { bucket: '2026-06-09T11:55:00Z', ms: 0, count: 1 },
+            { bucket: '2026-06-09T11:55:30Z', ms: 900, count: 1 },
+          ],
+        },
+      },
+    } as unknown as OverviewRealtimeBlock;
+
+    renderToStaticMarkup(
+      <OverviewRealtimePanel
+        realtime={malformedRealtime}
+        loading={false}
+        window="15m"
+        onWindowChange={() => {}}
+        isDark={false}
+        isMobile={false}
+        timezone="UTC"
+      />
+    );
+
+    expect(chartCapture.chartCalls[0].data.datasets[0].data).toEqual([null, null, 120]);
+    expect(chartCapture.chartCalls[0].data.datasets[1].data).toEqual([]);
+    expect(chartCapture.chartCalls[1].data.datasets[0].data).toEqual([null, 800]);
+    expect(chartCapture.chartCalls[1].data.datasets[1].data).toEqual([
+      { x: '11:55:30', y: 900, count: 1 },
+    ]);
+  });
+
   it('caps response distribution particles at one thousand points', () => {
     const particles = Array.from({ length: 1_205 }, (_, index) => ({
       bucket: `2026-06-09T11:${String(40 + Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}Z`,
