@@ -36,6 +36,7 @@ import {
   type RequestEventColumnId,
 } from '@/components/usage/RequestEventsDetailsCard';
 import { buildUsageRangeQuery } from '@/utils/usage/rangeQuery';
+import { getDailyAveragePanelUsage, isDailyAverageRange } from '@/utils/usage/overview';
 import {
   type UsageTimeRange
 } from '@/utils/usage';
@@ -769,6 +770,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
 
   const {
     usage,
+    currentUsage: currentOverviewUsage,
     loading,
     error,
     lastRefreshedAt,
@@ -1591,6 +1593,12 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   } = useSparklines({ usage, loading });
 
   const overviewDisplayLoading = getOverviewDisplayLoading({ loading, hasUsage: Boolean(usage) });
+  const reserveDailyAveragePanel = isDailyAverageRange({
+    range: timeRange,
+    customStart: effectiveCustomTimeRange.start,
+    customEnd: effectiveCustomTimeRange.end,
+  });
+  const dailyAveragePanelUsage = getDailyAveragePanelUsage(currentOverviewUsage, usage, reserveDailyAveragePanel);
 
   return (
     <div className={styles.pageShell}>
@@ -1872,7 +1880,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
 
             {activeTab === 'overview' && (
               <>
-                <DailyAveragePanel usage={usage} loading={overviewDisplayLoading} />
+                <DailyAveragePanel usage={dailyAveragePanelUsage} loading={overviewDisplayLoading} reserveVisible={reserveDailyAveragePanel} />
 
                 <StatCards
                   usage={usage}

@@ -64,6 +64,7 @@ describe('buildDailyAverageMetrics', () => {
 
     expect(metrics).toBeNull();
   });
+
 });
 
 describe('DailyAveragePanel', () => {
@@ -87,5 +88,16 @@ describe('DailyAveragePanel', () => {
     const html = renderToStaticMarkup(<DailyAveragePanel usage={null} loading={false} />);
 
     expect(html).toBe('');
+  });
+
+  it('keeps the panel shell visible while another daily-average range is loading', () => {
+    const html = renderToStaticMarkup(<DailyAveragePanel usage={null} loading={true} reserveVisible />);
+
+    expect(html).toContain('Daily Average');
+    expect(html).toContain('Avg Requests');
+    expect(html).toContain('Avg Tokens');
+    expect(html).toContain('Avg Cost');
+    expect(html).not.toContain('Range ');
+    expect(html).not.toContain('65.9');
   });
 });

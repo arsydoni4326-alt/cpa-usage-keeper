@@ -18,6 +18,7 @@ interface DailyAverageMetrics {
 interface DailyAveragePanelProps {
   usage: UsageOverviewPayload | null;
   loading: boolean;
+  reserveVisible?: boolean;
 }
 
 interface DailyAverageMetricItem {
@@ -66,26 +67,27 @@ export function buildDailyAverageMetrics(usage: UsageOverviewPayload | null): Da
   };
 }
 
-export function DailyAveragePanel({ usage, loading }: DailyAveragePanelProps) {
+export function DailyAveragePanel({ usage, loading, reserveVisible = false }: DailyAveragePanelProps) {
   const { t } = useTranslation();
   const metrics = useMemo(() => buildDailyAverageMetrics(usage), [usage]);
-  const [displayMetrics, setDisplayMetrics] = useState<DailyAverageMetrics | null>(metrics);
+  const shouldRenderPanel = Boolean(metrics) || reserveVisible;
+  const [renderPanel, setRenderPanel] = useState(shouldRenderPanel);
   const [visible, setVisible] = useState(false);
-  const displayMetricsRef = useRef(displayMetrics);
+  const renderPanelRef = useRef(renderPanel);
 
   useEffect(() => {
-    displayMetricsRef.current = displayMetrics;
-  }, [displayMetrics]);
+    renderPanelRef.current = renderPanel;
+  }, [renderPanel]);
 
   useEffect(() => {
     let frame: number | null = null;
     let enterFrame: number | null = null;
     let timer: number | null = null;
 
-    if (metrics) {
+    if (shouldRenderPanel) {
       frame = window.requestAnimationFrame(() => {
-        const hadPanel = displayMetricsRef.current !== null;
-        setDisplayMetrics(metrics);
+        const hadPanel = renderPanelRef.current;
+        setRenderPanel(true);
         if (hadPanel) {
           setVisible(true);
           return;
@@ -100,14 +102,14 @@ export function DailyAveragePanel({ usage, loading }: DailyAveragePanelProps) {
     }
 
     frame = window.requestAnimationFrame(() => setVisible(false));
-    timer = window.setTimeout(() => setDisplayMetrics(null), DAILY_AVERAGE_TRANSITION_MS);
+    timer = window.setTimeout(() => setRenderPanel(false), DAILY_AVERAGE_TRANSITION_MS);
     return () => {
       if (frame !== null) window.cancelAnimationFrame(frame);
       if (timer !== null) window.clearTimeout(timer);
     };
-  }, [metrics]);
+  }, [shouldRenderPanel]);
 
-  if (!displayMetrics) {
+  if (!renderPanel) {
     return null;
   }
 
@@ -115,21 +117,21 @@ export function DailyAveragePanel({ usage, loading }: DailyAveragePanelProps) {
     {
       key: 'requests',
       label: t('usage_stats.avg_requests'),
-      value: loading ? '-' : formatAverageCount(displayMetrics.requests),
+      value: loading || !metrics ? '-' : formatAverageCount(metrics.requests),
       icon: <IconSatellite size={15} />,
       accent: '#3b82f6',
     },
     {
       key: 'tokens',
       label: t('usage_stats.avg_tokens'),
-      value: loading ? '-' : formatCompactNumber(displayMetrics.tokens),
+      value: loading || !metrics ? '-' : formatCompactNumber(metrics.tokens),
       icon: <IconDiamond size={15} />,
       accent: '#8b5cf6',
     },
     {
       key: 'cost',
       label: t('usage_stats.avg_cost'),
-      value: loading ? '-' : formatUsd(displayMetrics.cost),
+      value: loading || !metrics ? '-' : formatUsd(metrics.cost),
       icon: <IconDollarSign size={15} />,
       accent: '#f59e0b',
       className: styles.dailyAverageMetricCost,
@@ -143,9 +145,11 @@ export function DailyAveragePanel({ usage, loading }: DailyAveragePanelProps) {
     >
       <div className={styles.dailyAverageIdentity}>
         <span className={styles.dailyAverageTitle}>{t('usage_stats.daily_average')}</span>
-        <span className={styles.dailyAverageRangePill}>
-          {t('usage_stats.daily_average_range', { days: formatRangeDays(displayMetrics.rangeDays) })}
-        </span>
+        {metrics && (
+          <span className={styles.dailyAverageRangePill}>
+            {t('usage_stats.daily_average_range', { days: formatRangeDays(metrics.rangeDays) })}
+          </span>
+        )}
       </div>
       <div className={styles.dailyAverageMetrics}>
         {metricItems.map((item) => (
@@ -162,7 +166,7 @@ export function DailyAveragePanel({ usage, loading }: DailyAveragePanelProps) {
           </div>
         ))}
       </div>
-      {!displayMetrics.costAvailable && (
+      {metrics && !metrics.costAvailable && (
         <span className={styles.dailyAverageCostHint}>{t('usage_stats.cost_need_price')}</span>
       )}
     </section>

@@ -47,8 +47,8 @@ describe('UsagePage toolbar styles', () => {
   })
 
   it('places the Daily Average panel above stat cards with animated responsive styling', () => {
-    const usageDailyAverageIndex = usagePageSource.indexOf('<DailyAveragePanel usage={usage} loading={overviewDisplayLoading} />')
-    const keyDailyAverageIndex = keyOverviewPageSource.indexOf('<DailyAveragePanel usage={usage} loading={overviewDisplayLoading} />')
+    const usageDailyAverageIndex = usagePageSource.indexOf('<DailyAveragePanel usage={dailyAveragePanelUsage} loading={overviewDisplayLoading} reserveVisible={reserveDailyAveragePanel} />')
+    const keyDailyAverageIndex = keyOverviewPageSource.indexOf('<DailyAveragePanel usage={dailyAveragePanelUsage} loading={overviewDisplayLoading} reserveVisible={reserveDailyAveragePanel} />')
     expect(usageDailyAverageIndex).toBeGreaterThanOrEqual(0)
     expect(keyDailyAverageIndex).toBeGreaterThanOrEqual(0)
     expect(usageDailyAverageIndex).toBeLessThan(usagePageSource.indexOf('<StatCards'))
