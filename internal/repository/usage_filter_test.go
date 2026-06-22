@@ -1314,8 +1314,21 @@ func TestBuildUsageOverviewRealtimeWithFilterBuildsRealtimeBlockFromRecentCache(
 		realtime.ResponseDistribution.Latency.AverageLine[26].AvgMS == nil || math.Abs(*realtime.ResponseDistribution.Latency.AverageLine[26].AvgMS-900) > 0.000000001 {
 		t.Fatalf("expected failed request latency distribution without ttft after sliding carry, got ttft=%+v latency=%+v", realtime.ResponseDistribution.TTFT.AverageLine[26], realtime.ResponseDistribution.Latency.AverageLine[26])
 	}
-	if len(realtime.ResponseDistribution.TTFT.Particles) == 0 || len(realtime.ResponseDistribution.Latency.Particles) == 0 {
-		t.Fatalf("expected response distribution particles to be populated, got ttft=%+v latency=%+v", realtime.ResponseDistribution.TTFT.Particles, realtime.ResponseDistribution.Latency.Particles)
+	expectedTTFTParticles := []dto.RealtimeResponseParticleRecord{
+		{Bucket: "2026-06-09T11:55:00Z", MS: 100, Count: 1},
+		{Bucket: "2026-06-09T11:55:00Z", MS: 200, Count: 1},
+	}
+	if !reflect.DeepEqual(realtime.ResponseDistribution.TTFT.Particles, expectedTTFTParticles) {
+		t.Fatalf("expected response distribution TTFT particles to map one usage event to one point, got %+v", realtime.ResponseDistribution.TTFT.Particles)
+	}
+	expectedLatencyParticles := []dto.RealtimeResponseParticleRecord{
+		{Bucket: "2026-06-09T11:55:00Z", MS: 500, Count: 1},
+		{Bucket: "2026-06-09T11:55:00Z", MS: 700, Count: 1},
+		{Bucket: "2026-06-09T11:55:30Z", MS: 900, Count: 1},
+		{Bucket: "2026-06-09T11:59:30Z", MS: 300, Count: 1},
+	}
+	if !reflect.DeepEqual(realtime.ResponseDistribution.Latency.Particles, expectedLatencyParticles) {
+		t.Fatalf("expected response distribution latency particles to map one usage event to one point, got %+v", realtime.ResponseDistribution.Latency.Particles)
 	}
 	if realtime.RequestLevel[21].Requests != 3 || realtime.RequestLevel[21].RequestsPerMinute != 1 {
 		t.Fatalf("expected request level to use the 3m sliding window, got %+v", realtime.RequestLevel[21])
