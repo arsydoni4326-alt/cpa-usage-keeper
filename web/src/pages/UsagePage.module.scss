@@ -1895,7 +1895,7 @@
   flex: 0 0 auto;
   flex-direction: column;
   gap: 12px;
-  height: var(--settings-list-scroll-height);
+  max-height: var(--settings-list-scroll-height);
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
@@ -2088,7 +2088,7 @@
   }
 
   .sessionSettingsBody {
-    height: var(--settings-list-scroll-height);
+    max-height: var(--settings-list-scroll-height);
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
