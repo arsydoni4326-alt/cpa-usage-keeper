@@ -317,6 +317,7 @@ describe('OverviewRealtimePanel', () => {
       response_distribution: {
         ttft: {
           average_line: [
+            null,
             { bucket: '2026-06-09T11:55:00Z', avg_ms: 0 },
             { bucket: '2026-06-09T11:55:30Z', avg_ms: -5 },
             { bucket: '2026-06-09T11:56:00Z', avg_ms: 120 },
@@ -325,6 +326,7 @@ describe('OverviewRealtimePanel', () => {
         },
         latency: {
           average_line: [
+            undefined,
             { bucket: '2026-06-09T11:55:00Z', avg_ms: 0 },
             { bucket: '2026-06-09T11:55:30Z', avg_ms: 800 },
           ],

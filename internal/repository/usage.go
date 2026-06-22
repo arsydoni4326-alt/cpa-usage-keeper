@@ -2057,8 +2057,7 @@ func sampleUsageOverviewRealtimeDistributionParticles(particles []dto.RealtimeRe
 
 	sampled := make([]dto.RealtimeResponseParticleRecord, 0, maxParticles)
 	for index := 0; index < maxParticles; index++ {
-		start := index * len(sortedParticles) / maxParticles
-		end := (index + 1) * len(sortedParticles) / maxParticles
+		start, end := usageOverviewRealtimeDistributionParticleRange(index, len(sortedParticles), maxParticles)
 		if end <= start {
 			end = start + 1
 		}
@@ -2069,6 +2068,15 @@ func sampleUsageOverviewRealtimeDistributionParticles(particles []dto.RealtimeRe
 		sampled = append(sampled, representative)
 	}
 	return sampled
+}
+
+func usageOverviewRealtimeDistributionParticleRange(index, particleCount, maxParticles int) (int, int) {
+	if maxParticles <= 0 {
+		return 0, 0
+	}
+	start := int(int64(index) * int64(particleCount) / int64(maxParticles))
+	end := int(int64(index+1) * int64(particleCount) / int64(maxParticles))
+	return start, end
 }
 
 func usageOverviewRealtimeParticleTimeKey(particle dto.RealtimeResponseParticleRecord) string {

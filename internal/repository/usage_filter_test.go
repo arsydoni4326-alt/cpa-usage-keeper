@@ -1487,6 +1487,13 @@ func TestBuildUsageOverviewRealtimeWithFilterCapsResponseDistributionParticles(t
 	assertRealtimeDistributionParticleCap(t, realtime.ResponseDistribution.Latency, sampleCount)
 }
 
+func TestUsageOverviewRealtimeDistributionParticleRangeUsesWideArithmetic(t *testing.T) {
+	start, end := usageOverviewRealtimeDistributionParticleRange(999, 2_200_000, 1000)
+	if start != 2_197_800 || end != 2_200_000 {
+		t.Fatalf("expected wide particle range arithmetic, got start=%d end=%d", start, end)
+	}
+}
+
 func assertRealtimeDistributionParticleCap(t *testing.T, series dto.RealtimeResponseDistributionSeriesRecord, totalSamples int64) {
 	t.Helper()
 	if len(series.Particles) > 1000 {

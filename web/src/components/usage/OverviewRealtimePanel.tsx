@@ -294,7 +294,7 @@ function responseDistributionAveragePoints(
 }
 
 function responseDistributionValues(points: RealtimeResponseAveragePoint[] | null | undefined): Array<number | null> {
-  return (points ?? []).map((point) => {
+  return (points ?? []).filter(Boolean).map((point) => {
     if (point.avg_ms == null) return null;
     const value = safeNumber(point.avg_ms);
     return value > 0 ? value : null;
@@ -307,7 +307,7 @@ function parseResponseDistributionTime(value: string | null | undefined): number
 }
 
 function responseDistributionAverageData(points: RealtimeResponseAveragePoint[] | null | undefined): ResponseDistributionDatum[] {
-  return (points ?? []).map((point) => {
+  return (points ?? []).filter(Boolean).map((point) => {
     const x = parseResponseDistributionTime(point.bucket);
     if (x == null) return null;
     if (point.avg_ms == null) return { x, y: null };
