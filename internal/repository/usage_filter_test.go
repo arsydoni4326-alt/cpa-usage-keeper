@@ -1099,6 +1099,17 @@ func TestBuildUsageOverviewWithFilterUsesExactPresetWindowMinutes(t *testing.T) 
 			if overview.Summary.WindowMinutes != tc.expectMinutes {
 				t.Fatalf("expected %d minute window, got %+v", tc.expectMinutes, overview.Summary)
 			}
+			if tc.rangeName == "24h" {
+				if overview.Summary.DailyAverageRequests != nil || overview.Summary.DailyAverageTokens != nil || overview.Summary.DailyAverageCost != nil || overview.Summary.DailyAverageRangeDays != nil {
+					t.Fatalf("expected 24h overview not to expose daily averages, got %+v", overview.Summary)
+				}
+			}
+			if tc.rangeName == "7d" {
+				assertFloat64PtrClose(t, overview.Summary.DailyAverageRequests, 1.0/7.0)
+				assertFloat64PtrClose(t, overview.Summary.DailyAverageTokens, 25.0/7.0)
+				assertFloat64PtrClose(t, overview.Summary.DailyAverageCost, overview.Summary.TotalCost/7.0)
+				assertFloat64PtrClose(t, overview.Summary.DailyAverageRangeDays, 7.0)
+			}
 			if len(overview.Series.Requests) != 1 || overview.Series.Requests[tc.expectBucketKey] != 1 {
 				t.Fatalf("unexpected request series for %s: %+v", tc.rangeName, overview.Series.Requests)
 			}
@@ -1108,6 +1119,16 @@ func TestBuildUsageOverviewWithFilterUsesExactPresetWindowMinutes(t *testing.T) 
 				t.Fatalf("DELETE %s returned error: %v", table, err)
 			}
 		}
+	}
+}
+
+func assertFloat64PtrClose(t *testing.T, actual *float64, expected float64) {
+	t.Helper()
+	if actual == nil {
+		t.Fatalf("expected %.8f, got nil", expected)
+	}
+	if diff := math.Abs(*actual - expected); diff > 0.0000001 {
+		t.Fatalf("expected %.8f, got %.8f", expected, *actual)
 	}
 }
 

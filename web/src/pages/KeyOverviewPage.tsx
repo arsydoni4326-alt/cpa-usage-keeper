@@ -9,6 +9,7 @@ import { IconRefreshCw } from '@/components/ui/icons';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useThemeStore } from '@/stores';
 import {
+  DailyAveragePanel,
   OverviewRealtimePanel,
   ServiceHealthCard,
   StatCards,
@@ -488,6 +489,8 @@ export function KeyOverviewPage({ apiKey, onAuthRequired }: KeyOverviewPageProps
             </div>
 
             {displayError && <div className={styles.errorBox}>{displayError}</div>}
+
+            <DailyAveragePanel usage={usage} loading={overviewDisplayLoading} />
 
             <StatCards
               usage={usage}

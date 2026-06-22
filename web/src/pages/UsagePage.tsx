@@ -13,6 +13,7 @@ import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useThemeStore } from '@/stores';
 import {
   StatCards,
+  DailyAveragePanel,
   OverviewRealtimePanel,
   AnalysisPanel,
   ApiKeySettingsCard,
@@ -1871,6 +1872,8 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
 
             {activeTab === 'overview' && (
               <>
+                <DailyAveragePanel usage={usage} loading={overviewDisplayLoading} />
+
                 <StatCards
                   usage={usage}
                   loading={overviewDisplayLoading}
