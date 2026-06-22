@@ -1,4 +1,5 @@
 import type { UsageTimeRange } from '@/lib/types';
+import { buildUsageRangeQuery } from '@/utils/usage/rangeQuery';
 
 export const getOverviewDisplayLoading = ({ loading, hasUsage }: { loading: boolean; hasUsage: boolean }) => loading && !hasUsage;
 
@@ -17,9 +18,8 @@ export const getDailyAveragePanelUsage = <T>(
   currentUsage: T | null,
   fallbackUsage: T | null,
   reserveVisible: boolean,
-): T | null => currentUsage ?? (reserveVisible ? fallbackUsage : null);
-
-const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
+  loading = false,
+): T | null => currentUsage ?? (reserveVisible && loading ? fallbackUsage : null);
 
 export const isDailyAverageRange = ({
   range,
@@ -30,13 +30,15 @@ export const isDailyAverageRange = ({
   customStart?: string;
   customEnd?: string;
 }): boolean => {
-  if (range === '7d' || range === '30d') {
-    return true;
-  }
-  if (range !== 'custom') {
+  const rangeQuery = buildUsageRangeQuery({ range, customStart, customEnd });
+  if (!rangeQuery.valid) {
     return false;
   }
-  const start = customStart?.trim() ?? '';
-  const end = customEnd?.trim() ?? '';
-  return dateOnlyPattern.test(start) && dateOnlyPattern.test(end) && start < end;
+  if (rangeQuery.range === '7d' || rangeQuery.range === '30d') {
+    return true;
+  }
+  if (rangeQuery.range !== 'custom') {
+    return false;
+  }
+  return Boolean(rangeQuery.start && rangeQuery.end && rangeQuery.start < rangeQuery.end);
 };

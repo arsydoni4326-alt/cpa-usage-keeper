@@ -1598,7 +1598,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     customStart: effectiveCustomTimeRange.start,
     customEnd: effectiveCustomTimeRange.end,
   });
-  const dailyAveragePanelUsage = getDailyAveragePanelUsage(currentOverviewUsage, usage, reserveDailyAveragePanel);
+  const dailyAveragePanelUsage = getDailyAveragePanelUsage(currentOverviewUsage, usage, reserveDailyAveragePanel, loading);
 
   return (
     <div className={styles.pageShell}>

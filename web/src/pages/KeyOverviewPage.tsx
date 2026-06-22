@@ -330,7 +330,7 @@ export function KeyOverviewPage({ apiKey, onAuthRequired }: KeyOverviewPageProps
   const overviewDisplayLoading = getOverviewDisplayLoading({ loading, hasUsage: Boolean(usage) });
   const currentOverviewUsage = getCurrentOverviewUsage(usage, timeRange, loadedUsageRange);
   const reserveDailyAveragePanel = isDailyAverageRange({ range: timeRange });
-  const dailyAveragePanelUsage = getDailyAveragePanelUsage(currentOverviewUsage, usage, reserveDailyAveragePanel);
+  const dailyAveragePanelUsage = getDailyAveragePanelUsage(currentOverviewUsage, usage, reserveDailyAveragePanel, loading);
   const {
     requestsSparkline,
     tokensSparkline,

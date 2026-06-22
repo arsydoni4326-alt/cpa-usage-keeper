@@ -24,6 +24,7 @@ describe('shared usage overview helpers', () => {
     expect(isDailyAverageRange({ range: '30d' })).toBe(true);
     expect(isDailyAverageRange({ range: 'custom', customStart: '2026-06-01', customEnd: '2026-06-02' })).toBe(true);
     expect(isDailyAverageRange({ range: 'custom', customStart: '2026-06-01', customEnd: '2026-06-01' })).toBe(false);
+    expect(isDailyAverageRange({ range: 'custom', customStart: '2026-02-31', customEnd: '2026-03-02' })).toBe(false);
     expect(isDailyAverageRange({ range: '24h' })).toBe(false);
     expect(isDailyAverageRange({ range: 'today' })).toBe(false);
     expect(isDailyAverageRange({ range: 'yesterday' })).toBe(false);
@@ -34,7 +35,8 @@ describe('shared usage overview helpers', () => {
     const fallbackUsage = { summary: { daily_average_requests: 7 } };
 
     expect(getDailyAveragePanelUsage(currentUsage, fallbackUsage, true)).toBe(currentUsage);
-    expect(getDailyAveragePanelUsage(null, fallbackUsage, true)).toBe(fallbackUsage);
-    expect(getDailyAveragePanelUsage(null, fallbackUsage, false)).toBeNull();
+    expect(getDailyAveragePanelUsage(null, fallbackUsage, true, true)).toBe(fallbackUsage);
+    expect(getDailyAveragePanelUsage(null, fallbackUsage, true, false)).toBeNull();
+    expect(getDailyAveragePanelUsage(null, fallbackUsage, false, true)).toBeNull();
   });
 });
