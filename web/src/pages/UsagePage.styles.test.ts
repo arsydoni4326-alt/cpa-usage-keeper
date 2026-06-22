@@ -158,12 +158,28 @@ describe('UsagePage toolbar styles', () => {
     expect(apiKeySettingsMobileBlock).toMatch(/\.apiKeyAliasInput\s*\{[\s\S]*?max-width:\s*100%;/)
   })
 
-  it('keeps Session Management content in a fixed scroll viewport', () => {
+  it('lets Session Management content shrink until it needs to scroll', () => {
+    const sessionSettingsBodyBlock = usagePageStyles.slice(
+      usagePageStyles.indexOf('.sessionSettingsBody {'),
+      usagePageStyles.indexOf('.sessionSettingsList')
+    )
+    const sessionSettingsMobileBlock = usagePageStyles.slice(
+      usagePageStyles.indexOf('@include mobile {\n  .apiKeySettingsCard:global(.card)'),
+      usagePageStyles.indexOf('.pricesList')
+    )
+    const sessionSettingsMobileBodyBlock = sessionSettingsMobileBlock.slice(
+      sessionSettingsMobileBlock.indexOf('  .sessionSettingsBody {'),
+      sessionSettingsMobileBlock.indexOf('  .sessionSettingsItem {')
+    )
+
     expect(usagePageStyles).toMatch(/\.sessionSettingsCard:global\(\.card\)\s*\{[\s\S]*?min-height:\s*auto;/)
     expect(usagePageStyles).toMatch(/\.sessionSettingsBody\s*\{[\s\S]*?flex:\s*0 0 auto;/)
-    expect(usagePageStyles).toMatch(/\.sessionSettingsBody\s*\{[\s\S]*?\n\s{2}height:\s*var\(--settings-list-scroll-height\);/)
+    expect(sessionSettingsBodyBlock).toMatch(/\n\s{2}max-height:\s*var\(--settings-list-scroll-height\);/)
+    expect(sessionSettingsBodyBlock).not.toMatch(/\n\s{2}height:\s*var\(--settings-list-scroll-height\);/)
     expect(usagePageStyles).toMatch(/\.sessionSettingsBody\s*\{[\s\S]*?overflow-y:\s*auto;/)
     expect(usagePageStyles).toMatch(/\.sessionSettingsBody\s*\{[\s\S]*?overflow-x:\s*hidden;/)
+    expect(sessionSettingsMobileBodyBlock).toMatch(/\n\s{4}max-height:\s*var\(--settings-list-scroll-height\);/)
+    expect(sessionSettingsMobileBodyBlock).not.toMatch(/\n\s{4}height:\s*var\(--settings-list-scroll-height\);/)
   })
 
   it('reserves the Session Management action column so current rows keep timestamps aligned', () => {
