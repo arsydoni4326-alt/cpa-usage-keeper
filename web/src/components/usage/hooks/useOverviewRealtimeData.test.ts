@@ -39,4 +39,13 @@ describe('resolveDisplayRealtime', () => {
       realtimeQueryKey: ':60m',
     })).toBeNull();
   });
+
+  it('hides stale realtime data while loading if the API key changes', () => {
+    expect(resolveDisplayRealtime({
+      realtime: realtimeForWindow('15m'),
+      loading: true,
+      lastRealtimeQueryKey: 'key-a:15m',
+      realtimeQueryKey: 'key-b:15m',
+    })).toBeNull();
+  });
 });
