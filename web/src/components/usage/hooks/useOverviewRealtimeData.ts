@@ -20,8 +20,8 @@ export interface UseOverviewRealtimeDataOptions {
 
 interface ResolveDisplayRealtimeOptions {
   realtime: OverviewRealtimeBlock | null;
-  loading: boolean;
   lastRealtimeQueryKey: string | null;
+  lastRealtimeErrorQueryKey?: string | null;
   realtimeQueryKey: string;
 }
 
@@ -33,12 +33,13 @@ const realtimeQueryScope = (queryKey: string | null): string | null => {
 
 export function resolveDisplayRealtime({
   realtime,
-  loading,
   lastRealtimeQueryKey,
+  lastRealtimeErrorQueryKey,
   realtimeQueryKey,
 }: ResolveDisplayRealtimeOptions): OverviewRealtimeBlock | null {
   if (lastRealtimeQueryKey === realtimeQueryKey) return realtime;
-  if (loading && realtime && realtimeQueryScope(lastRealtimeQueryKey) === realtimeQueryScope(realtimeQueryKey)) {
+  if (lastRealtimeErrorQueryKey === realtimeQueryKey) return null;
+  if (realtime && realtimeQueryScope(lastRealtimeQueryKey) === realtimeQueryScope(realtimeQueryKey)) {
     return realtime;
   }
   return null;
@@ -56,8 +57,8 @@ export function useOverviewRealtimeData(options: UseOverviewRealtimeDataOptions 
   const realtimeQueryKey = `${apiKeyId ?? ''}:${realtimeWindow ?? ''}`;
   const currentRealtime = resolveDisplayRealtime({
     realtime,
-    loading,
     lastRealtimeQueryKey,
+    lastRealtimeErrorQueryKey,
     realtimeQueryKey,
   });
 
