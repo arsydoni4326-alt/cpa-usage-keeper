@@ -572,6 +572,18 @@ func TestStopRefreshTasksStopsUsageHeaderWorker(t *testing.T) {
 	}
 }
 
+func TestNewServiceUsesOneMinuteUsageHeaderSnapshotFlushInterval(t *testing.T) {
+	// 默认构造 service，用生产默认值初始化 usage header snapshot worker。
+	service := NewServiceWithRegistry(openQuotaTestDatabase(t), NewProviderRegistry(nil))
+	// 测试结束时关闭 worker，避免后台 goroutine 泄漏到后续测试。
+	defer service.StopRefreshTasks()
+
+	// 默认 flush 间隔必须保持 1 分钟，防止高频 header 写 cache 又退回 30s。
+	if service.usageHeaderFlushInterval != time.Minute {
+		t.Fatalf("expected default usage header snapshot flush interval 1m, got %s", service.usageHeaderFlushInterval)
+	}
+}
+
 func TestTryAppendUsageHeaderSnapshotsWaitsForFlushBeforeApplyingOrQueryingIdentity(t *testing.T) {
 	db := openQuotaTestDatabase(t)
 	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "codex-auth", Provider: "codex", Type: "codex", AuthType: entities.UsageIdentityAuthTypeAuthFile})
