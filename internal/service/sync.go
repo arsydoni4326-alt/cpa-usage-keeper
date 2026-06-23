@@ -286,14 +286,11 @@ func (s *SyncService) processRedisInboxRows(ctx context.Context, inboxRows []ent
 		}
 		return nil
 	})
-	if result == nil {
+	// 事务错误或未产出持久化结果时统一走失败路径，避免两个等价分支后续漂移。
+	if err != nil || result == nil {
+		// 有具体错误时把可重试行标成 process_failed，异常空结果也复用同一保守返回。
 		markRedisInboxRowsProcessFailed(s.db, validRows, err)
-		// 事务未能进入持久化路径时也返回批次信号，避免 runner 和日志丢失本轮取数。
-		return newRedisBatchSyncResult("failed", processedRows), err
-	}
-	if err != nil {
-		markRedisInboxRowsProcessFailed(s.db, validRows, err)
-		// 事务失败时保留本轮已取行数，但不允许 runner 立即忙循环。
+		// 失败返回仍保留本轮已取行数，但不允许 runner 立即忙循环。
 		return newRedisBatchSyncResult("failed", processedRows), err
 	}
 	if result.InsertedEvents > 0 {
