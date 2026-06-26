@@ -141,6 +141,9 @@ func openQuotaTestDB(t *testing.T) *gorm.DB {
 
 func seedUsageIdentity(t *testing.T, db *gorm.DB, identity entities.UsageIdentity) {
 	t.Helper()
+	if identity.Name == "" {
+		identity.Name = identity.Identity
+	}
 	identity.CreatedAt = time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC)
 	identity.UpdatedAt = identity.CreatedAt
 	if err := db.Create(&identity).Error; err != nil {

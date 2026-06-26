@@ -1,4 +1,4 @@
-package quota
+package test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"cpa-usage-keeper/internal/entities"
+	. "cpa-usage-keeper/internal/quota"
 	"github.com/sirupsen/logrus"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 )
@@ -26,7 +27,7 @@ func TestRunAutoRefreshSkipsWhenNoActiveStatus(t *testing.T) {
 	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-1", Provider: "claude", Type: "auth-file", AuthType: entities.UsageIdentityAuthTypeAuthFile})
 	handler := &refreshHandlerStub{output: ProviderOutput{Result: ClaudeResult{Usage: &ClaudeUsagePayload{FiveHour: &ClaudeUsageWindow{Utilization: 25}}}}}
 	service := NewServiceWithRegistry(db, NewProviderRegistry(map[string]ProviderHandler{"claude": handler}))
-	service.refreshCooldown = func(time.Duration) {}
+	setRefreshCooldown(service, func(time.Duration) {})
 
 	if err := service.RunAutoRefresh(context.Background()); err != nil {
 		t.Fatalf("RunAutoRefresh returned error: %v", err)
@@ -44,7 +45,7 @@ func TestRecordActiveStatusStartsAutoRefreshWhenBecomingActive(t *testing.T) {
 	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-1", Provider: "claude", Type: "auth-file", AuthType: entities.UsageIdentityAuthTypeAuthFile})
 	handler := &refreshHandlerStub{output: ProviderOutput{Result: ClaudeResult{Usage: &ClaudeUsagePayload{FiveHour: &ClaudeUsageWindow{Utilization: 25}}}}}
 	service := NewServiceWithRegistry(db, NewProviderRegistry(map[string]ProviderHandler{"claude": handler}))
-	service.refreshCooldown = func(time.Duration) {}
+	setRefreshCooldown(service, func(time.Duration) {})
 
 	service.RecordActiveStatus(time.Now())
 
@@ -60,7 +61,7 @@ func TestRecordActiveStatusDoesNotRestartAutoRefreshWhileAlreadyActive(t *testin
 	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-1", Provider: "claude", Type: "auth-file", AuthType: entities.UsageIdentityAuthTypeAuthFile})
 	handler := &refreshHandlerStub{output: ProviderOutput{Result: ClaudeResult{Usage: &ClaudeUsagePayload{FiveHour: &ClaudeUsageWindow{Utilization: 25}}}}}
 	service := NewServiceWithRegistry(db, NewProviderRegistry(map[string]ProviderHandler{"claude": handler}))
-	service.refreshCooldown = func(time.Duration) {}
+	setRefreshCooldown(service, func(time.Duration) {})
 	now := time.Now()
 
 	service.RecordActiveStatus(now)
@@ -79,12 +80,10 @@ func TestRecordActiveStatusDoesNotStartAutoRefreshWhenLastRoundIsRecent(t *testi
 	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-1", Provider: "claude", Type: "auth-file", AuthType: entities.UsageIdentityAuthTypeAuthFile})
 	handler := &refreshHandlerStub{output: ProviderOutput{Result: ClaudeResult{Usage: &ClaudeUsagePayload{FiveHour: &ClaudeUsageWindow{Utilization: 25}}}}}
 	service := NewServiceWithRegistry(db, NewProviderRegistry(map[string]ProviderHandler{"claude": handler}))
-	service.refreshCooldown = func(time.Duration) {}
+	setRefreshCooldown(service, func(time.Duration) {})
 	now := time.Now()
 	markBackendPageActiveForAutoRefreshTest(service, now.Add(-AutoRefreshActiveTTL-time.Second))
-	service.autoRefreshMu.Lock()
-	service.lastAutoRefreshRoundAt = now.Add(-time.Minute)
-	service.autoRefreshMu.Unlock()
+	setLastAutoRefreshRoundAt(service, now.Add(-time.Minute))
 
 	service.RecordActiveStatus(now)
 	service.WaitRefreshTasks()
@@ -108,7 +107,7 @@ func TestRunAutoRefreshQueuesOnlyActiveAuthFiles(t *testing.T) {
 	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "unsupported-1", Provider: "vertex", Type: "vertex", AuthType: entities.UsageIdentityAuthTypeAuthFile})
 	handler := &refreshHandlerStub{output: ProviderOutput{Result: ClaudeResult{Usage: &ClaudeUsagePayload{FiveHour: &ClaudeUsageWindow{Utilization: 25}}}}}
 	service := NewServiceWithRegistry(db, NewProviderRegistry(map[string]ProviderHandler{"claude": handler}))
-	service.refreshCooldown = func(time.Duration) {}
+	setRefreshCooldown(service, func(time.Duration) {})
 	markBackendPageActiveForAutoRefreshTest(service, time.Now())
 
 	if err := service.RunAutoRefresh(context.Background()); err != nil {
@@ -124,9 +123,7 @@ func TestRunAutoRefreshQueuesOnlyActiveAuthFiles(t *testing.T) {
 			t.Fatalf("expected %s to stay out of auto refresh queue, got %v", authIndex, err)
 		}
 	}
-	service.refreshMu.Lock()
-	_, hasBlankTask := service.refreshTasks["  "]
-	service.refreshMu.Unlock()
+	_, hasBlankTask := refreshTasks(service)["  "]
 	if hasBlankTask {
 		t.Fatal("expected blank identity to stay out of auto refresh queue")
 	}
@@ -138,7 +135,7 @@ func TestRunAutoRefreshRunsWhenStatusIsActive(t *testing.T) {
 	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-2", Provider: "claude", Type: "auth-file", AuthType: entities.UsageIdentityAuthTypeAuthFile})
 	handler := &refreshHandlerStub{output: ProviderOutput{Result: ClaudeResult{Usage: &ClaudeUsagePayload{FiveHour: &ClaudeUsageWindow{Utilization: 25}}}}}
 	service := NewServiceWithRegistry(db, NewProviderRegistry(map[string]ProviderHandler{"claude": handler}))
-	service.refreshCooldown = func(time.Duration) {}
+	setRefreshCooldown(service, func(time.Duration) {})
 	markBackendPageActiveForAutoRefreshTest(service, time.Now())
 
 	if err := service.RunAutoRefresh(context.Background()); err != nil {
@@ -158,7 +155,7 @@ func TestRunAutoRefreshSkipsWhenPreviousAutoRoundIsActive(t *testing.T) {
 	block := make(chan struct{})
 	handler := &refreshHandlerStub{block: block, output: ProviderOutput{Result: ClaudeResult{Usage: &ClaudeUsagePayload{FiveHour: &ClaudeUsageWindow{Utilization: 25}}}}}
 	service := NewServiceWithRegistry(db, NewProviderRegistry(map[string]ProviderHandler{"claude": handler}))
-	service.refreshCooldown = func(time.Duration) {}
+	setRefreshCooldown(service, func(time.Duration) {})
 	markBackendPageActiveForAutoRefreshTest(service, time.Now())
 	hook := logrustest.NewGlobal()
 	t.Cleanup(func() {
@@ -185,7 +182,7 @@ func TestRunAutoRefreshSkipsCachedHTTPFailures(t *testing.T) {
 	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-1", Provider: "claude", Type: "auth-file", AuthType: entities.UsageIdentityAuthTypeAuthFile})
 	handler := &refreshHandlerStub{err: ProviderHTTPError{StatusCode: 401, Message: "expired token"}}
 	service := NewServiceWithRegistry(db, NewProviderRegistry(map[string]ProviderHandler{"claude": handler}))
-	service.refreshCooldown = func(time.Duration) {}
+	setRefreshCooldown(service, func(time.Duration) {})
 
 	first, err := service.Refresh(context.Background(), RefreshRequest{AuthIndexes: []string{"auth-1"}, Source: RefreshSourceManual})
 	if err != nil {
@@ -209,7 +206,7 @@ func TestRunAutoRefreshLogsRoundStartAndEndOnce(t *testing.T) {
 	seedUsageIdentity(t, db, entities.UsageIdentity{Identity: "auth-1", Provider: "claude", Type: "auth-file", AuthType: entities.UsageIdentityAuthTypeAuthFile})
 	handler := &refreshHandlerStub{output: ProviderOutput{Result: ClaudeResult{Usage: &ClaudeUsagePayload{FiveHour: &ClaudeUsageWindow{Utilization: 25}}}}}
 	service := NewServiceWithRegistry(db, NewProviderRegistry(map[string]ProviderHandler{"claude": handler}))
-	service.refreshCooldown = func(time.Duration) {}
+	setRefreshCooldown(service, func(time.Duration) {})
 	markBackendPageActiveForAutoRefreshTest(service, time.Now())
 	hook := logrustest.NewGlobal()
 	t.Cleanup(func() {
@@ -246,10 +243,8 @@ func TestRunAutoRefreshLogsRoundEndWhenIdentityScanFails(t *testing.T) {
 	}
 
 	assertAutoRefreshRoundLogs(t, hook, 1, 1)
-	service.autoRefreshMu.Lock()
-	lastRoundAt := service.lastAutoRefreshRoundAt
-	lastAttemptAt := service.lastAutoRefreshAttemptAt
-	service.autoRefreshMu.Unlock()
+	lastRoundAt := lastAutoRefreshRoundAt(service)
+	lastAttemptAt := lastAutoRefreshAttemptAt(service)
 	if !lastRoundAt.IsZero() {
 		t.Fatalf("expected failed identity scan not to update last auto refresh round time, got %v", lastRoundAt)
 	}
@@ -279,16 +274,14 @@ func assertAutoRefreshRoundLogs(t *testing.T, hook *logrustest.Hook, wantStart i
 }
 
 func markBackendPageActiveForAutoRefreshTest(service *Service, at time.Time) {
-	service.activeMu.Lock()
-	defer service.activeMu.Unlock()
-	service.lastActiveStatusAt = at
+	setBackendPageActiveForAutoRefreshTest(service, at)
 }
 
 func TestNewServiceWithRegistryAndOptionsUsesConfiguredAutoRefreshInterval(t *testing.T) {
 	db := openQuotaTestDatabase(t)
 	service := NewServiceWithRegistryAndOptions(db, NewProviderRegistry(nil), ServiceOptions{AutoRefreshInterval: 2 * time.Minute})
-	if service.autoRefreshInterval != 2*time.Minute {
-		t.Fatalf("expected configured auto refresh interval 2m, got %s", service.autoRefreshInterval)
+	if autoRefreshInterval(service) != 2*time.Minute {
+		t.Fatalf("expected configured auto refresh interval 2m, got %s", autoRefreshInterval(service))
 	}
 }
 
@@ -313,11 +306,9 @@ func TestNextAutoRefreshDelayUsesLastRoundTime(t *testing.T) {
 	service := NewServiceWithRegistryAndOptions(db, NewProviderRegistry(nil), ServiceOptions{AutoRefreshInterval: 5 * time.Minute})
 	now := time.Date(2026, 5, 26, 12, 0, 0, 0, time.Local)
 	markBackendPageActiveForAutoRefreshTest(service, now)
-	service.autoRefreshMu.Lock()
-	service.lastAutoRefreshRoundAt = now.Add(-4 * time.Minute)
-	service.autoRefreshMu.Unlock()
+	setLastAutoRefreshRoundAt(service, now.Add(-4*time.Minute))
 
-	delay := service.nextAutoRefreshDelay(now)
+	delay := nextAutoRefreshDelay(service, now)
 
 	if delay != time.Minute {
 		t.Fatalf("expected next auto refresh delay 1m after recent heartbeat round, got %s", delay)
@@ -329,11 +320,9 @@ func TestNextAutoRefreshDelayUsesLastAttemptAfterScanFailure(t *testing.T) {
 	service := NewServiceWithRegistryAndOptions(db, NewProviderRegistry(nil), ServiceOptions{AutoRefreshInterval: 5 * time.Minute})
 	now := time.Date(2026, 5, 26, 12, 0, 0, 0, time.Local)
 	markBackendPageActiveForAutoRefreshTest(service, now)
-	service.autoRefreshMu.Lock()
-	service.lastAutoRefreshAttemptAt = now.Add(-4 * time.Minute)
-	service.autoRefreshMu.Unlock()
+	setLastAutoRefreshAttemptAt(service, now.Add(-4*time.Minute))
 
-	delay := service.nextAutoRefreshDelay(now)
+	delay := nextAutoRefreshDelay(service, now)
 
 	if delay != time.Minute {
 		t.Fatalf("expected next auto refresh delay 1m after failed attempt, got %s", delay)
@@ -345,12 +334,10 @@ func TestNextAutoRefreshDelayWaitsForNextTriggerWhenRoundIsRunning(t *testing.T)
 	service := NewServiceWithRegistryAndOptions(db, NewProviderRegistry(nil), ServiceOptions{AutoRefreshInterval: 5 * time.Minute})
 	now := time.Date(2026, 5, 26, 12, 0, 0, 0, time.Local)
 	markBackendPageActiveForAutoRefreshTest(service, now)
-	service.autoRefreshMu.Lock()
-	service.autoRefreshRunning = true
-	service.lastAutoRefreshRoundAt = now.Add(-5 * time.Minute)
-	service.autoRefreshMu.Unlock()
+	setAutoRefreshRunning(service, true)
+	setLastAutoRefreshRoundAt(service, now.Add(-5*time.Minute))
 
-	delay := service.nextAutoRefreshDelay(now)
+	delay := nextAutoRefreshDelay(service, now)
 
 	if delay != 5*time.Minute {
 		t.Fatalf("expected running round to wait for the next scheduled trigger, got %s", delay)
