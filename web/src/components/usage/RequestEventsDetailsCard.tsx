@@ -94,6 +94,11 @@ export const isRequestEventColumnSelectionControlled = (
   onVisibleColumnIdsChange: ((columnIds: RequestEventColumnId[]) => void) | undefined,
 ) => visibleColumnIds !== undefined && onVisibleColumnIdsChange !== undefined;
 
+export const shouldCloseMenuOnFocusLeave = (
+  container: { contains: (target: EventTarget) => boolean },
+  nextFocus: EventTarget | null
+): boolean => nextFocus === null || !container.contains(nextFocus);
+
 const appendSelectedOption = (
   options: SelectOption[],
   selectedValue: string,
@@ -524,12 +529,21 @@ function RequestEventsExportMenu({
     }
   };
 
+  const handleBlur = (event: React.FocusEvent<HTMLDivElement>) => {
+    if (shouldCloseMenuOnFocusLeave({
+      contains: (target) => target instanceof Node && event.currentTarget.contains(target),
+    }, event.relatedTarget)) {
+      setOpen(false);
+    }
+  };
+
   return (
     <div
       className={styles.requestEventsExportMenu}
       onMouseEnter={() => !disabled && setOpen(true)}
       onMouseLeave={() => setOpen(false)}
       onKeyDown={handleKeyDown}
+      onBlur={handleBlur}
     >
       <Button
         type="button"

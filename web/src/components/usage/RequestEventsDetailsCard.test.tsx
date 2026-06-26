@@ -5,6 +5,7 @@ import {
   RequestEventsDetailsCard,
   isRequestEventColumnSelectionControlled,
   resolveRequestEventColumnMenuFocusIndex,
+  shouldCloseMenuOnFocusLeave,
   toggleRequestEventColumnId,
   type RequestEventColumnId,
 } from './RequestEventsDetailsCard';
@@ -373,6 +374,16 @@ describe('RequestEventsDetailsCard pagination', () => {
     expect(isRequestEventColumnSelectionControlled(['timestamp'], () => undefined)).toBe(true);
     expect(isRequestEventColumnSelectionControlled(undefined, () => undefined)).toBe(false);
     expect(isRequestEventColumnSelectionControlled(['timestamp'], undefined)).toBe(false);
+  });
+
+  it('closes export menu only when focus leaves the menu container', () => {
+    const insideTarget = {};
+    const outsideTarget = {};
+    const container = { contains: (target: EventTarget) => target === insideTarget };
+
+    expect(shouldCloseMenuOnFocusLeave(container, insideTarget as EventTarget)).toBe(false);
+    expect(shouldCloseMenuOnFocusLeave(container, outsideTarget as EventTarget)).toBe(true);
+    expect(shouldCloseMenuOnFocusLeave(container, null)).toBe(true);
   });
 
   it('cycles column menu focus for arrow and tab navigation', () => {
