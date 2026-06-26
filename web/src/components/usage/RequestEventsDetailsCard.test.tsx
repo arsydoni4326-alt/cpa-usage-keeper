@@ -293,10 +293,15 @@ describe('RequestEventsDetailsCard pagination', () => {
     expect(html).not.toContain('_requestEventsLimitHint_');
   });
 
-  it('hides export buttons while keeping clear filters available', () => {
+  it('renders one export menu trigger instead of separate CSV and JSON buttons', () => {
     const html = renderCard({ modelFilter: 'claude-sonnet' });
 
     expect(html).toContain('Clear Filters');
+    expect(countOccurrences(html, '>Export<')).toBe(1);
+    expect(html.indexOf('Clear Filters')).toBeLessThan(html.indexOf('>Export<'));
+    expect(html).toContain('aria-haspopup="menu"');
+    expect(html).toContain('_requestEventsExportButton_');
+    expect(html).toContain('_requestEventsExportButtonInner_');
     expect(html).not.toContain('Export CSV');
     expect(html).not.toContain('Export JSON');
   });
