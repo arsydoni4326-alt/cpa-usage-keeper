@@ -96,10 +96,10 @@ func TestRedisIngestRunnerStartupHTTPInboxWriteFailureUsesOneSecondBackoff(t *te
 	if output == "" {
 		t.Fatal("expected inbox write retry log")
 	}
-	requireDurations(t, delays, []time.Duration{time.Second})
 	select {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for runner to stop")
 	}
+	requireDurations(t, delays, []time.Duration{time.Second})
 }
