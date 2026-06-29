@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"cpa-usage-keeper/internal/entities"
+	"cpa-usage-keeper/internal/helper"
 	"cpa-usage-keeper/internal/repository"
 	"cpa-usage-keeper/internal/timeutil"
 
@@ -312,7 +313,7 @@ func (s *Service) ensureRefreshTaskWithIdentity(authIndex string, source Refresh
 		// AuthIndex 是任务唯一 key，也是前端轮询 key。
 		AuthIndex: authIndex,
 		// 展示字段来自入队时的身份快照，巡检弹框读取缓存时无需逐条回查 identity。
-		Name: identity.Name,
+		Name: helper.UsageIdentityDisplayName(identity),
 		Type: identity.Type,
 		// FileName 是 CPA auth-files 的原始 name，后续删除功能不能复用展示名。
 		FileName: identity.FileName,
