@@ -23,7 +23,7 @@
 - Request Events 提供请求级明细查看、筛选、分页、导出和自定义显示
 - 分析页面提供用量趋势、成本分析、模型/API Key/AI Provider 构成和时段热力图
 - API Key 独立查询页，可按 CPA API Key 查看专属用量
-- 支持 CPA 插件嵌入模式，可在 CPAMC 中使用 Keeper
+- 可通过 CPA 插件将 Keeper Dashboard 内嵌到 CPAMC 中使用
 - 凭证页面展示 Auth File 与 AI Provider 使用情况，支持限额查询、刷新、巡检和排序
 - 支持多 Provider quota 窗口用量与限额展示
 - 可维护模型价格，用于成本估算和统计展示

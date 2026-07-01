@@ -23,7 +23,7 @@ It relies on [CLIProxyAPI (CPA)](https://github.com/router-for-me/CLIProxyAPI) a
 - Request Events for per-request details, filtering, pagination, export, and customizable display
 - Analysis page for usage trends, cost analysis, model/API Key/AI Provider composition, and hourly heatmaps
 - Standalone API Key usage page for querying usage by CPA API Key
-- CPA plugin embedded mode support for using Keeper inside CPAMC
+- Embed the Keeper dashboard into CPAMC through the CPA plugin
 - Credentials page for Auth File and AI Provider usage, with quota lookup, refresh, inspection, and sorting
 - Provider quota window usage and quota display across supported providers
 - Maintain model prices for cost estimation and reporting
