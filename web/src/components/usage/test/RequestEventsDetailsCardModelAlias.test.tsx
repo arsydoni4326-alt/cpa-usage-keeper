@@ -61,9 +61,15 @@ const renderCard = (props: Partial<React.ComponentProps<typeof RequestEventsDeta
 describe('RequestEventsDetailsCard model alias column', () => {
   it('shows model alias after model by default', () => {
     const html = renderCard();
+    const modelHeaderIndex = html.indexOf('>Model</th>');
+    const modelAliasHeaderIndex = html.indexOf('>Model Alias</th>');
+    const effortHeaderIndex = html.indexOf('title="Reasoning Effort">Effort</th>');
 
-    expect(html.indexOf('>Model</th>')).toBeLessThan(html.indexOf('>Model Alias</th>'));
-    expect(html.indexOf('>Model Alias</th>')).toBeLessThan(html.indexOf('title="Reasoning Effort">Effort</th>'));
+    expect(modelHeaderIndex).toBeGreaterThanOrEqual(0);
+    expect(modelAliasHeaderIndex).toBeGreaterThanOrEqual(0);
+    expect(effortHeaderIndex).toBeGreaterThanOrEqual(0);
+    expect(modelHeaderIndex).toBeLessThan(modelAliasHeaderIndex);
+    expect(modelAliasHeaderIndex).toBeLessThan(effortHeaderIndex);
     expect(html).toMatch(/<td class="[^"]*modelCell[^"]*" title="sonnet-business">sonnet-business<\/td>/);
   });
 

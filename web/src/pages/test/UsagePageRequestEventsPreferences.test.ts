@@ -27,6 +27,10 @@ const LEGACY_V2_FULL_COLUMNS = [
   'total_cost',
 ] as unknown as RequestEventColumnId[];
 
+const LEGACY_V1_FULL_COLUMNS_WITHOUT_SPEED_MODE_AND_MODEL_ALIAS = LEGACY_V2_FULL_COLUMNS.filter(
+  (columnId) => columnId !== 'service_tier'
+);
+
 const EXPECTED_COLUMNS_WITH_MODEL_ALIAS = [
   'timestamp',
   'api_key',
@@ -72,5 +76,15 @@ describe('UsagePage request event model alias preferences', () => {
 
     expect(preferences.visibleColumnIds).toEqual(customizedColumns);
     expect(preferences.visibleColumnIds).not.toContain('model_alias');
+  });
+
+  it('upgrades legacy v1 full-column preferences missing speed mode and model alias', () => {
+    const preferences = normalizeRequestEventsPreferences({
+      version: 1,
+      pageSize: 100,
+      visibleColumnIds: LEGACY_V1_FULL_COLUMNS_WITHOUT_SPEED_MODE_AND_MODEL_ALIAS,
+    });
+
+    expect(preferences.visibleColumnIds).toEqual(EXPECTED_COLUMNS_WITH_MODEL_ALIAS);
   });
 });
