@@ -936,7 +936,7 @@ func TestCalculateUsageTokenCostBreakdownDoesNotDoubleChargeReasoningTokens(t *t
 
 	cost := helper.CalculateUsageTokenCostBreakdown(input, pricing).TotalCostUSD
 
-	if cost != 46.4 {
+	if math.Abs(cost-46.4) > 0.000000001 {
 		t.Fatalf("expected reasoning tokens not to be added to completion cost, got %f", cost)
 	}
 }

@@ -351,6 +351,40 @@ func TestSumUsageWindowStatsByAuthIndexUsesRawAndHourlyModelAliasPricing(t *test
 	assertUsageCostClose(t, hourlyStats.Cost, 2)
 }
 
+func TestSumUsageWindowStatsByAuthIndexMergesRawAndHourlyByModelAliasAndModel(t *testing.T) {
+	db := openUsageCostResolverDatabase(t, "usage-window-merged-alias-cost.db")
+	upsertUsageCostResolverPrice(t, db, "base-model", 10)
+	upsertUsageCostResolverPrice(t, db, "alias-model", 2)
+	authIndex := "auth-merged"
+	alias := "alias-model"
+	start := time.Date(2026, 6, 1, 10, 15, 0, 0, time.UTC)
+	end := time.Date(2026, 6, 1, 18, 45, 0, 0, time.UTC)
+
+	if _, _, err := repository.InsertUsageEvents(db, []entities.UsageEvent{
+		{EventKey: "left-raw-alias", AuthIndex: authIndex, Model: "base-model", ModelAlias: &alias, Timestamp: time.Date(2026, 6, 1, 10, 30, 0, 0, time.UTC), InputTokens: 1_000_000, TotalTokens: 1_000_000},
+		{EventKey: "left-raw-model", AuthIndex: authIndex, Model: "base-model", Timestamp: time.Date(2026, 6, 1, 10, 35, 0, 0, time.UTC), InputTokens: 500_000, TotalTokens: 500_000},
+		{EventKey: "right-raw-alias", AuthIndex: authIndex, Model: "base-model", ModelAlias: &alias, Timestamp: time.Date(2026, 6, 1, 17, 30, 0, 0, time.UTC), InputTokens: 1_000_000, TotalTokens: 1_000_000},
+		{EventKey: "right-raw-model", AuthIndex: authIndex, Model: "base-model", Timestamp: time.Date(2026, 6, 1, 17, 35, 0, 0, time.UTC), InputTokens: 500_000, TotalTokens: 500_000},
+	}); err != nil {
+		t.Fatalf("InsertUsageEvents returned error: %v", err)
+	}
+	if err := db.Create(&[]entities.UsageOverviewHourlyStat{
+		{BucketStart: time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC), AuthIndex: authIndex, Model: "base-model", ModelAlias: "alias-model", InputTokens: 1_000_000, TotalTokens: 1_000_000},
+		{BucketStart: time.Date(2026, 6, 1, 13, 0, 0, 0, time.UTC), AuthIndex: authIndex, Model: "base-model", InputTokens: 1_000_000, TotalTokens: 1_000_000},
+	}).Error; err != nil {
+		t.Fatalf("seed hourly stats: %v", err)
+	}
+
+	stats, err := repository.SumUsageWindowStatsByAuthIndex(context.Background(), db, authIndex, start, &end)
+	if err != nil {
+		t.Fatalf("SumUsageWindowStatsByAuthIndex returned error: %v", err)
+	}
+	if stats.Tokens != 5_000_000 {
+		t.Fatalf("expected raw and hourly tokens to merge by model_alias/model, got %+v", stats)
+	}
+	assertUsageCostClose(t, stats.Cost, 26)
+}
+
 func openUsageCostResolverDatabase(t *testing.T, name string) *gorm.DB {
 	t.Helper()
 	db, err := repository.OpenDatabase(config.Config{SQLitePath: filepath.Join(t.TempDir(), name)})

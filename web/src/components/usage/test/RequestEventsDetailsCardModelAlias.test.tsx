@@ -58,26 +58,43 @@ const renderCard = (props: Partial<React.ComponentProps<typeof RequestEventsDeta
     />,
   );
 
+const textFromMarkup = (value: string) => value.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+
+const extractTableHeaders = (html: string) =>
+  Array.from(html.matchAll(/<th\b[^>]*>(.*?)<\/th>/gs), (match) => textFromMarkup(match[1]));
+
+const extractFirstTableRowCells = (html: string) => {
+  const row = html.match(/<tbody><tr>(.*?)<\/tr><\/tbody>/s)?.[1] ?? '';
+  return Array.from(row.matchAll(/<td\b[^>]*>(.*?)<\/td>/gs), (match) => textFromMarkup(match[1]));
+};
+
 describe('RequestEventsDetailsCard model alias column', () => {
   it('shows model alias after model by default', () => {
     const html = renderCard();
-    const modelHeaderIndex = html.indexOf('>Model</th>');
-    const modelAliasHeaderIndex = html.indexOf('>Model Alias</th>');
-    const effortHeaderIndex = html.indexOf('title="Reasoning Effort">Effort</th>');
+    const headers = extractTableHeaders(html);
+    const cells = extractFirstTableRowCells(html);
+    const modelHeaderIndex = headers.indexOf('Model');
+    const modelAliasHeaderIndex = headers.indexOf('Model Alias');
+    const effortHeaderIndex = headers.indexOf('Effort');
 
     expect(modelHeaderIndex).toBeGreaterThanOrEqual(0);
     expect(modelAliasHeaderIndex).toBeGreaterThanOrEqual(0);
     expect(effortHeaderIndex).toBeGreaterThanOrEqual(0);
     expect(modelHeaderIndex).toBeLessThan(modelAliasHeaderIndex);
     expect(modelAliasHeaderIndex).toBeLessThan(effortHeaderIndex);
-    expect(html).toMatch(/<td class="[^"]*modelCell[^"]*" title="sonnet-business">sonnet-business<\/td>/);
+    expect(cells[modelHeaderIndex]).toBe('claude-sonnet');
+    expect(cells[modelAliasHeaderIndex]).toBe('sonnet-business');
   });
 
   it('renders a dash when model alias is missing', () => {
     const html = renderCard({
       events: [{ ...events[0], model_alias: '' }],
     });
+    const headers = extractTableHeaders(html);
+    const cells = extractFirstTableRowCells(html);
+    const modelAliasHeaderIndex = headers.indexOf('Model Alias');
 
-    expect(html).toMatch(/claude-sonnet<\/td><td class="[^"]*modelCell[^"]*" title="-">-<\/td>/);
+    expect(modelAliasHeaderIndex).toBeGreaterThanOrEqual(0);
+    expect(cells[modelAliasHeaderIndex]).toBe('-');
   });
 });
