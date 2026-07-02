@@ -59,7 +59,7 @@ func TestSyncServiceCleanupStorageDeletesUsageEventsWhenEnabled(t *testing.T) {
 func TestNewSyncServiceCleanupStorageReadsCleanupFlagFromConfig(t *testing.T) {
 	db := openSyncCleanupTestDatabase(t)
 	now := time.Now().In(time.Local)
-	seedSyncCleanupUsageEventsAt(t, db, now.AddDate(0, -2, 0), now)
+	seedSyncCleanupUsageEventsAt(t, db, now.AddDate(0, -3, 0), now)
 	syncer := service.NewSyncService(db, config.Config{
 		CPABaseURL:                "https://cpa.example.com",
 		CPAManagementKey:          "secret",
