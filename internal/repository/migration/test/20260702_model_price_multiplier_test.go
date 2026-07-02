@@ -12,18 +12,14 @@ import (
 
 const modelPriceMultiplierMigrationVersion = "20260702_model_price_multiplier"
 
-func TestRunAddsModelPriceMultiplierToExistingPricing(t *testing.T) {
+func Test20260702ModelPriceMultiplierMigrationAddsDefaultToExistingPricing(t *testing.T) {
 	db := openModelPriceMultiplierMigrationDatabase(t)
 	defer closeModelPriceMultiplierMigrationDatabase(t, db)
 
 	if err := db.Exec(`CREATE TABLE schema_migrations (version TEXT PRIMARY KEY, applied_at DATETIME NOT NULL)`).Error; err != nil {
 		t.Fatalf("create schema_migrations: %v", err)
 	}
-	for _, version := range previousModelPriceMultiplierMigrationVersions() {
-		if err := db.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", version, "2026-07-01T00:00:00Z").Error; err != nil {
-			t.Fatalf("seed schema migration %s: %v", version, err)
-		}
-	}
+	seedSchemaMigrationsBefore(t, db, modelPriceMultiplierMigrationVersion, "2026-07-01T00:00:00Z")
 	if err := db.Exec(`CREATE TABLE model_price_settings (
 		id integer PRIMARY KEY,
 		model text,
@@ -69,52 +65,6 @@ func TestRunAddsModelPriceMultiplierToExistingPricing(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("expected migration %s to be recorded once, got %d", modelPriceMultiplierMigrationVersion, count)
-	}
-}
-
-func previousModelPriceMultiplierMigrationVersions() []string {
-	return []string{
-		"20260503_add_usage_event_redis_fields",
-		"20260503_backfill_usage_event_redis_fields",
-		"20260503_drop_snapshot_runs",
-		"20260504_drop_legacy_snapshot_run_columns",
-		"20260504_create_usage_identities",
-		"20260504_migrate_usage_identities_metadata",
-		"20260504_backfill_usage_event_identity_fields",
-		"20260504_backfill_usage_identity_stats",
-		"20260504_drop_legacy_metadata_tables",
-		"20260504_remove_prefix_usage_identities",
-		"20260505_add_usage_identity_lookup_key",
-		"20260505_migrate_ai_provider_identities_to_auth_index",
-		"20260506_add_usage_performance_indexes",
-		"20260507_add_usage_identity_metadata_fields",
-		"20260508_add_usage_event_model_alias",
-		"20260509_update_usage_identity_quota_fields",
-		"20260510_remove_usage_identity_quota_fields",
-		"20260511_add_usage_identity_base_url",
-		"20260512_normalize_storage_times_to_project_tz",
-		"20260513_use_int64_primary_keys",
-		"20260513_create_cpa_api_keys",
-		"20260514_add_usage_event_cache_token_fields",
-		"20260514_add_usage_event_plain_dimension_indexes",
-		"20260514_create_usage_overview_stats",
-		"20260514_remove_usage_event_event_key_unique_index",
-		"20260517_add_usage_identity_sync_metadata_fields",
-		"20260518_usage_overview_rollup_dimensions",
-		"20260519_add_usage_event_reasoning_effort",
-		"20260525_add_usage_event_quota_window_indexes",
-		"20260528_add_usage_event_cpa_response_fields",
-		"20260531_model_price_pricing_style",
-		"20260601_backfill_claude_usage_tokens",
-		"20260602_add_usage_event_executor_type",
-		"20260603_add_usage_identity_file_fields",
-		"20260605_backfill_gemini_codex_token_format",
-		"20260610_remove_usage_event_write_heavy_indexes",
-		"20260611_remove_usage_event_low_value_indexes",
-		"20260612_replace_redis_inbox_queue_key_with_source",
-		"20260620_create_auth_sessions",
-		"20260629_add_usage_identity_alias",
-		"20260701_add_auth_session_source",
 	}
 }
 

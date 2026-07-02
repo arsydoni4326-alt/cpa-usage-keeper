@@ -170,6 +170,15 @@ export const notifyPricingSyncUnexpectedError = (
   );
 };
 
+const notifyPricingPersistenceError = (
+  error: unknown,
+  fallbackMessage: string,
+  onNotice: PriceSettingsCardProps['onNotice'],
+) => {
+  const message = error instanceof Error ? error.message : '';
+  onNotice?.('error', `${fallbackMessage}${message ? `: ${message}` : ''}`);
+};
+
 const pricingStyleOptions = (t: (key: string) => string): SelectOption[] => [
   { value: 'openai', label: t('usage_stats.model_price_style_openai') },
   { value: 'claude', label: t('usage_stats.model_price_style_claude') },
@@ -219,6 +228,7 @@ export function PriceSettingsCard({
   const [cachePrice, setCachePrice] = useState('');
   const [cacheCreationPrice, setCacheCreationPrice] = useState('');
   const [priceMultiplier, setPriceMultiplier] = useState('1');
+  const [priceSaving, setPriceSaving] = useState(false);
 
   // 编辑弹窗独立保存草稿值，避免用户取消时污染已保存价格。
   const [editModel, setEditModel] = useState<string | null>(null);
@@ -228,7 +238,9 @@ export function PriceSettingsCard({
   const [editCache, setEditCache] = useState('');
   const [editCacheCreation, setEditCacheCreation] = useState('');
   const [editMultiplier, setEditMultiplier] = useState('1');
+  const [editSaving, setEditSaving] = useState(false);
   const [deleteModel, setDeleteModel] = useState<string | null>(null);
+  const [deleteSaving, setDeleteSaving] = useState(false);
 
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
@@ -236,8 +248,8 @@ export function PriceSettingsCard({
   const [syncPreview, setSyncPreview] = useState<PricingSyncPreviewResponse | null>(null);
   const [syncDrafts, setSyncDrafts] = useState<PricingSyncDraft[]>([]);
 
-  const handleSavePrice = () => {
-    if (!selectedModel) return;
+  const handleSavePrice = async () => {
+    if (!selectedModel || priceSaving) return;
     const price = pricingDraftToModelPrice({
       style: pricingStyle,
       prompt: promptPrice,
@@ -251,24 +263,38 @@ export function PriceSettingsCard({
       return;
     }
     const newPrices = { ...modelPrices, [selectedModel]: price };
-    onPricesChange(newPrices);
-    onNotice?.('success', t('usage_stats.model_price_save_success'));
-    setSelectedModel('');
-    setPricingStyle('openai');
-    setPromptPrice('');
-    setCompletionPrice('');
-    setCachePrice('');
-    setCacheCreationPrice('');
-    setPriceMultiplier('1');
+    setPriceSaving(true);
+    try {
+      await Promise.resolve(onPricesChange(newPrices));
+      onNotice?.('success', t('usage_stats.model_price_save_success'));
+      setSelectedModel('');
+      setPricingStyle('openai');
+      setPromptPrice('');
+      setCompletionPrice('');
+      setCachePrice('');
+      setCacheCreationPrice('');
+      setPriceMultiplier('1');
+    } catch (error) {
+      notifyPricingPersistenceError(error, t('usage_stats.model_price_save_failed'), onNotice);
+    } finally {
+      setPriceSaving(false);
+    }
   };
 
-  const confirmDeleteModel = () => {
-    if (!deleteModel) return;
+  const confirmDeleteModel = async () => {
+    if (!deleteModel || deleteSaving) return;
     const newPrices = { ...modelPrices };
     delete newPrices[deleteModel];
-    onPricesChange(newPrices);
-    onNotice?.('success', t('usage_stats.model_price_delete_success'));
-    setDeleteModel(null);
+    setDeleteSaving(true);
+    try {
+      await Promise.resolve(onPricesChange(newPrices));
+      onNotice?.('success', t('usage_stats.model_price_delete_success'));
+      setDeleteModel(null);
+    } catch (error) {
+      notifyPricingPersistenceError(error, t('usage_stats.model_price_delete_failed'), onNotice);
+    } finally {
+      setDeleteSaving(false);
+    }
   };
 
   const handleOpenEdit = (model: string) => {
@@ -282,8 +308,8 @@ export function PriceSettingsCard({
     setEditMultiplier(priceToInputValue(price?.multiplier ?? 1));
   };
 
-  const handleSaveEdit = () => {
-    if (!editModel) return;
+  const handleSaveEdit = async () => {
+    if (!editModel || editSaving) return;
     const price = pricingDraftToModelPrice({
       style: editStyle,
       prompt: editPrompt,
@@ -297,9 +323,16 @@ export function PriceSettingsCard({
       return;
     }
     const newPrices = { ...modelPrices, [editModel]: price };
-    onPricesChange(newPrices);
-    onNotice?.('success', t('usage_stats.model_price_edit_success'));
-    setEditModel(null);
+    setEditSaving(true);
+    try {
+      await Promise.resolve(onPricesChange(newPrices));
+      onNotice?.('success', t('usage_stats.model_price_edit_success'));
+      setEditModel(null);
+    } catch (error) {
+      notifyPricingPersistenceError(error, t('usage_stats.model_price_edit_failed'), onNotice);
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   const handleModelSelect = (value: string) => {
@@ -537,7 +570,7 @@ export function PriceSettingsCard({
                       className={styles.usagePillControl}
                     />
                   </div>
-                  <Button variant="primary" className={styles.usagePillAction} onClick={handleSavePrice} disabled={!selectedModel}>
+                  <Button variant="primary" className={styles.usagePillAction} onClick={() => void handleSavePrice()} disabled={!selectedModel} loading={priceSaving}>
                     {t('common.save')}
                   </Button>
                 </div>
@@ -601,10 +634,10 @@ export function PriceSettingsCard({
         onClose={() => setEditModel(null)}
         footer={
           <div className={styles.priceActions}>
-            <Button variant="secondary" className={styles.usagePillAction} onClick={() => setEditModel(null)}>
+            <Button variant="secondary" className={styles.usagePillAction} onClick={() => setEditModel(null)} disabled={editSaving}>
               {t('common.cancel')}
             </Button>
-            <Button variant="primary" className={styles.usagePillAction} onClick={handleSaveEdit}>
+            <Button variant="primary" className={styles.usagePillAction} onClick={() => void handleSaveEdit()} loading={editSaving}>
               {t('common.save')}
             </Button>
           </div>
@@ -688,10 +721,10 @@ export function PriceSettingsCard({
         onClose={() => setDeleteModel(null)}
         footer={
           <div className={styles.priceActions}>
-            <Button variant="secondary" className={styles.usagePillAction} onClick={() => setDeleteModel(null)}>
+            <Button variant="secondary" className={styles.usagePillAction} onClick={() => setDeleteModel(null)} disabled={deleteSaving}>
               {t('common.cancel')}
             </Button>
-            <Button variant="danger" className={`${styles.usagePillAction} ${styles.usagePillActionDanger}`} onClick={confirmDeleteModel}>
+            <Button variant="danger" className={`${styles.usagePillAction} ${styles.usagePillActionDanger}`} onClick={() => void confirmDeleteModel()} loading={deleteSaving}>
               {t('usage_stats.model_price_delete_confirm_action')}
             </Button>
           </div>

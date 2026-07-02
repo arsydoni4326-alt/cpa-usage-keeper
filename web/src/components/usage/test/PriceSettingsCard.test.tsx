@@ -142,7 +142,7 @@ describe('PriceSettingsCard', () => {
 
   it('opens edit without showing a top notice before the user saves', () => {
     const editHandlerStart = source.indexOf('const handleOpenEdit = (model: string) => {');
-    const editHandlerEnd = source.indexOf('\n  const handleSaveEdit = () => {', editHandlerStart);
+    const editHandlerEnd = source.indexOf('\n  const handleSaveEdit = async () => {', editHandlerStart);
     const editHandler = source.slice(editHandlerStart, editHandlerEnd);
 
     expect(editHandlerStart).toBeGreaterThanOrEqual(0);
@@ -153,10 +153,33 @@ describe('PriceSettingsCard', () => {
 
   it('requires confirmation before deleting a saved model price', () => {
     expect(source).toContain('const [deleteModel, setDeleteModel] = useState<string | null>(null);');
-    expect(source).toContain('const confirmDeleteModel = () => {');
+    expect(source).toContain('const confirmDeleteModel = async () => {');
     expect(source).toContain("onClick={() => setDeleteModel(model)}");
     expect(source).toContain("title={t('usage_stats.model_price_delete_confirm_title')}");
     expect(source).toContain("t('usage_stats.model_price_delete_confirm_action')");
+  });
+
+  it('waits for persistence before reporting create, edit and delete success', () => {
+    const saveHandlerStart = source.indexOf('const handleSavePrice = async () => {');
+    const saveHandlerEnd = source.indexOf('\n  const confirmDeleteModel = async () => {', saveHandlerStart);
+    const saveHandler = source.slice(saveHandlerStart, saveHandlerEnd);
+    const deleteHandlerStart = source.indexOf('const confirmDeleteModel = async () => {');
+    const deleteHandlerEnd = source.indexOf('\n  const handleOpenEdit = (model: string) => {', deleteHandlerStart);
+    const deleteHandler = source.slice(deleteHandlerStart, deleteHandlerEnd);
+    const editHandlerStart = source.indexOf('const handleSaveEdit = async () => {');
+    const editHandlerEnd = source.indexOf('\n  const handleModelSelect = (value: string) => {', editHandlerStart);
+    const editHandler = source.slice(editHandlerStart, editHandlerEnd);
+
+    for (const handler of [saveHandler, deleteHandler, editHandler]) {
+      expect(handler).toContain('await Promise.resolve(onPricesChange(newPrices));');
+      expect(handler.indexOf('await Promise.resolve(onPricesChange(newPrices));')).toBeLessThan(handler.indexOf("onNotice?.('success'"));
+    }
+    expect(saveHandler).toContain('setPriceSaving(true);');
+    expect(saveHandler).toContain('setPriceSaving(false);');
+    expect(editHandler).toContain('setEditSaving(true);');
+    expect(editHandler).toContain('setEditSaving(false);');
+    expect(deleteHandler).toContain('setDeleteSaving(true);');
+    expect(deleteHandler).toContain('setDeleteSaving(false);');
   });
 
   it('keeps explicit zero multipliers when converting sync drafts', () => {

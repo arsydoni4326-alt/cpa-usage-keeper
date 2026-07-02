@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -17,8 +18,24 @@ import (
 )
 
 func TestOrderedMigrationsPreservesExecutionOrder(t *testing.T) {
-	got := migration.OrderedMigrationVersionsForTest()
-	want := []string{
+	db, err := gorm.Open(sqlite.Open(testSQLiteDSN(filepath.Join(t.TempDir(), "migration-order.db"))), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	defer closeOpenedDatabase(t, db)
+
+	if err := migration.MarkAllAsApplied(db); err != nil {
+		t.Fatalf("MarkAllAsApplied returned error: %v", err)
+	}
+	var got []string
+	if err := db.Raw("SELECT version FROM schema_migrations ORDER BY rowid ASC").Scan(&got).Error; err != nil {
+		t.Fatalf("load migration versions by insertion order: %v", err)
+	}
+	assertStringSlicesEqual(t, expectedMigrationVersions(), got)
+}
+
+func expectedMigrationVersions() []string {
+	return []string{
 		"20260503_add_usage_event_redis_fields",
 		"20260503_backfill_usage_event_redis_fields",
 		"20260503_drop_snapshot_runs",
@@ -61,14 +78,6 @@ func TestOrderedMigrationsPreservesExecutionOrder(t *testing.T) {
 		"20260629_add_usage_identity_alias",
 		"20260701_add_auth_session_source",
 		"20260702_model_price_multiplier",
-	}
-	if len(got) != len(want) {
-		t.Fatalf("expected ordered migrations %v, got %v", want, got)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("expected ordered migrations %v, got %v", want, got)
-		}
 	}
 }
 
@@ -120,58 +129,7 @@ func TestOpenDatabaseRunsSchemaMigrationsAndAddsUsageEventRedisFields(t *testing
 	if err := db.Table("schema_migrations").Order("version asc").Pluck("version", &versions).Error; err != nil {
 		t.Fatalf("load schema migrations: %v", err)
 	}
-	expected := []string{
-		"20260503_add_usage_event_redis_fields",
-		"20260503_backfill_usage_event_redis_fields",
-		"20260503_drop_snapshot_runs",
-		"20260504_backfill_usage_event_identity_fields",
-		"20260504_backfill_usage_identity_stats",
-		"20260504_create_usage_identities",
-		"20260504_drop_legacy_metadata_tables",
-		"20260504_drop_legacy_snapshot_run_columns",
-		"20260504_migrate_usage_identities_metadata",
-		"20260504_remove_prefix_usage_identities",
-		"20260505_add_usage_identity_lookup_key",
-		"20260505_migrate_ai_provider_identities_to_auth_index",
-		"20260506_add_usage_performance_indexes",
-		"20260507_add_usage_identity_metadata_fields",
-		"20260508_add_usage_event_model_alias",
-		"20260509_update_usage_identity_quota_fields",
-		"20260510_remove_usage_identity_quota_fields",
-		"20260511_add_usage_identity_base_url",
-		"20260512_normalize_storage_times_to_project_tz",
-		"20260513_create_cpa_api_keys",
-		"20260513_use_int64_primary_keys",
-		"20260514_add_usage_event_cache_token_fields",
-		"20260514_add_usage_event_plain_dimension_indexes",
-		"20260514_create_usage_overview_stats",
-		"20260514_remove_usage_event_event_key_unique_index",
-		"20260517_add_usage_identity_sync_metadata_fields",
-		"20260518_usage_overview_rollup_dimensions",
-		"20260519_add_usage_event_reasoning_effort",
-		"20260525_add_usage_event_quota_window_indexes",
-		"20260528_add_usage_event_cpa_response_fields",
-		"20260531_model_price_pricing_style",
-		"20260601_backfill_claude_usage_tokens",
-		"20260602_add_usage_event_executor_type",
-		"20260603_add_usage_identity_file_fields",
-		"20260605_backfill_gemini_codex_token_format",
-		"20260610_remove_usage_event_write_heavy_indexes",
-		"20260611_remove_usage_event_low_value_indexes",
-		"20260612_replace_redis_inbox_queue_key_with_source",
-		"20260620_create_auth_sessions",
-		"20260629_add_usage_identity_alias",
-		"20260701_add_auth_session_source",
-		"20260702_model_price_multiplier",
-	}
-	if len(versions) != len(expected) {
-		t.Fatalf("expected migration versions %v, got %v", expected, versions)
-	}
-	for i := range expected {
-		if versions[i] != expected[i] {
-			t.Fatalf("expected migration versions %v, got %v", expected, versions)
-		}
-	}
+	assertStringSlicesEqual(t, sortedExpectedMigrationVersions(), versions)
 }
 
 func TestRunNormalizesLegacyStorageTimesToProjectTimezone(t *testing.T) {
@@ -203,7 +161,7 @@ func TestRunNormalizesLegacyStorageTimesToProjectTimezone(t *testing.T) {
 	if err := db.Exec("CREATE TABLE model_price_settings (id INTEGER PRIMARY KEY AUTOINCREMENT, model TEXT, created_at DATETIME, updated_at DATETIME)").Error; err != nil {
 		t.Fatalf("create model_price_settings: %v", err)
 	}
-	for _, version := range migration.OrderedMigrationVersionsForTest() {
+	for _, version := range expectedMigrationVersions() {
 		if version == "20260512_normalize_storage_times_to_project_tz" {
 			continue
 		}
@@ -253,7 +211,7 @@ func TestOpenDatabaseMigrationsAreIdempotent(t *testing.T) {
 	if err := db.Table("schema_migrations").Count(&count).Error; err != nil {
 		t.Fatalf("count schema migrations: %v", err)
 	}
-	expectedCount := int64(len(migration.OrderedMigrationVersionsForTest()))
+	expectedCount := int64(len(expectedMigrationVersions()))
 	if count != expectedCount {
 		t.Fatalf("expected %d applied migrations after reopening database, got %d", expectedCount, count)
 	}
@@ -306,44 +264,25 @@ func assertRawMigrationTime(t *testing.T, db *gorm.DB, table string, field strin
 	}
 }
 
-func TestRunSchemaMigrationKeepsDefaultMigrationsTransactional(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(testSQLiteDSN(filepath.Join(t.TempDir(), "app.db"))), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open database: %v", err)
-	}
+func TestRunKeepsDefaultMigrationsTransactionalWhenRecordingFails(t *testing.T) {
+	db := openDatabaseWithFailingMigrationRecord(t, "20260620_create_auth_sessions")
 	defer closeOpenedDatabase(t, db)
-	if err := db.Exec("CREATE TABLE schema_migrations (version TEXT PRIMARY KEY, applied_at DATETIME NOT NULL)").Error; err != nil {
-		t.Fatalf("create schema_migrations: %v", err)
-	}
 
-	err = migration.RunSchemaMigrationForTest(db, "test_transactional_failure", func(tx *gorm.DB) error {
-		if err := tx.Exec("CREATE TABLE transactional_probe (id INTEGER PRIMARY KEY)").Error; err != nil {
-			return err
-		}
-		return fmt.Errorf("boom")
-	})
+	err := migration.Run(db)
 	if err == nil {
 		t.Fatal("expected migration error")
 	}
-	if db.Migrator().HasTable("transactional_probe") {
-		t.Fatal("expected default schema migration to roll back created table")
+	if db.Migrator().HasTable(&entities.AuthSession{}) {
+		t.Fatal("expected failed auth session migration to roll back created table")
 	}
 }
 
-func TestRunSchemaMigrationLogsErrors(t *testing.T) {
+func TestRunLogsSchemaMigrationErrors(t *testing.T) {
 	logs := captureMigrationLogs(t, logrus.InfoLevel)
-	db, err := gorm.Open(sqlite.Open(testSQLiteDSN(filepath.Join(t.TempDir(), "app.db"))), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open database: %v", err)
-	}
+	db := openDatabaseWithFailingMigrationRecord(t, "20260620_create_auth_sessions")
 	defer closeOpenedDatabase(t, db)
-	if err := db.Exec("CREATE TABLE schema_migrations (version TEXT PRIMARY KEY, applied_at DATETIME NOT NULL)").Error; err != nil {
-		t.Fatalf("create schema_migrations: %v", err)
-	}
 
-	err = migration.RunSchemaMigrationForTest(db, "test_failure", func(*gorm.DB) error {
-		return fmt.Errorf("boom")
-	})
+	err := migration.Run(db)
 	if err == nil {
 		t.Fatal("expected migration error")
 	}
@@ -352,13 +291,76 @@ func TestRunSchemaMigrationLogsErrors(t *testing.T) {
 	for _, want := range []string{
 		"level=info",
 		"msg=\"schema migration started\"",
-		"version=test_failure",
+		"version=20260620_create_auth_sessions",
 		"level=error",
 		"msg=\"schema migration failed\"",
-		"error=boom",
+		"error=\"forced record failure\"",
 	} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("expected migration error logs to contain %q, got:\n%s", want, content)
+		}
+	}
+}
+
+func openDatabaseWithFailingMigrationRecord(t *testing.T, version string) *gorm.DB {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(testSQLiteDSN(filepath.Join(t.TempDir(), "app.db"))), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := db.Exec("CREATE TABLE schema_migrations (version TEXT PRIMARY KEY, applied_at DATETIME NOT NULL)").Error; err != nil {
+		t.Fatalf("create schema_migrations: %v", err)
+	}
+	seedSchemaMigrationsBefore(t, db, version, "2026-06-20T00:00:00Z")
+	quotedVersion := strings.ReplaceAll(version, "'", "''")
+	if err := db.Exec(fmt.Sprintf(`
+		CREATE TRIGGER fail_schema_migration_record
+		BEFORE INSERT ON schema_migrations
+		WHEN NEW.version = '%s'
+		BEGIN
+			SELECT RAISE(ABORT, 'forced record failure');
+		END
+	`, quotedVersion)).Error; err != nil {
+		t.Fatalf("create schema migration failure trigger: %v", err)
+	}
+	return db
+}
+
+func seedSchemaMigrationsBefore(t *testing.T, db *gorm.DB, targetVersion string, appliedAt string) {
+	t.Helper()
+	for _, version := range migrationVersionsBefore(t, targetVersion) {
+		if err := db.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", version, appliedAt).Error; err != nil {
+			t.Fatalf("seed schema_migrations %s: %v", version, err)
+		}
+	}
+}
+
+func migrationVersionsBefore(t *testing.T, targetVersion string) []string {
+	t.Helper()
+	versions := expectedMigrationVersions()
+	for index, version := range versions {
+		if version == targetVersion {
+			return append([]string(nil), versions[:index]...)
+		}
+	}
+	t.Fatalf("missing migration version %s in expected migration list", targetVersion)
+	return nil
+}
+
+func sortedExpectedMigrationVersions() []string {
+	versions := append([]string(nil), expectedMigrationVersions()...)
+	sort.Strings(versions)
+	return versions
+}
+
+func assertStringSlicesEqual(t *testing.T, want []string, got []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("expected versions %v, got %v", want, got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("expected versions %v, got %v", want, got)
 		}
 	}
 }

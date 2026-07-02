@@ -171,13 +171,14 @@ export function usePricingData(options: UsePricingDataOptions = {}): UsePricingD
       setModelPricesState(previousPrices);
       if (error instanceof ApiError && error.status === 401) {
         onAuthRequiredRef.current?.();
-        return;
+        throw error;
       }
       const message = error instanceof Error ? error.message : '';
       showNotification(
         `${t('notification.upload_failed')}${message ? `: ${message}` : ''}`,
         'error'
       );
+      throw error;
     }
   }, [modelPrices, showNotification, t]);
 

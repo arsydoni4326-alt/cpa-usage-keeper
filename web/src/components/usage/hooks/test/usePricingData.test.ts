@@ -19,6 +19,16 @@ describe('usePricingData auth callback stability', () => {
     expect(source).toContain('onAuthRequiredRef.current?.();');
     expect(source).not.toContain('}, [applyPricingResponse, onAuthRequired]);');
   });
+
+  it('returns pricing persistence failures to the caller after rollback handling', () => {
+    const setModelPricesStart = source.indexOf('const setModelPrices = useCallback(async (prices: Record<string, ModelPrice>) => {');
+    const setModelPricesEnd = source.indexOf('\n  const syncModelPrices = useCallback', setModelPricesStart);
+    const setModelPricesBlock = source.slice(setModelPricesStart, setModelPricesEnd);
+
+    expect(setModelPricesStart).toBeGreaterThanOrEqual(0);
+    expect(setModelPricesBlock).toContain('setModelPricesState(previousPrices);');
+    expect(setModelPricesBlock).toContain('throw error;');
+  });
 });
 
 describe('persistModelPriceEntries', () => {
