@@ -243,6 +243,9 @@ func (s *Service) StartAutoRefresh(ctx context.Context) error {
 		}
 		settings, err := s.GetAutoRefreshSettings(ctx)
 		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
 			logrus.Errorf("quota auto refresh settings lookup failed: %v", err)
 			if s.sleepAutoRefreshDelay(ctx, autoRefreshSettingsCheckInterval) == autoRefreshWakeCanceled {
 				return nil
@@ -266,6 +269,9 @@ func (s *Service) StartAutoRefresh(ctx context.Context) error {
 			}
 		}
 		if err := s.RunAutoRefresh(ctx); err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
 			logrus.Errorf("quota auto refresh failed: %v", err)
 		}
 	}
@@ -279,6 +285,9 @@ func (s *Service) currentAutoRefreshTime() time.Time {
 }
 
 func (s *Service) sleepAutoRefreshDelay(ctx context.Context, delay time.Duration) autoRefreshWakeReason {
+	if s == nil {
+		return autoRefreshWakeCanceled
+	}
 	if delay <= 0 {
 		return autoRefreshWakeElapsed
 	}
@@ -311,6 +320,9 @@ func (s *Service) notifyAutoRefreshSettingsChanged() {
 }
 
 func (s *Service) nextAutoRefreshDelay(settings AutoRefreshSettings, now time.Time) time.Duration {
+	if s == nil {
+		return autoRefreshSettingsCheckInterval
+	}
 	if !settings.Enabled || settings.Schedule == nil {
 		return autoRefreshSettingsCheckInterval
 	}

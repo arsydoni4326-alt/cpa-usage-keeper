@@ -38,6 +38,9 @@ func cleanupExpiredRefreshTasks(service *quota.Service, now time.Time)
 //go:linkname nextAutoRefreshDelay cpa-usage-keeper/internal/quota.(*Service).nextAutoRefreshDelay
 func nextAutoRefreshDelay(service *quota.Service, settings quota.AutoRefreshSettings, now time.Time) time.Duration
 
+//go:linkname sleepAutoRefreshDelay cpa-usage-keeper/internal/quota.(*Service).sleepAutoRefreshDelay
+func sleepAutoRefreshDelay(service *quota.Service, ctx context.Context, delay time.Duration) int
+
 //go:linkname resetInspectionCompletedAt cpa-usage-keeper/internal/quota.(*Service).resetInspectionCompletedAt
 func resetInspectionCompletedAt(service *quota.Service)
 

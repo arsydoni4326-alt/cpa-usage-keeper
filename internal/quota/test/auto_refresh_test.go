@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	. "cpa-usage-keeper/internal/quota"
 	"github.com/sirupsen/logrus"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
+	"gorm.io/gorm"
 )
 
 func TestStartAutoRefreshWithNilServiceReturns(t *testing.T) {
@@ -20,6 +22,96 @@ func TestStartAutoRefreshWithNilServiceReturns(t *testing.T) {
 	if err := service.StartAutoRefresh(ctx); err != nil {
 		t.Fatalf("expected nil service auto refresh to return nil, got %v", err)
 	}
+}
+
+func TestSleepAutoRefreshDelayAllowsNilService(t *testing.T) {
+	var service *Service
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			t.Fatalf("expected nil service sleep to return safely, recovered %v", recovered)
+		}
+	}()
+
+	sleepAutoRefreshDelay(service, ctx, time.Millisecond)
+}
+
+func TestNextAutoRefreshDelayAllowsNilService(t *testing.T) {
+	var service *Service
+
+	delay := nextAutoRefreshDelay(service, AutoRefreshSettings{
+		Enabled:  true,
+		Schedule: &AutoRefreshSchedule{Unit: AutoRefreshScheduleUnitMinute, Value: 1},
+	}, time.Date(2026, 5, 26, 12, 0, 0, 0, time.Local))
+
+	if delay != time.Minute {
+		t.Fatalf("expected nil service scheduler delay to recheck after 1m, got %s", delay)
+	}
+}
+
+func TestStartAutoRefreshSuppressesSettingsLookupCancellationLog(t *testing.T) {
+	db := openQuotaTestDatabase(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	callbackName := "test:cancel_auto_refresh_settings_lookup"
+	cancelledDuringLookup := false
+	if err := db.Callback().Query().After("gorm:query").Register(callbackName, func(tx *gorm.DB) {
+		if cancelledDuringLookup || !statementIncludesSettingKey(tx, "quota.auto_refresh.enabled") {
+			return
+		}
+		cancelledDuringLookup = true
+		cancel()
+		tx.AddError(context.Canceled)
+	}); err != nil {
+		t.Fatalf("register query callback returned error: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Callback().Query().Remove(callbackName) })
+	service := newQuotaServiceWithRegistry(t, db, NewProviderRegistry(nil))
+	setAutoRefreshDelay(service, func(context.Context, time.Duration) bool {
+		return false
+	})
+	hook := logrustest.NewGlobal()
+	t.Cleanup(func() {
+		hook.Reset()
+	})
+
+	if err := service.StartAutoRefresh(ctx); err != nil {
+		t.Fatalf("StartAutoRefresh returned error: %v", err)
+	}
+
+	if !cancelledDuringLookup {
+		t.Fatal("expected test hook to cancel the context during settings lookup")
+	}
+	assertNoAutoRefreshErrorLog(t, hook, "quota auto refresh settings lookup failed")
+}
+
+func TestStartAutoRefreshSuppressesRunCancellationLog(t *testing.T) {
+	db := openQuotaTestDatabase(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	service := newQuotaServiceWithRegistry(t, db, NewProviderRegistry(nil))
+	setAutoRefreshDelay(service, func(context.Context, time.Duration) bool {
+		cancel()
+		return true
+	})
+	if _, err := service.UpdateAutoRefreshSettings(context.Background(), AutoRefreshSettings{
+		Enabled:  true,
+		Schedule: &AutoRefreshSchedule{Unit: AutoRefreshScheduleUnitMinute, Value: 1},
+	}); err != nil {
+		t.Fatalf("UpdateAutoRefreshSettings returned error: %v", err)
+	}
+	hook := logrustest.NewGlobal()
+	t.Cleanup(func() {
+		hook.Reset()
+	})
+
+	if err := service.StartAutoRefresh(ctx); err != nil {
+		t.Fatalf("StartAutoRefresh returned error: %v", err)
+	}
+
+	assertNoAutoRefreshErrorLog(t, hook, "quota auto refresh failed")
 }
 
 func TestStartAutoRefreshRunsAfterInitialConfiguredDelay(t *testing.T) {
@@ -373,6 +465,15 @@ func assertAutoRefreshRoundLogs(t *testing.T, hook *logrustest.Hook, wantStart i
 	}
 	if startLogs != wantStart || endLogs != wantEnd {
 		t.Fatalf("expected start=%d end=%d info logs, got start=%d end=%d entries=%+v", wantStart, wantEnd, startLogs, endLogs, hook.AllEntries())
+	}
+}
+
+func assertNoAutoRefreshErrorLog(t *testing.T, hook *logrustest.Hook, messagePrefix string) {
+	t.Helper()
+	for _, entry := range hook.AllEntries() {
+		if entry.Level == logrus.ErrorLevel && strings.HasPrefix(entry.Message, messagePrefix) {
+			t.Fatalf("expected no %q error log, got entries=%+v", messagePrefix, hook.AllEntries())
+		}
 	}
 }
 
