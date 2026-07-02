@@ -111,7 +111,7 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 	}
 
 	cpaClient := cpa.NewClient(cfg.CPABaseURL, cfg.CPAManagementKey, cfg.RequestTimeout, cfg.TLSSkipVerify)
-	quotaService := quota.NewServiceWithOptions(db, cpaClient, quota.ServiceOptions{RefreshWorkerLimit: cfg.QuotaRefreshWorkerLimit, AutoRefreshInterval: cfg.QuotaAutoRefreshInterval})
+	quotaService := quota.NewServiceWithOptions(db, cpaClient, quota.ServiceOptions{RefreshWorkerLimit: cfg.QuotaRefreshWorkerLimit})
 	// syncService 仍然是 metadata 和 usage 处理共享的业务服务入口。
 	syncService := service.NewSyncServiceWithOptions(db, service.SyncServiceOptions{
 		BaseURL: cfg.CPABaseURL,
@@ -209,7 +209,7 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 		Maintenance:       NewStorageCleanupRunner(syncService),
 		MetadataSync:      metadataSyncRunner,
 		QuotaService:      quotaService,
-		QuotaAutoRefresh:  quotaAutoRefreshService(cfg, quotaService),
+		QuotaAutoRefresh:  quotaService,
 		BackupMaintenance: backupMaintenance,
 		RecentUsageCache:  recentUsageCache,
 		LogCloser:         logCloser,
@@ -226,7 +226,7 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 				Quota:         quotaService,
 				CPAAPIKeys:    cpaAPIKeyService,
 				AuthFiles:     authFilesManagementService,
-				Status:        api.StatusRouteConfig{CPAPublicURL: cfg.CPAPublicURL, ActiveRecorder: quotaActiveRecorder(cfg, quotaService), QuotaAutoRefreshEnabled: cfg.QuotaAutoRefreshEnabled},
+				Status:        api.StatusRouteConfig{CPAPublicURL: cfg.CPAPublicURL},
 			},
 		),
 	}, nil
@@ -250,20 +250,6 @@ func publicOrigin(candidate string) (string, bool) {
 		return "", false
 	}
 	return scheme + "://" + parsed.Host, true
-}
-
-func quotaActiveRecorder(cfg config.Config, service *quota.Service) api.ActiveStatusRecorder {
-	if !cfg.QuotaAutoRefreshEnabled {
-		return nil
-	}
-	return service
-}
-
-func quotaAutoRefreshService(cfg config.Config, service *quota.Service) QuotaRunner {
-	if !cfg.QuotaAutoRefreshEnabled {
-		return nil
-	}
-	return service
 }
 
 func closeGormDB(db *gorm.DB) error {

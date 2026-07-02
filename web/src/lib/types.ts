@@ -35,12 +35,23 @@ export interface StatusResponse {
   running: boolean
   sync_running: boolean
   timezone: string
-  quotaAutoRefreshEnabled?: boolean
   cpa_public_url?: string
   last_run_at?: string
   last_error?: string
   last_warning?: string
   last_status?: string
+}
+
+export type QuotaAutoRefreshScheduleUnit = 'minute' | 'hour' | 'day' | 'week'
+
+export interface QuotaAutoRefreshSchedule {
+  unit: QuotaAutoRefreshScheduleUnit
+  value: number
+}
+
+export interface QuotaAutoRefreshSettings {
+  enabled: boolean
+  schedule: QuotaAutoRefreshSchedule | null
 }
 
 export interface VersionResponse {

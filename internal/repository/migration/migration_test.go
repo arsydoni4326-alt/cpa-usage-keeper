@@ -62,6 +62,7 @@ func TestOrderedMigrationsPreservesExecutionOrder(t *testing.T) {
 		"20260629_add_usage_identity_alias",
 		"20260701_add_auth_session_source",
 		"20260702_model_price_multiplier",
+		"20260702_create_app_settings",
 	}
 	assertStringSlicesEqual(t, want, got)
 }
@@ -98,6 +99,9 @@ func TestOpenDatabaseRunsSchemaMigrationsAndAddsUsageEventRedisFields(t *testing
 	}
 	if !db.Migrator().HasColumn(&entities.AuthSession{}, "source") {
 		t.Fatal("expected auth_sessions.source column to exist")
+	}
+	if !db.Migrator().HasTable(&entities.AppSetting{}) {
+		t.Fatal("expected app_settings table to exist")
 	}
 	if db.Migrator().HasColumn(&entities.RedisUsageInbox{}, "queue_key") {
 		t.Fatal("expected redis_usage_inboxes.queue_key column not to exist")

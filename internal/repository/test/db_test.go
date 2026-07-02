@@ -65,6 +65,13 @@ func TestOpenDatabaseCreatesFreshDatabaseFromCurrentSchemaWithoutRunningMigratio
 	if latestMigrationCount != 1 {
 		t.Fatalf("expected fresh database to mark latest migration applied, got %d", latestMigrationCount)
 	}
+	var appSettingsMigrationCount int64
+	if err := db.Table("schema_migrations").Where("version = ?", "20260702_create_app_settings").Count(&appSettingsMigrationCount).Error; err != nil {
+		t.Fatalf("count app settings schema migration: %v", err)
+	}
+	if appSettingsMigrationCount != 1 {
+		t.Fatalf("expected fresh database to mark app settings migration applied, got %d", appSettingsMigrationCount)
+	}
 	if strings.Contains(logs.String(), "schema migration started") {
 		t.Fatalf("expected fresh database creation not to run version migrations, got logs:\n%s", logs.String())
 	}
@@ -91,6 +98,9 @@ func TestOpenDatabaseCreatesFreshDatabaseFromCurrentSchemaWithoutRunningMigratio
 	}
 	if !db.Migrator().HasColumn(&entities.ModelPriceSetting{}, "price_multiplier") {
 		t.Fatal("expected model_price_settings.price_multiplier column to exist")
+	}
+	if !db.Migrator().HasTable(&entities.AppSetting{}) {
+		t.Fatal("expected app_settings table to exist")
 	}
 	for _, indexName := range []string{
 		"idx_usage_events_api_group_key",

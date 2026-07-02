@@ -52,6 +52,7 @@ const (
 	migrationAddUsageIdentityAlias                  = "20260629_add_usage_identity_alias"
 	migrationAddAuthSessionSource                   = "20260701_add_auth_session_source"
 	migrationModelPriceMultiplier                   = "20260702_model_price_multiplier"
+	migrationCreateAppSettings                      = "20260702_create_app_settings"
 )
 
 type schemaMigration struct {
@@ -148,6 +149,7 @@ func orderedMigrations() []databaseMigration {
 		{version: migrationAddUsageIdentityAlias, run: addUsageIdentityAliasMigration},
 		{version: migrationAddAuthSessionSource, run: addAuthSessionSourceMigration},
 		{version: migrationModelPriceMultiplier, run: addModelPriceMultiplierMigration},
+		{version: migrationCreateAppSettings, run: createAppSettingsMigration},
 	}
 }
 
