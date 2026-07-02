@@ -248,6 +248,18 @@ export function PriceSettingsCard({
   const [syncPreview, setSyncPreview] = useState<PricingSyncPreviewResponse | null>(null);
   const [syncDrafts, setSyncDrafts] = useState<PricingSyncDraft[]>([]);
 
+  const closeEditModal = () => {
+    if (!editSaving) {
+      setEditModel(null);
+    }
+  };
+
+  const closeDeleteModal = () => {
+    if (!deleteSaving) {
+      setDeleteModel(null);
+    }
+  };
+
   const handleSavePrice = async () => {
     if (!selectedModel || priceSaving) return;
     const price = pricingDraftToModelPrice({
@@ -631,10 +643,11 @@ export function PriceSettingsCard({
       <Modal
         open={editModel !== null}
         title={formatDisplayName(editModel ?? '')}
-        onClose={() => setEditModel(null)}
+        onClose={closeEditModal}
+        closeDisabled={editSaving}
         footer={
           <div className={styles.priceActions}>
-            <Button variant="secondary" className={styles.usagePillAction} onClick={() => setEditModel(null)} disabled={editSaving}>
+            <Button variant="secondary" className={styles.usagePillAction} onClick={closeEditModal} disabled={editSaving}>
               {t('common.cancel')}
             </Button>
             <Button variant="primary" className={styles.usagePillAction} onClick={() => void handleSaveEdit()} loading={editSaving}>
@@ -651,6 +664,7 @@ export function PriceSettingsCard({
               value={editStyle}
               options={styleOptions}
               onChange={(value) => setEditStyle(value === 'claude' ? 'claude' : 'openai')}
+              disabled={editSaving}
               className={styles.usagePillControl}
             />
           </div>
@@ -662,6 +676,7 @@ export function PriceSettingsCard({
               onChange={(e) => setEditPrompt(e.target.value)}
               placeholder="0.00"
               step="0.0001"
+              disabled={editSaving}
               className={styles.usagePillControl}
             />
           </div>
@@ -673,6 +688,7 @@ export function PriceSettingsCard({
               onChange={(e) => setEditCompletion(e.target.value)}
               placeholder="0.00"
               step="0.0001"
+              disabled={editSaving}
               className={styles.usagePillControl}
             />
           </div>
@@ -684,6 +700,7 @@ export function PriceSettingsCard({
               onChange={(e) => setEditCache(e.target.value)}
               placeholder="0.00"
               step="0.0001"
+              disabled={editSaving}
               className={styles.usagePillControl}
             />
           </div>
@@ -696,6 +713,7 @@ export function PriceSettingsCard({
                 onChange={(e) => setEditCacheCreation(e.target.value)}
                 placeholder="0.00"
                 step="0.0001"
+                disabled={editSaving}
                 className={styles.usagePillControl}
               />
             </div>
@@ -709,6 +727,7 @@ export function PriceSettingsCard({
               placeholder="1"
               step="0.0001"
               min="0"
+              disabled={editSaving}
               className={styles.usagePillControl}
             />
           </div>
@@ -718,10 +737,11 @@ export function PriceSettingsCard({
       <Modal
         open={deleteModel !== null}
         title={t('usage_stats.model_price_delete_confirm_title')}
-        onClose={() => setDeleteModel(null)}
+        onClose={closeDeleteModal}
+        closeDisabled={deleteSaving}
         footer={
           <div className={styles.priceActions}>
-            <Button variant="secondary" className={styles.usagePillAction} onClick={() => setDeleteModel(null)} disabled={deleteSaving}>
+            <Button variant="secondary" className={styles.usagePillAction} onClick={closeDeleteModal} disabled={deleteSaving}>
               {t('common.cancel')}
             </Button>
             <Button variant="danger" className={`${styles.usagePillAction} ${styles.usagePillActionDanger}`} onClick={() => void confirmDeleteModel()} loading={deleteSaving}>

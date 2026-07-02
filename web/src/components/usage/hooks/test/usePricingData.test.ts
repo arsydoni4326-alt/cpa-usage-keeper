@@ -29,6 +29,19 @@ describe('usePricingData auth callback stability', () => {
     expect(setModelPricesBlock).toContain('setModelPricesState(previousPrices);');
     expect(setModelPricesBlock).toContain('throw error;');
   });
+
+  it('updates saved model prices only after persistence succeeds', () => {
+    const setModelPricesStart = source.indexOf('const setModelPrices = useCallback(async (prices: Record<string, ModelPrice>) => {');
+    const setModelPricesEnd = source.indexOf('\n  const syncModelPrices = useCallback', setModelPricesStart);
+    const setModelPricesBlock = source.slice(setModelPricesStart, setModelPricesEnd);
+    const persistenceStart = setModelPricesBlock.indexOf('await Promise.all([');
+    const stateUpdateStart = setModelPricesBlock.indexOf('setModelPricesState(prices);');
+
+    expect(setModelPricesStart).toBeGreaterThanOrEqual(0);
+    expect(persistenceStart).toBeGreaterThanOrEqual(0);
+    expect(stateUpdateStart).toBeGreaterThan(persistenceStart);
+    expect(setModelPricesBlock.indexOf('setModelPricesState(previousPrices);')).toBeGreaterThan(stateUpdateStart);
+  });
 });
 
 describe('persistModelPriceEntries', () => {

@@ -182,6 +182,35 @@ describe('PriceSettingsCard', () => {
     expect(deleteHandler).toContain('setDeleteSaving(false);');
   });
 
+  it('keeps edit and delete modals locked while persistence is pending', () => {
+    const closeEditStart = source.indexOf('const closeEditModal = () => {');
+    const closeEditEnd = source.indexOf('\n  const closeDeleteModal = () => {', closeEditStart);
+    const closeEdit = source.slice(closeEditStart, closeEditEnd);
+    const closeDeleteStart = source.indexOf('const closeDeleteModal = () => {');
+    const closeDeleteEnd = source.indexOf('\n  const handleSavePrice = async () => {', closeDeleteStart);
+    const closeDelete = source.slice(closeDeleteStart, closeDeleteEnd);
+    const editModalStart = source.indexOf('<Modal\n        open={editModel !== null}');
+    const editModalEnd = source.indexOf('\n      </Modal>', editModalStart);
+    const editModal = source.slice(editModalStart, editModalEnd);
+    const deleteModalStart = source.indexOf('<Modal\n        open={deleteModel !== null}');
+    const deleteModalEnd = source.indexOf('\n      </Modal>', deleteModalStart);
+    const deleteModal = source.slice(deleteModalStart, deleteModalEnd);
+
+    expect(closeEditStart).toBeGreaterThanOrEqual(0);
+    expect(closeEdit).toContain('if (!editSaving) {');
+    expect(closeEdit).toContain('setEditModel(null);');
+    expect(closeDeleteStart).toBeGreaterThanOrEqual(0);
+    expect(closeDelete).toContain('if (!deleteSaving) {');
+    expect(closeDelete).toContain('setDeleteModel(null);');
+    expect(editModalStart).toBeGreaterThanOrEqual(0);
+    expect(editModal).toContain('onClose={closeEditModal}');
+    expect(editModal).toContain('closeDisabled={editSaving}');
+    expect(editModal).toContain('disabled={editSaving}');
+    expect(deleteModalStart).toBeGreaterThanOrEqual(0);
+    expect(deleteModal).toContain('onClose={closeDeleteModal}');
+    expect(deleteModal).toContain('closeDisabled={deleteSaving}');
+  });
+
   it('keeps explicit zero multipliers when converting sync drafts', () => {
     expect(syncDraftToModelPrice({ ...syncDraft('free-model'), multiplier: '0' })?.multiplier).toBe(0);
     expect(syncDraftToModelPrice({ ...syncDraft('bad-model'), multiplier: '-1' })).toBeNull();

@@ -153,7 +153,6 @@ export function usePricingData(options: UsePricingDataOptions = {}): UsePricingD
 
   const setModelPrices = useCallback(async (prices: Record<string, ModelPrice>) => {
     const previousPrices = modelPrices;
-    setModelPricesState(prices);
 
     try {
       const previousModels = new Set(Object.keys(previousPrices));
@@ -166,6 +165,7 @@ export function usePricingData(options: UsePricingDataOptions = {}): UsePricingD
           .filter((model) => !nextModels.has(model))
           .map((model) => deletePricing(model)),
       ]);
+      setModelPricesState(prices);
       setLastRefreshedAt(new Date());
     } catch (error) {
       setModelPricesState(previousPrices);
