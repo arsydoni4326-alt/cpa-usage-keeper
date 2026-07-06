@@ -1,16 +1,16 @@
-package service
+package test
 
 import (
 	"testing"
 
 	"cpa-usage-keeper/internal/entities"
-	"cpa-usage-keeper/internal/repository/dto"
+	"cpa-usage-keeper/internal/service"
 )
 
 func TestNormalizeUsageEventTokensUsesCodexStyleOutputForGeminiFamily(t *testing.T) {
 	for _, usageType := range []string{"gemini", "vertex", "gemini-cli", "gemini-cli-code-assist", "antigravity", "aistudio", "ai-studio"} {
 		t.Run(usageType, func(t *testing.T) {
-			event := NormalizeUsageEventTokens(entities.UsageEvent{
+			event := service.NormalizeUsageEventTokens(entities.UsageEvent{
 				InputTokens:     11,
 				OutputTokens:    7,
 				ReasoningTokens: 3,
@@ -26,7 +26,7 @@ func TestNormalizeUsageEventTokensUsesCodexStyleOutputForGeminiFamily(t *testing
 }
 
 func TestNormalizeUsageEventTokensBackfillsTotalWithCodexStyleOutput(t *testing.T) {
-	event := NormalizeUsageEventTokens(entities.UsageEvent{
+	event := service.NormalizeUsageEventTokens(entities.UsageEvent{
 		InputTokens:     11,
 		OutputTokens:    7,
 		ReasoningTokens: 3,
@@ -39,7 +39,7 @@ func TestNormalizeUsageEventTokensBackfillsTotalWithCodexStyleOutput(t *testing.
 }
 
 func TestNormalizeUsageEventTokensDoesNotDoubleCountCodexReasoningWhenTotalMissing(t *testing.T) {
-	event := NormalizeUsageEventTokens(entities.UsageEvent{
+	event := service.NormalizeUsageEventTokens(entities.UsageEvent{
 		InputTokens:     11,
 		OutputTokens:    10,
 		ReasoningTokens: 3,
@@ -51,10 +51,10 @@ func TestNormalizeUsageEventTokensDoesNotDoubleCountCodexReasoningWhenTotalMissi
 	}
 }
 
-func TestNormalizeUsageEventTokensKeepsOpenAIStyleOutput(t *testing.T) {
-	for _, usageType := range []string{"codex", "openai", "custom"} {
+func TestNormalizeUsageEventTokensKeepsAlreadyIncludedOutputWhenTotalMissing(t *testing.T) {
+	for _, usageType := range []string{"codex", "openai", "openai-compatible", "openai_compatibility", "custom"} {
 		t.Run(usageType, func(t *testing.T) {
-			event := NormalizeUsageEventTokens(entities.UsageEvent{
+			event := service.NormalizeUsageEventTokens(entities.UsageEvent{
 				InputTokens:     11,
 				OutputTokens:    10,
 				ReasoningTokens: 3,
@@ -68,23 +68,37 @@ func TestNormalizeUsageEventTokensKeepsOpenAIStyleOutput(t *testing.T) {
 	}
 }
 
-func TestNormalizeXAIStyleTokensKeepsResponsesOutput(t *testing.T) {
-	tokens := normalizeXAIStyleTokens(dto.TokenStats{
+func TestNormalizeUsageEventTokensDoesNotFoldCodexWhenCompatibilityWouldFold(t *testing.T) {
+	event := service.NormalizeUsageEventTokens(entities.UsageEvent{
+		InputTokens:     11,
+		OutputTokens:    7,
+		ReasoningTokens: 3,
+		CachedTokens:    5,
+		TotalTokens:     21,
+	}, "codex")
+
+	if event.InputTokens != 11 || event.OutputTokens != 7 || event.ReasoningTokens != 3 || event.CachedTokens != 5 || event.TotalTokens != 21 {
+		t.Fatalf("expected codex normalization to keep output unchanged, got %+v", event)
+	}
+}
+
+func TestNormalizeUsageEventTokensKeepsResponsesOutputForXAI(t *testing.T) {
+	event := service.NormalizeUsageEventTokens(entities.UsageEvent{
 		InputTokens:     11,
 		OutputTokens:    10,
 		ReasoningTokens: 3,
 		CachedTokens:    5,
-	})
+	}, "xai")
 
-	if tokens.InputTokens != 11 || tokens.OutputTokens != 10 || tokens.ReasoningTokens != 3 || tokens.CachedTokens != 5 || tokens.TotalTokens != 21 {
-		t.Fatalf("expected xAI Responses tokens to keep Codex-style output tokens, got %+v", tokens)
+	if event.InputTokens != 11 || event.OutputTokens != 10 || event.ReasoningTokens != 3 || event.CachedTokens != 5 || event.TotalTokens != 21 {
+		t.Fatalf("expected xAI Responses tokens to keep Codex-style output tokens, got %+v", event)
 	}
 }
 
-func TestNormalizeUsageEventTokensFoldsGeminiStyleReasoningForOpenAICompatible(t *testing.T) {
-	for _, usageType := range []string{"openai-compatible", "openai_compatibility"} {
+func TestNormalizeUsageEventTokensFoldsGeminiStyleReasoningForOpenAICompatibility(t *testing.T) {
+	for _, usageType := range []string{"openai", "openai-compatible", "openai_compatibility"} {
 		t.Run(usageType, func(t *testing.T) {
-			event := NormalizeUsageEventTokens(entities.UsageEvent{
+			event := service.NormalizeUsageEventTokens(entities.UsageEvent{
 				InputTokens:     11,
 				OutputTokens:    7,
 				ReasoningTokens: 3,
@@ -99,10 +113,27 @@ func TestNormalizeUsageEventTokensFoldsGeminiStyleReasoningForOpenAICompatible(t
 	}
 }
 
-func TestNormalizeUsageEventTokensKeepsCodexStyleOutputForOpenAICompatible(t *testing.T) {
-	for _, usageType := range []string{"openai-compatible", "openai_compatibility"} {
+func TestNormalizeUsageEventTokensDoesNotFoldOpenAICompatibilityWithoutTotalProof(t *testing.T) {
+	for _, usageType := range []string{"openai", "openai-compatible", "openai_compatibility"} {
 		t.Run(usageType, func(t *testing.T) {
-			event := NormalizeUsageEventTokens(entities.UsageEvent{
+			event := service.NormalizeUsageEventTokens(entities.UsageEvent{
+				InputTokens:     11,
+				OutputTokens:    7,
+				ReasoningTokens: 3,
+				CachedTokens:    5,
+			}, usageType)
+
+			if event.InputTokens != 11 || event.OutputTokens != 7 || event.ReasoningTokens != 3 || event.CachedTokens != 5 || event.TotalTokens != 18 {
+				t.Fatalf("expected %s to keep separated reasoning without total proof, got %+v", usageType, event)
+			}
+		})
+	}
+}
+
+func TestNormalizeUsageEventTokensKeepsCodexStyleOutputForOpenAICompatibility(t *testing.T) {
+	for _, usageType := range []string{"openai", "openai-compatible", "openai_compatibility"} {
+		t.Run(usageType, func(t *testing.T) {
+			event := service.NormalizeUsageEventTokens(entities.UsageEvent{
 				InputTokens:     11,
 				OutputTokens:    10,
 				ReasoningTokens: 3,
@@ -117,10 +148,10 @@ func TestNormalizeUsageEventTokensKeepsCodexStyleOutputForOpenAICompatible(t *te
 	}
 }
 
-func TestNormalizeUsageEventTokensDoesNotFoldOpenAIStyleReasoningWhenTotalPresent(t *testing.T) {
-	for _, usageType := range []string{"codex", "openai"} {
+func TestNormalizeUsageEventTokensDoesNotFoldCodexReasoningWhenTotalPresent(t *testing.T) {
+	for _, usageType := range []string{"codex"} {
 		t.Run(usageType, func(t *testing.T) {
-			event := NormalizeUsageEventTokens(entities.UsageEvent{
+			event := service.NormalizeUsageEventTokens(entities.UsageEvent{
 				InputTokens:     11,
 				OutputTokens:    10,
 				ReasoningTokens: 3,
@@ -129,7 +160,7 @@ func TestNormalizeUsageEventTokensDoesNotFoldOpenAIStyleReasoningWhenTotalPresen
 			}, usageType)
 
 			if event.InputTokens != 11 || event.OutputTokens != 10 || event.ReasoningTokens != 3 || event.CachedTokens != 5 || event.TotalTokens != 21 {
-				t.Fatalf("expected %s strict normalization to keep output unchanged, got %+v", usageType, event)
+				t.Fatalf("expected %s normalization to keep output unchanged, got %+v", usageType, event)
 			}
 		})
 	}
