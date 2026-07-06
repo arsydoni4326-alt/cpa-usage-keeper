@@ -48,8 +48,10 @@ func normalizeUsageTokensByType(tokens dto.TokenStats, usageType string) dto.Tok
 		return normalizeKimiTokens(tokens)
 	case "xai":
 		return normalizeXAIStyleTokens(tokens)
-	case "openai", "openai-compatible", "openai_compatibility", "codex":
+	case "openai", "codex":
 		return normalizeOpenAIStyleTokens(tokens)
+	case "openai-compatible", "openai_compatibility":
+		return normalizeOpenAICompatibilityTokens(tokens)
 	default:
 		return normalizeDefaultTokens(tokens)
 	}
@@ -65,9 +67,16 @@ func normalizeClaudeTokens(tokens dto.TokenStats) dto.TokenStats {
 
 func normalizeOpenAIStyleTokens(tokens dto.TokenStats) dto.TokenStats {
 	tokens = clampTokenStats(tokens)
-	// Models routed via OpenAI-compatible gateway (e.g. Gemini) may report
-	// output_tokens without reasoning_tokens included. Detect via token
-	// arithmetic and fold to maintain the unified Codex-style storage format.
+	// Real OpenAI and Codex Responses usage already includes reasoning_tokens in output_tokens.
+	return fillCodexStyleTotalTokens(tokens)
+}
+
+func normalizeOpenAICompatibilityTokens(tokens dto.TokenStats) dto.TokenStats {
+	tokens = clampTokenStats(tokens)
+	// OpenAI-compatible protocol does not guarantee OpenAI token semantics. CPA may route
+	// Gemini-family models through OpenAICompatExecutor where output_tokens and
+	// reasoning_tokens are reported separately. Fold when arithmetic proves reasoning
+	// is not already included in output.
 	if tokens.ReasoningTokens > 0 &&
 		tokens.TotalTokens > 0 &&
 		tokens.InputTokens+tokens.OutputTokens+tokens.ReasoningTokens == tokens.TotalTokens {
