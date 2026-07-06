@@ -153,6 +153,7 @@ describe('Credential section styles', () => {
     expect(intervalFieldStyles).toContain('max-width: 100%;')
     expect(credentialStyles).toMatch(/\.credentialAutoRefreshIntervalField\s*\{[\s\S]*?input,\s*select\s*\{[\s\S]*?min-height:\s*40px;/)
     expect(credentialStyles).toMatch(/\.credentialAutoRefreshIntervalField\s*\{[\s\S]*?input,\s*select\s*\{[\s\S]*?text-align:\s*center;/)
+    expect(intervalFieldStyles).toMatch(/select\s*\{[\s\S]*?grid-column:\s*span 2;/)
     expect(credentialStyles).toMatch(/\.credentialAutoRefreshIntervalLabel\s*\{[\s\S]*?text-align:\s*right;/)
     expect(credentialStyles).toMatch(/\.credentialAutoRefreshUnitSuffix\s*\{[\s\S]*?text-align:\s*left;/)
     expect(credentialStyles).toMatch(/\.credentialAutoRefreshUnitSuffix\s*\{[\s\S]*?overflow:\s*visible;/)
