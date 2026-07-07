@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type CSSProperties, type FocusEvent, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import '@/lib/chartjs';
-import { Tooltip } from 'chart.js';
-import type { Chart, ChartData, ChartOptions, Plugin, ScriptableContext, TooltipModel, TooltipPositionerFunction } from 'chart.js';
+import { Interaction, Tooltip } from 'chart.js';
+import type { Chart, ChartData, ChartOptions, InteractionItem, InteractionModeFunction, Plugin, ScriptableContext, TooltipModel, TooltipPositionerFunction } from 'chart.js';
 import { Bar, Doughnut, Scatter } from 'react-chartjs-2';
 import type { AnalysisCompositionItem, AnalysisCostBreakdown, AnalysisHeatmapCell, AnalysisLatencyDiagnostics, AnalysisModelEfficiencyItem, AnalysisResponse, AnalysisTokenUsageBucket } from '@/lib/types';
 import { calculateDisplayInputTokens, calculateDisplayOutputTokens, formatCompactNumber, formatDurationMs, formatUsd } from '@/utils/usage';
@@ -130,6 +130,10 @@ declare module 'chart.js' {
   interface TooltipPositionerMap {
     analysisCompositionCursor: TooltipPositionerFunction<'doughnut'>;
   }
+
+  interface InteractionModeMap {
+    analysisCompositionArc: InteractionModeFunction;
+  }
 }
 
 const CHART_COLORS: GradientColor[] = [
@@ -180,6 +184,9 @@ const COMPOSITION_DONUT_SPACING = 4;
 const COMPOSITION_DONUT_HOVER_OFFSET = 10;
 const COMPOSITION_DONUT_LAYOUT_PADDING = 28;
 const COMPOSITION_TOOLTIP_CARET_PADDING = 18;
+const COMPOSITION_TOOLTIP_TITLE_LINE_LENGTH = 28;
+const COMPOSITION_TOOLTIP_TITLE_MAX_LINES = 3;
+const FULL_CIRCLE = Math.PI * 2;
 const HEATMAP_TOOLTIP_MAX_WIDTH = 280;
 const HEATMAP_TOOLTIP_VIEWPORT_PADDING = 8;
 const HEATMAP_TOOLTIP_CURSOR_OFFSET = 14;
@@ -274,6 +281,107 @@ const toFiniteNumber = (value: unknown): number | undefined => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
 };
+
+type DoughnutArcProps = {
+  x: number;
+  y: number;
+  innerRadius: number;
+  outerRadius: number;
+  startAngle: number;
+  endAngle: number;
+  circumference: number;
+};
+
+type DoughnutArcElement = {
+  options?: {
+    spacing?: unknown;
+    borderWidth?: unknown;
+  };
+  getProps: (props: Array<keyof DoughnutArcProps>, useFinalPosition?: boolean) => Partial<DoughnutArcProps>;
+};
+
+const normalizeRadians = (angle: number): number => ((angle % FULL_CIRCLE) + FULL_CIRCLE) % FULL_CIRCLE;
+
+const getRadiansDistance = (first: number, second: number): number => {
+  const distance = Math.abs(normalizeRadians(first) - normalizeRadians(second));
+  return Math.min(distance, FULL_CIRCLE - distance);
+};
+
+const isAngleWithinArc = (angle: number, startAngle: number, endAngle: number, circumference: number): boolean => {
+  if (Math.abs(circumference) >= FULL_CIRCLE - 0.0001) return true;
+  const normalizedAngle = normalizeRadians(angle);
+  const normalizedStart = normalizeRadians(startAngle);
+  const normalizedEnd = normalizeRadians(endAngle);
+  return normalizedStart <= normalizedEnd
+    ? normalizedAngle >= normalizedStart && normalizedAngle <= normalizedEnd
+    : normalizedAngle >= normalizedStart || normalizedAngle <= normalizedEnd;
+};
+
+const getDoughnutArcProps = (element: unknown, useFinalPosition?: boolean): { element: DoughnutArcElement; props: DoughnutArcProps } | undefined => {
+  if (!element || typeof element !== 'object') return undefined;
+  const candidate = element as Partial<DoughnutArcElement>;
+  if (typeof candidate.getProps !== 'function') return undefined;
+  const props = candidate.getProps(['x', 'y', 'innerRadius', 'outerRadius', 'startAngle', 'endAngle', 'circumference'], useFinalPosition);
+  const x = toFiniteNumber(props.x);
+  const y = toFiniteNumber(props.y);
+  const innerRadius = toFiniteNumber(props.innerRadius);
+  const outerRadius = toFiniteNumber(props.outerRadius);
+  const startAngle = toFiniteNumber(props.startAngle);
+  const endAngle = toFiniteNumber(props.endAngle);
+  const circumference = toFiniteNumber(props.circumference);
+  if (
+    x === undefined
+    || y === undefined
+    || innerRadius === undefined
+    || outerRadius === undefined
+    || startAngle === undefined
+    || endAngle === undefined
+    || circumference === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    element: candidate as DoughnutArcElement,
+    props: { x, y, innerRadius, outerRadius, startAngle, endAngle, circumference },
+  };
+};
+
+const isPointerInsidePaintedArc = (item: InteractionItem, event: unknown, useFinalPosition?: boolean): boolean => {
+  const pointerX = toFiniteNumber((event as { x?: unknown } | undefined)?.x);
+  const pointerY = toFiniteNumber((event as { y?: unknown } | undefined)?.y);
+  if (pointerX === undefined || pointerY === undefined) return false;
+  const arc = getDoughnutArcProps(item.element, useFinalPosition);
+  if (!arc) return false;
+  const { element, props } = arc;
+  const deltaX = pointerX - props.x;
+  const deltaY = pointerY - props.y;
+  const radius = Math.hypot(deltaX, deltaY);
+  if (radius < props.innerRadius || radius > props.outerRadius) return false;
+  const angle = Math.atan2(deltaY, deltaX);
+  if (!isAngleWithinArc(angle, props.startAngle, props.endAngle, props.circumference)) return false;
+  if (Math.abs(props.circumference) >= FULL_CIRCLE - 0.0001) return true;
+
+  const midRadius = (props.innerRadius + props.outerRadius) / 2;
+  if (midRadius <= 0) return true;
+  const spacing = toFiniteNumber(element.options?.spacing) ?? COMPOSITION_DONUT_SPACING;
+  const borderWidth = toFiniteNumber(element.options?.borderWidth) ?? 0;
+  const boundaryPadding = Math.min(
+    Math.abs(props.circumference) / 3,
+    ((spacing + borderWidth) / midRadius) * 1.2,
+  );
+  if (boundaryPadding <= 0) return true;
+
+  // Chart.js 的 nearest 负责小扇区候选；这里只剔除视觉切缝附近未绘制的像素。
+  return getRadiansDistance(angle, props.startAngle) > boundaryPadding
+    && getRadiansDistance(angle, props.endAngle) > boundaryPadding;
+};
+
+const analysisCompositionArcMode: InteractionModeFunction = (chart, event, options, useFinalPosition) => {
+  const candidateItems = Interaction.modes.nearest(chart, event, { ...options, axis: 'r', intersect: false }, useFinalPosition);
+  return candidateItems.filter((item) => isPointerInsidePaintedArc(item, event, useFinalPosition));
+};
+
+Interaction.modes.analysisCompositionArc = analysisCompositionArcMode;
 
 const getNativeViewportPoint = (event: unknown): ViewportPoint | undefined => {
   if (!event || typeof event !== 'object') return undefined;
@@ -866,12 +974,41 @@ type CompositionTooltipLabels = {
   totalTokens: string;
 };
 
+const toTruncatedTooltipTitleLine = (line: string): string => {
+  const suffixLength = 3;
+  const maxContentLength = COMPOSITION_TOOLTIP_TITLE_LINE_LENGTH - suffixLength;
+  return `${line.slice(0, maxContentLength)}...`;
+};
+
+const wrapCompositionTooltipTitle = (label: string | undefined): string[] => {
+  const normalized = (label ?? '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return [];
+  const lines: string[] = [];
+  let remaining = normalized;
+
+  while (remaining.length > 0) {
+    if (remaining.length <= COMPOSITION_TOOLTIP_TITLE_LINE_LENGTH) {
+      lines.push(remaining);
+      break;
+    }
+    const naturalBreak = remaining.lastIndexOf(' ', COMPOSITION_TOOLTIP_TITLE_LINE_LENGTH);
+    const breakIndex = naturalBreak > 0 ? naturalBreak : COMPOSITION_TOOLTIP_TITLE_LINE_LENGTH;
+    lines.push(remaining.slice(0, breakIndex).trim());
+    remaining = remaining.slice(breakIndex).trimStart();
+  }
+
+  if (lines.length <= COMPOSITION_TOOLTIP_TITLE_MAX_LINES) return lines;
+  const visibleLines = lines.slice(0, COMPOSITION_TOOLTIP_TITLE_MAX_LINES);
+  visibleLines[COMPOSITION_TOOLTIP_TITLE_MAX_LINES - 1] = toTruncatedTooltipTitleLine(visibleLines[COMPOSITION_TOOLTIP_TITLE_MAX_LINES - 1]);
+  return visibleLines;
+};
+
 function buildCompositionChartOptions(chartTheme: ChartTheme, labels: CompositionTooltipLabels): ChartOptions<'doughnut'> {
   return {
     responsive: true,
     maintainAspectRatio: false,
-    interaction: { mode: 'nearest', intersect: false, axis: 'r' },
-    hover: { mode: 'nearest', intersect: false, axis: 'r' },
+    interaction: { mode: 'analysisCompositionArc', intersect: false, axis: 'r' },
+    hover: { mode: 'analysisCompositionArc', intersect: false, axis: 'r' },
     layout: { padding: COMPOSITION_DONUT_LAYOUT_PADDING },
     cutout: '58%',
     spacing: COMPOSITION_DONUT_SPACING,
@@ -879,7 +1016,7 @@ function buildCompositionChartOptions(chartTheme: ChartTheme, labels: Compositio
       legend: { display: false },
       tooltip: {
         enabled: true,
-        mode: 'nearest',
+        mode: 'analysisCompositionArc',
         intersect: false,
         axis: 'r',
         position: 'analysisCompositionCursor',
@@ -893,7 +1030,7 @@ function buildCompositionChartOptions(chartTheme: ChartTheme, labels: Compositio
         displayColors: true,
         usePointStyle: true,
         callbacks: {
-          title: (context) => context[0]?.label ?? '',
+          title: (context) => wrapCompositionTooltipTitle(context[0]?.label),
           label: (context) => `${labels.totalTokens}: ${formatCompactNumber(Number(context.parsed ?? 0))}`,
         },
       },
