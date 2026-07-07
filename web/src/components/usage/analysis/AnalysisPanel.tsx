@@ -387,8 +387,14 @@ const getNativeViewportPoint = (event: unknown): ViewportPoint | undefined => {
   if (!event || typeof event !== 'object') return undefined;
   const native = (event as { native?: unknown }).native;
   if (!native || typeof native !== 'object') return undefined;
-  const x = toFiniteNumber((native as { clientX?: unknown }).clientX);
-  const y = toFiniteNumber((native as { clientY?: unknown }).clientY);
+  const touchLists = native as {
+    touches?: ArrayLike<{ clientX?: unknown; clientY?: unknown }>;
+    changedTouches?: ArrayLike<{ clientX?: unknown; clientY?: unknown }>;
+  };
+  const touch = touchLists.touches?.[0] ?? touchLists.changedTouches?.[0];
+  const target = touch ?? native;
+  const x = toFiniteNumber((target as { clientX?: unknown }).clientX);
+  const y = toFiniteNumber((target as { clientY?: unknown }).clientY);
   return x === undefined || y === undefined ? undefined : { x, y };
 };
 
@@ -980,8 +986,8 @@ const toTruncatedTooltipTitleLine = (line: string): string => {
   return `${line.slice(0, maxContentLength)}...`;
 };
 
-const wrapCompositionTooltipTitle = (label: string | undefined): string[] => {
-  const normalized = (label ?? '').replace(/\s+/g, ' ').trim();
+const wrapCompositionTooltipTitle = (label: unknown): string[] => {
+  const normalized = String(label ?? '').replace(/\s+/g, ' ').trim();
   if (!normalized) return [];
   const lines: string[] = [];
   let remaining = normalized;

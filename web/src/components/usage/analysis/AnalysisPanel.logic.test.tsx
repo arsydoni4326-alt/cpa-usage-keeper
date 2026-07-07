@@ -384,6 +384,31 @@ describe('AnalysisPanel token chart data', () => {
     } as never)).toBe('usage_stats.total_tokens: 1.00K');
   });
 
+  it('coerces non-string usage distribution tooltip titles before wrapping', () => {
+    const analysis: AnalysisResponse = {
+      ...emptyAnalysis,
+      api_key_composition: [{
+        key: '1',
+        label: 'Primary Key',
+        total_tokens: 1000,
+        requests: 4,
+        percent: 100,
+        input_tokens: 700,
+        output_tokens: 200,
+        cached_tokens: 50,
+        reasoning_tokens: 50,
+        cost_usd: 0.42,
+        cost_available: true,
+      }],
+    };
+
+    renderToStaticMarkup(<AnalysisPanel analysis={analysis} loading={false} isDark={false} isMobile={false} />);
+
+    const tooltipTitle = chartCapture.doughnutOptions?.plugins?.tooltip?.callbacks?.title;
+    expect(typeof tooltipTitle).toBe('function');
+    expect(tooltipTitle?.([{ label: 12345 }] as never)).toEqual(['12345']);
+  });
+
   it('uses usage distribution interaction options for small arcs', () => {
     const analysis: AnalysisResponse = {
       ...emptyAnalysis,
@@ -1222,6 +1247,67 @@ describe('AnalysisPanel token chart data', () => {
     expect(tooltipElement?.style.opacity).toBe('1');
     expect(tooltipElement?.style.left).toBe('434px');
     expect(tooltipElement?.style.top).toBe('220px');
+  });
+
+  it('positions the model efficiency tooltip from a native touch point', () => {
+    const analysis: AnalysisResponse = {
+      ...emptyAnalysis,
+      model_efficiency: [
+        {
+          model: 'gpt-4o',
+          requests: 4,
+          input_tokens: 1000,
+          output_tokens: 300,
+          cached_tokens: 100,
+          reasoning_tokens: 20,
+          total_tokens: 2_000_000,
+          cost_usd: 2,
+          cost_available: true,
+          cost_per_request_usd: 0.5,
+          output_tokens_per_request: 80,
+          cache_rate: 0.1,
+        },
+      ],
+    };
+
+    renderToStaticMarkup(<AnalysisPanel analysis={analysis} loading={false} isDark={false} isMobile={false} />);
+
+    const elements = new Map<string, FakeElement>();
+    const fakeDocument = createFakeDocument(elements);
+    vi.stubGlobal('document', fakeDocument);
+    vi.stubGlobal('window', { innerWidth: 1024, innerHeight: 768 });
+
+    const modelScatterIndex = chartCapture.scatterData.findIndex((data) => data.datasets[0]?.label === 'usage_stats.analysis_model_efficiency_title');
+    expect(modelScatterIndex).toBeGreaterThanOrEqual(0);
+    const pointerPlugin = chartCapture.scatterPlugins[modelScatterIndex]?.find((plugin) => plugin.id === 'analysis-model-efficiency-tooltip-pointer');
+    expect(pointerPlugin).toBeTruthy();
+
+    const fakeChart = {
+      canvas: {
+        getBoundingClientRect: () => ({ left: 10, top: 20, right: 310, bottom: 320, width: 300, height: 300 }),
+      },
+    };
+    pointerPlugin?.beforeEvent?.(fakeChart as never, {
+      event: { type: 'mousemove', x: 100, y: 60, native: { touches: [{ clientX: 520, clientY: 360 }] } },
+      replay: false,
+      changed: false,
+      cancelable: false,
+      inChartArea: true,
+    } as never, undefined as never);
+    chartCapture.scatterOptions[modelScatterIndex]?.plugins?.tooltip?.external?.({
+      chart: fakeChart,
+      tooltip: {
+        opacity: 1,
+        caretX: 100,
+        caretY: 60,
+        dataPoints: [{ dataIndex: 0 }],
+      },
+    } as never);
+
+    const tooltipElement = elements.get('analysis-model-efficiency-tooltip');
+    expect(tooltipElement?.style.opacity).toBe('1');
+    expect(tooltipElement?.style.left).toBe('534px');
+    expect(tooltipElement?.style.top).toBe('280px');
   });
 
   it('keeps partial cost values visible and shows pricing hints near analysis charts', () => {
