@@ -6,6 +6,7 @@ const readSource = (url: URL) => readFileSync(url, 'utf8').replace(/\r\n/g, '\n'
 const globalStyles = readSource(new URL('../../styles/global.scss', import.meta.url))
 const usagePageStyles = readSource(new URL('../UsagePage.module.scss', import.meta.url))
 const usagePageSource = readSource(new URL('../UsagePage.tsx', import.meta.url))
+const keyOverviewPageStyles = readSource(new URL('../KeyOverviewPage.module.scss', import.meta.url))
 const keyOverviewPageSource = readSource(new URL('../KeyOverviewPage.tsx', import.meta.url))
 const requestEventsSource = readSource(new URL('../../components/usage/RequestEventsDetailsCard.tsx', import.meta.url))
 const priceSettingsSource = readSource(new URL('../../components/usage/PriceSettingsCard.tsx', import.meta.url))
@@ -30,6 +31,11 @@ const requestEventColumnDefinitionBlock = (columnId: string) => {
 }
 
 describe('UsagePage toolbar styles', () => {
+  it('lets dashboard page frames consume the mode-specific width cap', () => {
+    expect(usagePageStyles).toMatch(/\.pageFrame\s*\{[\s\S]*?width:\s*min\(var\(--keeper-page-max-width, 1245px\), 100%\);/)
+    expect(keyOverviewPageStyles).toMatch(/\.pageFrame\s*\{[\s\S]*?width:\s*min\(var\(--keeper-page-max-width, 1245px\), 100%\);/)
+  })
+
   it('pins top notices to the viewport instead of the scrolled page body', () => {
     const noticeBlock = usagePageStyles.match(/\.updateCheckToast\s*\{[\s\S]*?\n\}/)?.[0] ?? ''
 
