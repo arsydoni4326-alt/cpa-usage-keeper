@@ -222,6 +222,7 @@ describe('Credential section styles', () => {
     expect(credentialStyles).toMatch(/\.credentialAliasNameSlot\s*\{[\s\S]*?overflow-wrap:\s*anywhere;/)
     expect(credentialStyles).toMatch(/\.credentialAliasActionSlot\s*\{[\s\S]*?width:\s*24px;/)
     expect(credentialStyles).toMatch(/\.credentialAliasActionSlot\s*\{[\s\S]*?justify-self:\s*start;/)
+    expect(credentialStyles).not.toMatch(/\.credentialAliasDisplay\s*\{/)
   })
 
   it('keeps Auth Files inspection separate from the quota refresh pill', () => {

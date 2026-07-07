@@ -40,6 +40,7 @@ describe('CredentialAliasEditor', () => {
     expect(html).toContain('credentialAliasNameSlot')
     expect(html).toContain('credentialAliasActionSlot')
     expect(html.indexOf('credentialAliasNameSlot')).toBeLessThan(html.indexOf('credentialAliasActionSlot'))
+    expect(html).not.toMatch(/credentialAliasDisplay_[a-z0-9]+/)
   })
 
   it('disables other rows while an alias save is in flight', () => {
