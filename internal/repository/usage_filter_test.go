@@ -1326,7 +1326,7 @@ func TestBuildUsageOverviewRealtimeWithFilterBuildsRealtimeBlockFromRecentCache(
 		{APIGroupKey: "provider-a", Model: "gpt-5", AuthType: "oauth", AuthIndex: "auth-file-1", Timestamp: now.Add(-16 * time.Minute), InputTokens: 900, TotalTokens: 900},
 		{APIGroupKey: "provider-a", Model: "gpt-5", AuthType: "oauth", AuthIndex: "auth-file-1", Timestamp: now.Add(-4*time.Minute - 50*time.Second), InputTokens: 100, OutputTokens: 60, CachedTokens: 20, TotalTokens: 120, LatencyMS: 500, TTFTMS: &ttft100},
 		{APIGroupKey: "provider-a", Model: "gpt-5", AuthType: "oauth", AuthIndex: "auth-file-1", Timestamp: now.Add(-4*time.Minute - 45*time.Second), InputTokens: 50, OutputTokens: 40, CachedTokens: 5, TotalTokens: 80, LatencyMS: 700, TTFTMS: &ttft200},
-		{APIGroupKey: "provider-a", Model: "gpt-5", AuthType: "oauth", AuthIndex: "auth-file-1", Timestamp: now.Add(-4*time.Minute - 40*time.Second), InputTokens: 10, OutputTokens: 10, TotalTokens: 20, LatencyMS: 650, TTFTMS: &ttftZero},
+		{APIGroupKey: "provider-a", Model: "gpt-5", AuthType: "oauth", AuthIndex: "auth-file-1", Timestamp: now.Add(-4*time.Minute - 40*time.Second), InputTokens: 10, OutputTokens: 10, TotalTokens: 20, TTFTMS: &ttftZero},
 		{APIGroupKey: "provider-a", Model: "gpt-5", AuthType: "oauth", AuthIndex: "auth-file-1", Timestamp: now.Add(-4*time.Minute - 30*time.Second), Failed: true, InputTokens: 1000, TotalTokens: 1000, LatencyMS: 900, TTFTMS: &ttftFailed},
 		{APIGroupKey: "provider-a", Model: "claude-sonnet", AuthType: "apikey", Provider: "OpenAI Provider", AuthIndex: "provider-1", Timestamp: now.Add(-20 * time.Second), InputTokens: 100, OutputTokens: 25, TotalTokens: 50, LatencyMS: 300},
 		{APIGroupKey: "provider-b", Model: "gpt-5", AuthType: "oauth", AuthIndex: "auth-file-2", Timestamp: now.Add(-10 * time.Second), InputTokens: 700, TotalTokens: 700, LatencyMS: 100},
@@ -1372,14 +1372,18 @@ func TestBuildUsageOverviewRealtimeWithFilterBuildsRealtimeBlockFromRecentCache(
 	if expiredUsageBucket.Tokens != 0 || expiredUsageBucket.TokensPerMinute != 0 {
 		t.Fatalf("expected token velocity to expire after the 3m sliding window, got %+v", expiredUsageBucket)
 	}
-	if realtime.ResponseLevel[21].LatencyP95MS == nil || *realtime.ResponseLevel[21].LatencyP95MS != 700 ||
+	if realtime.ResponseLevel[21].LatencyP50MS == nil || *realtime.ResponseLevel[21].LatencyP50MS != 500 ||
+		realtime.ResponseLevel[21].LatencyP95MS == nil || *realtime.ResponseLevel[21].LatencyP95MS != 700 ||
+		realtime.ResponseLevel[21].TTFTP50MS == nil || *realtime.ResponseLevel[21].TTFTP50MS != 100 ||
 		realtime.ResponseLevel[21].TTFTP95MS == nil || *realtime.ResponseLevel[21].TTFTP95MS != 200 {
 		t.Fatalf("expected response level to exclude failed latency samples from the sliding window, got %+v", realtime.ResponseLevel[21])
 	}
-	if realtime.ResponseLevel[26].LatencyP95MS != nil || realtime.ResponseLevel[26].TTFTP95MS != nil {
+	if realtime.ResponseLevel[26].LatencyP50MS != nil || realtime.ResponseLevel[26].LatencyP95MS != nil ||
+		realtime.ResponseLevel[26].TTFTP50MS != nil || realtime.ResponseLevel[26].TTFTP95MS != nil {
 		t.Fatalf("expected failed request latency samples to be excluded after successful samples expire, got %+v", realtime.ResponseLevel[26])
 	}
-	if realtime.ResponseLevel[27].LatencyP95MS != nil || realtime.ResponseLevel[27].TTFTP95MS != nil {
+	if realtime.ResponseLevel[27].LatencyP50MS != nil || realtime.ResponseLevel[27].LatencyP95MS != nil ||
+		realtime.ResponseLevel[27].TTFTP50MS != nil || realtime.ResponseLevel[27].TTFTP95MS != nil {
 		t.Fatalf("expected response level to expire after the sliding window, got %+v", realtime.ResponseLevel[27])
 	}
 	if len(realtime.ResponseDistribution.TTFT.AverageLine) != 30 || len(realtime.ResponseDistribution.Latency.AverageLine) != 30 {
@@ -1388,7 +1392,7 @@ func TestBuildUsageOverviewRealtimeWithFilterBuildsRealtimeBlockFromRecentCache(
 	if realtime.ResponseDistribution.TTFT.AverageLine[21].AvgMS == nil || math.Abs(*realtime.ResponseDistribution.TTFT.AverageLine[21].AvgMS-150) > 0.000000001 {
 		t.Fatalf("expected ttft average line to use sliding samples, got %+v", realtime.ResponseDistribution.TTFT.AverageLine[21])
 	}
-	if realtime.ResponseDistribution.Latency.AverageLine[21].AvgMS == nil || math.Abs(*realtime.ResponseDistribution.Latency.AverageLine[21].AvgMS-(1850.0/3.0)) > 0.000000001 {
+	if realtime.ResponseDistribution.Latency.AverageLine[21].AvgMS == nil || math.Abs(*realtime.ResponseDistribution.Latency.AverageLine[21].AvgMS-600) > 0.000000001 {
 		t.Fatalf("expected latency average line to exclude failed request latency, got %+v", realtime.ResponseDistribution.Latency.AverageLine[21])
 	}
 	if realtime.ResponseDistribution.TTFT.AverageLine[26].AvgMS != nil ||
@@ -1402,17 +1406,15 @@ func TestBuildUsageOverviewRealtimeWithFilterBuildsRealtimeBlockFromRecentCache(
 	assertRealtimeParticleCore(t, realtime.ResponseDistribution.TTFT.Particles[1], "2026-06-09T11:55:00Z", 200, 1)
 	assertRealtimeParticleTimestamp(t, realtime.ResponseDistribution.TTFT.Particles[0], "2026-06-09T11:55:10Z")
 	assertRealtimeParticleTimestamp(t, realtime.ResponseDistribution.TTFT.Particles[1], "2026-06-09T11:55:15Z")
-	if len(realtime.ResponseDistribution.Latency.Particles) != 4 {
+	if len(realtime.ResponseDistribution.Latency.Particles) != 3 {
 		t.Fatalf("expected response distribution latency particles to map one usage event to one point, got %+v", realtime.ResponseDistribution.Latency.Particles)
 	}
 	assertRealtimeParticleCore(t, realtime.ResponseDistribution.Latency.Particles[0], "2026-06-09T11:55:00Z", 500, 1)
 	assertRealtimeParticleCore(t, realtime.ResponseDistribution.Latency.Particles[1], "2026-06-09T11:55:00Z", 700, 1)
-	assertRealtimeParticleCore(t, realtime.ResponseDistribution.Latency.Particles[2], "2026-06-09T11:55:00Z", 650, 1)
-	assertRealtimeParticleCore(t, realtime.ResponseDistribution.Latency.Particles[3], "2026-06-09T11:59:30Z", 300, 1)
+	assertRealtimeParticleCore(t, realtime.ResponseDistribution.Latency.Particles[2], "2026-06-09T11:59:30Z", 300, 1)
 	assertRealtimeParticleTimestamp(t, realtime.ResponseDistribution.Latency.Particles[0], "2026-06-09T11:55:10Z")
 	assertRealtimeParticleTimestamp(t, realtime.ResponseDistribution.Latency.Particles[1], "2026-06-09T11:55:15Z")
-	assertRealtimeParticleTimestamp(t, realtime.ResponseDistribution.Latency.Particles[2], "2026-06-09T11:55:20Z")
-	assertRealtimeParticleTimestamp(t, realtime.ResponseDistribution.Latency.Particles[3], "2026-06-09T11:59:40Z")
+	assertRealtimeParticleTimestamp(t, realtime.ResponseDistribution.Latency.Particles[2], "2026-06-09T11:59:40Z")
 	if realtime.RequestLevel[21].Requests != 4 || math.Abs(realtime.RequestLevel[21].RequestsPerMinute-(4.0/3.0)) > 0.000000001 {
 		t.Fatalf("expected request level to use the 3m sliding window, got %+v", realtime.RequestLevel[21])
 	}
