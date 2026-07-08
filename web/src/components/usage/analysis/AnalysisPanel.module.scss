@@ -28,8 +28,8 @@
 }
 
 .heatmapCardDark .analysisChartSurface {
-  background: #100e16;
-  border-color: rgba(255, 255, 255, 0.08);
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
 }
 
 .heatmapCardLight .analysisChartSurface {
@@ -724,10 +724,13 @@
 
 .heatmapCardDark {
   .heatmapCorner,
-  .heatmapHeaderCell,
+  .heatmapHeaderCell {
+    border-color: var(--border-color);
+    background: color-mix(in srgb, var(--bg-tertiary) 72%, var(--bg-primary));
+  }
+
   .heatmapCell {
-    border-color: rgba(255, 255, 255, 0.08);
-    background: #17131d;
+    border-color: var(--border-color);
   }
 }
 
