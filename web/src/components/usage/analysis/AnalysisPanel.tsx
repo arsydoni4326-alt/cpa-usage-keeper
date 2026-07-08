@@ -783,8 +783,8 @@ function calculateAverageTotalTokens(rows: ChartRow[]): number {
 }
 
 function calculateAnalysisWindowMinutes(analysis: AnalysisResponse | null): number | null {
-  const start = Date.parse(String(analysis?.range_start ?? ''));
-  const end = Date.parse(String(analysis?.range_end ?? ''));
+  const start = Date.parse(analysis?.range_start ?? '');
+  const end = Date.parse(analysis?.range_end ?? '');
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
   return (end - start) / 60_000;
 }
