@@ -461,7 +461,7 @@ describe('AnalysisPanel token chart data', () => {
     expect(chartCapture.doughnutPlugins).toBeUndefined();
   });
 
-  it('limits usage distribution hover to the painted doughnut arc', () => {
+  it('limits usage distribution hover to the doughnut ring while allowing arc edges', () => {
     renderToStaticMarkup(<AnalysisPanel analysis={{
       ...emptyAnalysis,
       api_key_composition: [{
@@ -503,7 +503,7 @@ describe('AnalysisPanel token chart data', () => {
       expect(mode?.({} as never, { x: 225, y: 225 }, {}, false)).toEqual([activeItem]);
       expect(mode?.({} as never, { x: 150, y: 150 }, {}, false)).toEqual([]);
       expect(mode?.({} as never, { x: 300, y: 150 }, {}, false)).toEqual([]);
-      expect(mode?.({} as never, { x: 255, y: 150 }, {}, false)).toEqual([]);
+      expect(mode?.({} as never, { x: 255, y: 150 }, {}, false)).toEqual([activeItem]);
     } finally {
       Interaction.modes.nearest = originalNearest;
     }

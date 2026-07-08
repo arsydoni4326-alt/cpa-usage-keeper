@@ -293,19 +293,10 @@ type DoughnutArcProps = {
 };
 
 type DoughnutArcElement = {
-  options?: {
-    spacing?: unknown;
-    borderWidth?: unknown;
-  };
   getProps: (props: Array<keyof DoughnutArcProps>, useFinalPosition?: boolean) => Partial<DoughnutArcProps>;
 };
 
 const normalizeRadians = (angle: number): number => ((angle % FULL_CIRCLE) + FULL_CIRCLE) % FULL_CIRCLE;
-
-const getRadiansDistance = (first: number, second: number): number => {
-  const distance = Math.abs(normalizeRadians(first) - normalizeRadians(second));
-  return Math.min(distance, FULL_CIRCLE - distance);
-};
 
 const isAngleWithinArc = (angle: number, startAngle: number, endAngle: number, circumference: number): boolean => {
   if (Math.abs(circumference) >= FULL_CIRCLE - 0.0001) return true;
@@ -352,28 +343,13 @@ const isPointerInsidePaintedArc = (item: InteractionItem, event: unknown, useFin
   if (pointerX === undefined || pointerY === undefined) return false;
   const arc = getDoughnutArcProps(item.element, useFinalPosition);
   if (!arc) return false;
-  const { element, props } = arc;
+  const { props } = arc;
   const deltaX = pointerX - props.x;
   const deltaY = pointerY - props.y;
   const radius = Math.hypot(deltaX, deltaY);
   if (radius < props.innerRadius || radius > props.outerRadius) return false;
   const angle = Math.atan2(deltaY, deltaX);
-  if (!isAngleWithinArc(angle, props.startAngle, props.endAngle, props.circumference)) return false;
-  if (Math.abs(props.circumference) >= FULL_CIRCLE - 0.0001) return true;
-
-  const midRadius = (props.innerRadius + props.outerRadius) / 2;
-  if (midRadius <= 0) return true;
-  const spacing = toFiniteNumber(element.options?.spacing) ?? COMPOSITION_DONUT_SPACING;
-  const borderWidth = toFiniteNumber(element.options?.borderWidth) ?? 0;
-  const boundaryPadding = Math.min(
-    Math.abs(props.circumference) / 3,
-    ((spacing + borderWidth) / midRadius) * 1.2,
-  );
-  if (boundaryPadding <= 0) return true;
-
-  // Chart.js 的 nearest 负责小扇区候选；这里只剔除视觉切缝附近未绘制的像素。
-  return getRadiansDistance(angle, props.startAngle) > boundaryPadding
-    && getRadiansDistance(angle, props.endAngle) > boundaryPadding;
+  return isAngleWithinArc(angle, props.startAngle, props.endAngle, props.circumference);
 };
 
 const getFullCircleCompositionItems = (chart: Chart, event: unknown, useFinalPosition?: boolean): InteractionItem[] => {
