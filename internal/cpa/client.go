@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -22,6 +23,13 @@ type Client struct {
 	baseURL       string
 	managementKey string
 	httpClient    *http.Client
+}
+
+type RequestLogResult struct {
+	StatusCode  int
+	Body        []byte
+	Filename    string
+	ContentType string
 }
 
 type authFileStatusRequest struct {
@@ -127,6 +135,65 @@ func NewClient(baseURL, managementKey string, timeout time.Duration, tlsSkipVeri
 		managementKey: strings.TrimSpace(managementKey),
 		httpClient:    httpClient,
 	}
+}
+
+func (c *Client) FetchRequestLogByID(ctx context.Context, requestID string) (*RequestLogResult, error) {
+	result := &RequestLogResult{}
+	if c == nil {
+		return result, fmt.Errorf("cpa client is nil")
+	}
+	if c.baseURL == "" {
+		return result, fmt.Errorf("cpa base url is required")
+	}
+	if c.managementKey == "" {
+		return result, fmt.Errorf("cpa management key is required")
+	}
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return result, fmt.Errorf("request id is required")
+	}
+	if strings.ContainsAny(requestID, "/\\") {
+		return result, fmt.Errorf("request id is invalid")
+	}
+
+	path := cpaManagementRequestLogByIDEndpoint + "/" + url.PathEscape(requestID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+	if err != nil {
+		return result, fmt.Errorf("build management request log request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.managementKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return result, fmt.Errorf("request management request log: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		result.StatusCode = resp.StatusCode
+		return result, fmt.Errorf("read management request log response: %w", err)
+	}
+	result.StatusCode = resp.StatusCode
+	result.Body = body
+	result.ContentType = strings.TrimSpace(resp.Header.Get("Content-Type"))
+	result.Filename = filenameFromContentDisposition(resp.Header.Get("Content-Disposition"))
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return result, fmt.Errorf("management request log request returned status %d", resp.StatusCode)
+	}
+	return result, nil
+}
+
+func filenameFromContentDisposition(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	_, params, err := mime.ParseMediaType(value)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(params["filename"])
 }
 
 func (c *Client) FetchManagementAPIKeys(ctx context.Context) (*response.ManagementAPIKeysResult, error) {

@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"cpa-usage-keeper/internal/timeutil"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type usageEventsResponse struct {
@@ -50,6 +52,7 @@ type usageEventPayload struct {
 	SourceRaw       string                 `json:"source_raw,omitempty"`
 	SourceType      string                 `json:"source_type,omitempty"`
 	AuthIndex       string                 `json:"auth_index,omitempty"`
+	RequestID       string                 `json:"request_id,omitempty"`
 	IsDelete        bool                   `json:"isDelete,omitempty"`
 	Failed          bool                   `json:"failed"`
 	LatencyMS       int64                  `json:"latency_ms"`
@@ -69,6 +72,21 @@ type usageEventTokenPayload struct {
 	CacheReadTokens     int64 `json:"cache_read_tokens"`
 	CacheCreationTokens int64 `json:"cache_creation_tokens"`
 	TotalTokens         int64 `json:"total_tokens"`
+}
+
+type usageEventRequestLogPayload struct {
+	EventID   string                        `json:"event_id"`
+	RequestID string                        `json:"request_id,omitempty"`
+	Filename  string                        `json:"filename,omitempty"`
+	Cached    bool                          `json:"cached"`
+	Available bool                          `json:"available"`
+	Sections  []usageEventRequestLogSection `json:"sections"`
+	Raw       string                        `json:"raw,omitempty"`
+}
+
+type usageEventRequestLogSection struct {
+	Title   string `json:"title"`
+	Content string `json:"content"`
 }
 
 type usageEventExportPayload struct {
@@ -108,6 +126,7 @@ func registerUsageEventsRoute(
 	usageProvider service.UsageProvider,
 	usageIdentityProvider service.UsageIdentityProvider,
 	cpaAPIKeyProvider service.CPAAPIKeyProvider,
+	requestLogProvider service.RequestLogProvider,
 ) {
 	router.GET("/usage/events/filters/models", func(c *gin.Context) {
 		models, err := loadUsageEventModelFilterOptions(c, usageProvider)
@@ -166,6 +185,24 @@ func registerUsageEventsRoute(
 			PageSize:   rows.PageSize,
 			TotalPages: rows.TotalPages,
 		})
+	})
+
+	router.GET("/usage/events/:id/request-log", func(c *gin.Context) {
+		if requestLogProvider == nil {
+			writeInternalError(c, "request log provider is not configured", nil)
+			return
+		}
+		eventID, err := strconv.ParseInt(strings.TrimSpace(c.Param("id")), 10, 64)
+		if err != nil || eventID <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid usage event id"})
+			return
+		}
+		response, err := requestLogProvider.GetUsageEventRequestLog(c.Request.Context(), eventID)
+		if err != nil {
+			writeUsageEventRequestLogError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, buildUsageEventRequestLogPayload(response))
 	})
 
 	router.GET("/usage/events/export", func(c *gin.Context) {
@@ -260,6 +297,7 @@ func buildUsageEventsPayload(rows []servicedto.UsageEventRecord, resolver usageI
 			Source:          source,
 			SourceType:      identity.Type,
 			AuthIndex:       row.AuthIndex,
+			RequestID:       strings.TrimSpace(row.RequestID),
 			IsDelete:        isDelete,
 			Failed:          row.Failed,
 			LatencyMS:       row.LatencyMS,
@@ -280,6 +318,44 @@ func buildUsageEventsPayload(rows []servicedto.UsageEventRecord, resolver usageI
 		})
 	}
 	return payload
+}
+
+func buildUsageEventRequestLogPayload(response service.RequestLogResponse) usageEventRequestLogPayload {
+	eventID := ""
+	if response.EventID != 0 {
+		eventID = strconv.FormatInt(response.EventID, 10)
+	}
+	sections := make([]usageEventRequestLogSection, 0, len(response.Sections))
+	for _, section := range response.Sections {
+		sections = append(sections, usageEventRequestLogSection{
+			Title:   strings.TrimSpace(section.Title),
+			Content: section.Content,
+		})
+	}
+	return usageEventRequestLogPayload{
+		EventID:   eventID,
+		RequestID: strings.TrimSpace(response.RequestID),
+		Filename:  strings.TrimSpace(response.Filename),
+		Cached:    response.Cached,
+		Available: response.Available,
+		Sections:  sections,
+		Raw:       response.Raw,
+	}
+}
+
+func writeUsageEventRequestLogError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": "usage event not found"})
+	case errors.Is(err, service.ErrRequestLogMissingID):
+		c.JSON(http.StatusNotFound, gin.H{"error": "usage event request id missing"})
+	case errors.Is(err, service.ErrRequestLogUnavailable):
+		c.JSON(http.StatusNotFound, gin.H{"error": "request log unavailable"})
+	case errors.Is(err, service.ErrRequestLogTooLarge):
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request log too large"})
+	default:
+		writeInternalError(c, "load usage event request log failed", err)
+	}
 }
 
 func buildUsageEventExportPayload(row servicedto.UsageEventRecord, resolver usageIdentityResolver, apiKeyInfos map[string]analysisAPIKeyInfo) usageEventExportPayload {

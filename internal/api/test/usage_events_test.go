@@ -16,6 +16,7 @@ import (
 	"cpa-usage-keeper/internal/entities"
 	"cpa-usage-keeper/internal/service"
 	servicedto "cpa-usage-keeper/internal/service/dto"
+	"gorm.io/gorm"
 )
 
 type usageEventsStub struct {
@@ -28,6 +29,19 @@ type usageEventsStub struct {
 	filterCalls        int
 	filterOptionCalls  int
 	exportCalls        int
+}
+
+type requestLogProviderStub struct {
+	response service.RequestLogResponse
+	err      error
+	eventID  int64
+	calls    int
+}
+
+func (s *requestLogProviderStub) GetUsageEventRequestLog(_ context.Context, eventID int64) (service.RequestLogResponse, error) {
+	s.eventID = eventID
+	s.calls++
+	return s.response, s.err
 }
 
 func (s *usageEventsStub) GetUsageOverview(context.Context, servicedto.UsageFilter) (*servicedto.UsageOverviewSnapshot, error) {
@@ -138,6 +152,7 @@ func TestUsageEventsReturnsFilteredRows(t *testing.T) {
 		ExecutorType:        "responses",
 		Endpoint:            "POST /v1/responses",
 		AuthType:            "apikey",
+		RequestID:           "req-log-42",
 		Provider:            "OpenAI Mirror",
 		Source:              "sk-provider-key",
 		AuthIndex:           "2",
@@ -186,6 +201,9 @@ func TestUsageEventsReturnsFilteredRows(t *testing.T) {
 	if !contains(body, `"auth_index":"2"`) {
 		t.Fatalf("expected auth index in response body: %s", body)
 	}
+	if !contains(body, `"request_id":"req-log-42"`) {
+		t.Fatalf("expected request_id in response body: %s", body)
+	}
 	if !contains(body, `"timestamp":"2026-04-22T19:00:00+08:00"`) {
 		t.Fatalf("expected project timezone timestamp in response body: %s", body)
 	}
@@ -224,6 +242,60 @@ func TestUsageEventsReturnsFilteredRows(t *testing.T) {
 	}
 	if provider.lastFilter.StartTime == nil || provider.lastFilter.EndTime == nil {
 		t.Fatalf("expected resolved time bounds in filter, got %+v", provider.lastFilter)
+	}
+}
+
+func TestUsageEventRequestLogReturnsStructuredLog(t *testing.T) {
+	provider := &usageEventsStub{}
+	requestLogProvider := &requestLogProviderStub{response: service.RequestLogResponse{
+		EventID:   42,
+		RequestID: "req-log-42",
+		Filename:  "error-v1-responses-req-log-42.log",
+		Available: true,
+		Sections: []service.RequestLogSection{{
+			Title:   "REQUEST INFO",
+			Content: "URL: /v1/responses",
+		}},
+		Raw: "=== REQUEST INFO ===\nURL: /v1/responses\n",
+	}}
+	router := NewRouter(nil, nil, provider, nil, AuthConfig{}, nil, "", OptionalProviders{RequestLogs: requestLogProvider})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/usage/events/42/request-log", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d body=%s", resp.Code, resp.Body.String())
+	}
+	body := resp.Body.String()
+	if !contains(body, `"event_id":"42"`) || !contains(body, `"request_id":"req-log-42"`) || !contains(body, `"filename":"error-v1-responses-req-log-42.log"`) {
+		t.Fatalf("expected request log metadata in response: %s", body)
+	}
+	if !contains(body, `"title":"REQUEST INFO"`) || !contains(body, `"content":"URL: /v1/responses"`) {
+		t.Fatalf("expected parsed request log sections in response: %s", body)
+	}
+	if requestLogProvider.calls != 1 || requestLogProvider.eventID != 42 {
+		t.Fatalf("expected provider call with event id 42, got calls=%d eventID=%d", requestLogProvider.calls, requestLogProvider.eventID)
+	}
+}
+
+func TestUsageEventRequestLogReturnsNotFoundWhenEventMissing(t *testing.T) {
+	provider := &usageEventsStub{}
+	requestLogProvider := &requestLogProviderStub{err: gorm.ErrRecordNotFound}
+	router := NewRouter(nil, nil, provider, nil, AuthConfig{}, nil, "", OptionalProviders{RequestLogs: requestLogProvider})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/usage/events/404/request-log", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d body=%s", resp.Code, resp.Body.String())
+	}
+	if !contains(resp.Body.String(), `"error":"usage event not found"`) {
+		t.Fatalf("expected not found error body, got %s", resp.Body.String())
+	}
+	if requestLogProvider.calls != 1 || requestLogProvider.eventID != 404 {
+		t.Fatalf("expected provider call with event id 404, got calls=%d eventID=%d", requestLogProvider.calls, requestLogProvider.eventID)
 	}
 }
 

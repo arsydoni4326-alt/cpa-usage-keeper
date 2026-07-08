@@ -57,6 +57,39 @@ func TestFetchManagementAPIKeysSendsBearerTokenAndParsesKeys(t *testing.T) {
 	}
 }
 
+func TestFetchRequestLogByIDDownloadsFileWithBearerToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != cpaManagementRequestLogByIDEndpoint+"/req-log-42" {
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer management-secret" {
+			t.Fatalf("expected management Authorization header, got %q", got)
+		}
+		w.Header().Set("Content-Disposition", `attachment; filename="error-v1-responses-req-log-42.log"`)
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte("=== REQUEST INFO ===\nURL: /v1/responses\n"))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "management-secret", 2*time.Second, false)
+	result, err := client.FetchRequestLogByID(context.Background(), " req-log-42 ")
+	if err != nil {
+		t.Fatalf("FetchRequestLogByID returned error: %v", err)
+	}
+	if result.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", result.StatusCode)
+	}
+	if result.Filename != "error-v1-responses-req-log-42.log" {
+		t.Fatalf("unexpected filename %q", result.Filename)
+	}
+	if result.ContentType != "text/plain; charset=utf-8" {
+		t.Fatalf("unexpected content type %q", result.ContentType)
+	}
+	if string(result.Body) != "=== REQUEST INFO ===\nURL: /v1/responses\n" {
+		t.Fatalf("unexpected body %q", string(result.Body))
+	}
+}
+
 func TestFetchManagementAPIKeysAllowsEmptyArray(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

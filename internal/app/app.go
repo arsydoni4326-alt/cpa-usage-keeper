@@ -178,6 +178,7 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 	}
 
 	usageService := service.NewUsageServiceWithRecentCache(db, recentUsageCache)
+	requestLogService := service.NewRequestLogService(db, cpaClient)
 	usageIdentityService := service.NewUsageIdentityServiceWithOptions(db, recentUsageCache, service.UsageIdentityServiceOptions{
 		OnDisplayNameChanged: quotaService.UpdateUsageIdentityDisplayNameSnapshot,
 	})
@@ -227,6 +228,7 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 				Quota:         quotaService,
 				CPAAPIKeys:    cpaAPIKeyService,
 				AuthFiles:     authFilesManagementService,
+				RequestLogs:   requestLogService,
 				Status:        api.StatusRouteConfig{CPAPublicURL: cfg.CPAPublicURL},
 			},
 		),

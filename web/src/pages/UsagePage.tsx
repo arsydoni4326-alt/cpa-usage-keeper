@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef, type KeyboardEvent, type SyntheticEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ApiError, exportUsageEvents, fetchAnalysis, fetchAuthSessions, fetchCpaApiKeyOptions, fetchCpaApiKeySettings, fetchStatus, fetchUpdateCheck, fetchUsageEventModelFilterOptions, fetchUsageEventSourceFilterOptions, fetchUsageEvents, fetchVersion, logout, revokeAuthSession, updateCpaApiKeyAlias, type UsageEventsExportFormat } from '@/lib/api';
-import type { AnalysisResponse, AuthManagedSessionItem, CpaApiKeyOption, CpaApiKeySettingsItem, OverviewRealtimeWindow, StatusResponse, UsageEvent, UsageSourceFilterOption, VersionResponse } from '@/lib/types';
+import { ApiError, exportUsageEvents, fetchAnalysis, fetchAuthSessions, fetchCpaApiKeyOptions, fetchCpaApiKeySettings, fetchStatus, fetchUpdateCheck, fetchUsageEventModelFilterOptions, fetchUsageEventRequestLog, fetchUsageEventSourceFilterOptions, fetchUsageEvents, fetchVersion, logout, revokeAuthSession, updateCpaApiKeyAlias, type UsageEventsExportFormat } from '@/lib/api';
+import type { AnalysisResponse, AuthManagedSessionItem, CpaApiKeyOption, CpaApiKeySettingsItem, OverviewRealtimeWindow, StatusResponse, UsageEvent, UsageEventRequestLogResponse, UsageSourceFilterOption, VersionResponse } from '@/lib/types';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import { Select } from '@/components/ui/Select';
@@ -803,8 +803,12 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   const [eventsVisibleColumnIds, setEventsVisibleColumnIds] = useState<RequestEventColumnId[]>(initialRequestEventsPreferences.visibleColumnIds);
   const [eventsExportingFormat, setEventsExportingFormat] = useState<UsageEventsExportFormat | null>(null);
   const [eventsFilterOptionsLoaded, setEventsFilterOptionsLoaded] = useState(false);
+  const [requestLogResponse, setRequestLogResponse] = useState<UsageEventRequestLogResponse | null>(null);
+  const [requestLogError, setRequestLogError] = useState('');
+  const [requestLogLoadingEventId, setRequestLogLoadingEventId] = useState<string | null>(null);
   const eventsRequestControllerRef = useRef<AbortController | null>(null);
   const eventsFilterOptionsRequestControllerRef = useRef<AbortController | null>(null);
+  const requestLogControllerRef = useRef<AbortController | null>(null);
   const [manualRefreshLoading, setManualRefreshLoading] = useState(false);
   const [pageVisible, setPageVisible] = useState(isUsagePageVisible);
   const showTopNotice = useCallback((kind: TopNoticeKind, message: string) => {
@@ -1386,6 +1390,54 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     }
   }, [eventsModelFilter, eventsResultFilter, eventsSourceFilter, getEventQueryWindow, onAuthRequired, selectedApiKeyId, showTopNotice, t, timeRange]);
 
+  const handleRequestLogOpen = useCallback(async (event: UsageEvent) => {
+    const eventId = String(event.id ?? '').trim();
+    if (!eventId) {
+      setRequestLogResponse(null);
+      setRequestLogError(t('usage_stats.request_events_log_missing_event'));
+      return;
+    }
+    requestLogControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestLogControllerRef.current = controller;
+    setRequestLogLoadingEventId(eventId);
+    setRequestLogResponse(null);
+    setRequestLogError('');
+    try {
+      const response = await fetchUsageEventRequestLog(eventId, controller.signal);
+      if (requestLogControllerRef.current !== controller) return;
+      setRequestLogResponse(response);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      if (error instanceof ApiError && error.status === 401) {
+        onAuthRequired?.();
+        return;
+      }
+      const missing = error instanceof ApiError && error.status === 404;
+      const tooLarge = error instanceof ApiError && error.status === 413;
+      setRequestLogError(
+        missing
+          ? t('usage_stats.request_events_log_unavailable')
+          : tooLarge
+            ? t('usage_stats.request_events_log_too_large')
+            : t('usage_stats.request_events_log_load_failed')
+      );
+    } finally {
+      if (requestLogControllerRef.current === controller) {
+        requestLogControllerRef.current = null;
+        setRequestLogLoadingEventId(null);
+      }
+    }
+  }, [onAuthRequired, t]);
+
+  const handleRequestLogClose = useCallback(() => {
+    requestLogControllerRef.current?.abort();
+    requestLogControllerRef.current = null;
+    setRequestLogLoadingEventId(null);
+    setRequestLogResponse(null);
+    setRequestLogError('');
+  }, []);
+
   const refreshActiveTab = useCallback(async () => {
     if (activeTab === 'events') {
       await Promise.all([loadEventFilterOptions(), loadEvents()]);
@@ -1958,6 +2010,11 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                   onResultFilterChange={handleEventsResultFilterChange}
                   onExport={handleEventsExport}
                   onVisibleColumnIdsChange={setEventsVisibleColumnIds}
+                  onRequestLogOpen={handleRequestLogOpen}
+                  requestLogLoadingEventId={requestLogLoadingEventId}
+                  requestLogResponse={requestLogResponse}
+                  requestLogError={requestLogError}
+                  onRequestLogClose={handleRequestLogClose}
                 />
               </>
             )}

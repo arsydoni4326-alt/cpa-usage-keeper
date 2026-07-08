@@ -253,6 +253,46 @@ describe('RequestEventsDetailsCard pagination', () => {
     expect(html).not.toContain('aria-label="Credential"');
   });
 
+  it('renders the Result badge as a request log trigger when request id is available', () => {
+    const html = renderCard({
+      events: [{ ...events[0], request_id: 'req-log-101' }],
+      onRequestLogOpen: () => undefined,
+    });
+
+    expect(html).toContain('title="Click to view request log"');
+    expect(html).toContain('aria-label="Success. View request log"');
+    expect(html).toContain('_requestEventsResultLogButton_');
+    expect(html).toContain('_requestEventsResultLogIcon_');
+    expect(html).toMatch(/<button[^>]*>.*Success.*<\/button>/);
+  });
+
+  it('renders request log content without request id or cache metadata', () => {
+    const html = renderCard({
+      requestLogResponse: {
+        event_id: '101',
+        request_id: 'req-log-101',
+        filename: 'preview-req-log-101.log',
+        cached: true,
+        available: true,
+        sections: [
+          { title: 'REQUEST INFO', content: 'URL: /v1/responses' },
+          { title: 'API RESPONSE ERROR', content: '{"error":"quota exceeded"}' },
+        ],
+        raw: '=== REQUEST INFO ===\nURL: /v1/responses\n',
+      },
+      onRequestLogClose: () => undefined,
+    });
+
+    expect(html).toContain('Request Info');
+    expect(html).toContain('API Response Error');
+    expect(html).toContain('URL: /v1/responses');
+    expect(html).not.toContain('Request ID');
+    expect(html).not.toContain('Request ID: req-log-101');
+    expect(html).not.toContain('<span>Cached</span>');
+    expect(html).not.toContain('<span>Fresh</span>');
+    expect(html).not.toContain('preview-req-log-101.log');
+  });
+
   it('keeps selected filters visible when backend options do not include them', () => {
     const html = renderCard({
       modelFilter: 'claude-haiku',
