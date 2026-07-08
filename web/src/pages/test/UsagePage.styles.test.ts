@@ -410,6 +410,9 @@ describe('UsagePage toolbar styles', () => {
       .find((block) => block.includes('font-variant-numeric: tabular-nums;')) ?? ''
     expect(heatmapCellBlock).toContain('box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.10);')
     expect(heatmapCellBlock).not.toContain('inset 0 -10px 18px')
+    const heatmapCellFocusBlock = [...analysisPanelStyles.matchAll(/\.heatmapCell:focus-visible\s*\{([\s\S]*?)\n\}/g)]
+      .map((match) => match[1])[0] ?? ''
+    expect(heatmapCellFocusBlock).toContain('box-shadow: 0 0 0 2px color-mix(in srgb, var(--heatmap-focus-color, #d86a4a) 70%, transparent), inset 0 0 0 1px rgba(255, 255, 255, 0.12);')
     expect(analysisPanelStyles).not.toContain('--heatmap-flame-alpha')
     expect(analysisPanelStyles).not.toContain('radial-gradient(circle at 50% 115%')
     expect(analysisPanelStyles).toMatch(/\.heatmapCorner,\s*\.heatmapHeaderCell\s*\{[\s\S]*?min-height:\s*48px;/)

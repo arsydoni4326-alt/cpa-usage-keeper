@@ -836,7 +836,7 @@
 }
 
 .heatmapCell:focus-visible {
-  box-shadow: 0 0 0 2px color-mix(in srgb, #d86a4a 70%, transparent), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--heatmap-focus-color, #d86a4a) 70%, transparent), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
 
 .heatmapCellTokenValue {
