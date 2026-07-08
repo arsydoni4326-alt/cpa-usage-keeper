@@ -5,7 +5,7 @@ import { Interaction, Tooltip } from 'chart.js';
 import type { Chart, ChartData, ChartOptions, InteractionItem, InteractionModeFunction, Plugin, ScriptableContext, TooltipModel, TooltipPositionerFunction } from 'chart.js';
 import { Bar, Doughnut, Scatter } from 'react-chartjs-2';
 import type { AnalysisCompositionItem, AnalysisCostBreakdown, AnalysisHeatmapCell, AnalysisLatencyDiagnostics, AnalysisModelEfficiencyItem, AnalysisResponse, AnalysisTokenUsageBucket } from '@/lib/types';
-import { calculateDisplayInputTokens, calculateDisplayOutputTokens, formatCompactNumber, formatDurationMs, formatUsd } from '@/utils/usage';
+import { calculateDisplayInputTokens, calculateDisplayOutputTokens, formatCompactNumber, formatDurationMs, formatPerMinuteValue, formatUsd } from '@/utils/usage';
 import styles from './AnalysisPanel.module.scss';
 
 interface AnalysisPanelProps {
@@ -782,6 +782,13 @@ function calculateAverageTotalTokens(rows: ChartRow[]): number {
   return rows.reduce((sum, row) => sum + row.total, 0) / rows.length;
 }
 
+function calculateAnalysisWindowMinutes(analysis: AnalysisResponse | null): number | null {
+  const start = Date.parse(String(analysis?.range_start ?? ''));
+  const end = Date.parse(String(analysis?.range_end ?? ''));
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  return (end - start) / 60_000;
+}
+
 function takeMajorComposition(items: AnalysisCompositionItem[], othersLabel: string, limit = 5): AnalysisCompositionItem[] {
   if (items.length <= limit) return items;
   const major = items.slice(0, limit);
@@ -1309,7 +1316,12 @@ function CompositionMetaPill({ label, value }: { label: string; value: string })
   );
 }
 
-function CompositionPanel({ tabs, loading, isDark }: { tabs: CompositionTab[]; loading: boolean; isDark: boolean }) {
+const formatCompositionRate = (value: number, windowMinutes: number | null): string => {
+  if (!windowMinutes || windowMinutes <= 0) return '--';
+  return formatPerMinuteValue(value / windowMinutes);
+};
+
+function CompositionPanel({ tabs, loading, isDark, windowMinutes }: { tabs: CompositionTab[]; loading: boolean; isDark: boolean; windowMinutes: number | null }) {
   const { t } = useTranslation();
   const [activeTabId, setActiveTabId] = useState<CompositionTab['id']>('api_key');
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
@@ -1379,6 +1391,8 @@ function CompositionPanel({ tabs, loading, isDark }: { tabs: CompositionTab[]; l
                       <CompositionMetaPill label={t('usage_stats.total_tokens')} value={formatCompactNumber(toNumber(item.total_tokens))} />
                       <CompositionMetaPill label={t('usage_stats.requests_count')} value={formatCompactNumber(toNumber(item.requests))} />
                       <CompositionMetaPill label={t('usage_stats.total_cost')} value={formatUsd(toNumber(item.cost_usd))} />
+                      <CompositionMetaPill label={t('usage_stats.rpm')} value={formatCompositionRate(toNumber(item.requests), windowMinutes)} />
+                      <CompositionMetaPill label={t('usage_stats.tpm')} value={formatCompositionRate(toNumber(item.total_tokens), windowMinutes)} />
                     </div>
                   </div>
                 );
@@ -2020,6 +2034,7 @@ export function AnalysisPanel({ analysis, loading, isDark, isMobile }: AnalysisP
   const modelComposition = useMemo(() => takeMajorComposition(analysis?.model_composition ?? [], t('usage_stats.analysis_others')), [analysis, t]);
   const authFilesComposition = useMemo(() => takeMajorComposition(analysis?.auth_files_composition ?? [], t('usage_stats.analysis_others')), [analysis, t]);
   const aiProviderComposition = useMemo(() => takeMajorComposition(analysis?.ai_provider_composition ?? [], t('usage_stats.analysis_others')), [analysis, t]);
+  const analysisWindowMinutes = useMemo(() => calculateAnalysisWindowMinutes(analysis), [analysis]);
   const compositionTabs = useMemo<CompositionTab[]>(() => [
     { id: 'api_key', label: t('usage_stats.analysis_composition_api_key_tab'), items: apiComposition },
     { id: 'model', label: t('usage_stats.analysis_composition_model_tab'), items: modelComposition },
@@ -2035,7 +2050,7 @@ export function AnalysisPanel({ analysis, loading, isDark, isMobile }: AnalysisP
         <ModelEfficiencyCard rows={analysis?.model_efficiency ?? []} loading={loading} isDark={isDark} isMobile={isMobile} />
       </div>
       <LatencyDiagnosticsCard diagnostics={analysis?.latency_diagnostics} loading={loading} isDark={isDark} isMobile={isMobile} />
-      <CompositionPanel tabs={compositionTabs} loading={loading} isDark={isDark} />
+      <CompositionPanel tabs={compositionTabs} loading={loading} isDark={isDark} windowMinutes={analysisWindowMinutes} />
       <Heatmap cells={analysis?.heatmap?.cells ?? []} apiKeys={analysis?.heatmap?.api_keys ?? []} apiKeyLabels={analysis?.heatmap?.api_key_labels ?? {}} models={analysis?.heatmap?.models ?? []} loading={loading} isDark={isDark} />
     </div>
   );

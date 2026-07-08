@@ -277,6 +277,8 @@ describe('AnalysisPanel token chart data', () => {
   it('renders a clean circular usage distribution donut with token-share style rows', () => {
     const analysis: AnalysisResponse = {
       ...emptyAnalysis,
+      range_start: '2026-05-28T00:00:00Z',
+      range_end: '2026-05-28T02:00:00Z',
       api_key_composition: [{
         key: '1',
         label: 'Primary Key',
@@ -339,6 +341,10 @@ describe('AnalysisPanel token chart data', () => {
     expect(markup).toContain('compositionUsageBar');
     expect(markup).toContain('compositionUsageMetaPill');
     expect(markup).toContain('style="width:100%;--composition-bar-color:#1d4ed8"');
+    expect(markup).toContain('usage_stats.rpm');
+    expect(markup).toContain('0.03');
+    expect(markup).toContain('usage_stats.tpm');
+    expect(markup).toContain('8.33');
     expect(markup).not.toContain('<table');
     expect(markup).not.toContain('gpt-4o');
     expect(markup).not.toContain('usage_stats.analysis_model_composition_title');
