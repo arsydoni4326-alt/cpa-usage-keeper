@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef, type KeyboardEvent, type SyntheticEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ApiError, downloadUsageEventRequestLog, exportUsageEvents, fetchAnalysis, fetchAuthSessions, fetchCpaApiKeyOptions, fetchCpaApiKeySettings, fetchStatus, fetchUpdateCheck, fetchUsageEventModelFilterOptions, fetchUsageEventRequestLog, fetchUsageEventSourceFilterOptions, fetchUsageEvents, fetchVersion, logout, revokeAuthSession, updateCpaApiKeyAlias, type UsageEventsExportFormat } from '@/lib/api';
+import { ApiError, exportUsageEvents, fetchAnalysis, fetchAuthSessions, fetchCpaApiKeyOptions, fetchCpaApiKeySettings, fetchStatus, fetchUpdateCheck, fetchUsageEventModelFilterOptions, fetchUsageEventRequestLog, fetchUsageEventSourceFilterOptions, fetchUsageEvents, fetchVersion, getUsageEventRequestLogDownloadURL, logout, revokeAuthSession, updateCpaApiKeyAlias, type UsageEventsExportFormat } from '@/lib/api';
 import type { AnalysisResponse, AuthManagedSessionItem, CpaApiKeyOption, CpaApiKeySettingsItem, OverviewRealtimeWindow, StatusResponse, UsageEvent, UsageEventRequestLogResponse, UsageSourceFilterOption, VersionResponse } from '@/lib/types';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
@@ -703,6 +703,15 @@ export const triggerBrowserFileDownload = (blob: Blob, filename: string) => {
   window.URL.revokeObjectURL(url);
 };
 
+export const triggerBrowserURLDownload = (url: string) => {
+  const link = document.createElement('a');
+  link.href = url;
+  link.rel = 'noopener';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+};
+
 export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   const { t } = useTranslation();
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -806,7 +815,6 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   const [requestLogResponse, setRequestLogResponse] = useState<UsageEventRequestLogResponse | null>(null);
   const [requestLogError, setRequestLogError] = useState('');
   const [requestLogLoadingEventId, setRequestLogLoadingEventId] = useState<string | null>(null);
-  const [requestLogDownloading, setRequestLogDownloading] = useState(false);
   const eventsRequestControllerRef = useRef<AbortController | null>(null);
   const eventsFilterOptionsRequestControllerRef = useRef<AbortController | null>(null);
   const requestLogControllerRef = useRef<AbortController | null>(null);
@@ -1437,28 +1445,15 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     setRequestLogLoadingEventId(null);
     setRequestLogResponse(null);
     setRequestLogError('');
-    setRequestLogDownloading(false);
   }, []);
 
-  const handleRequestLogDownload = useCallback(async (eventId: string) => {
+  const handleRequestLogDownload = useCallback((eventId: string) => {
     const normalizedEventId = eventId.trim();
     if (!normalizedEventId) return;
-    setRequestLogDownloading(true);
-    try {
-      const file = await downloadUsageEventRequestLog(normalizedEventId);
-      triggerBrowserFileDownload(file.blob, file.filename);
-      showTopNotice('success', t('usage_stats.request_events_log_download_success'));
-      handleRequestLogClose();
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 401) {
-        onAuthRequired?.();
-        return;
-      }
-      showTopNotice('error', t('notification.download_failed'));
-    } finally {
-      setRequestLogDownloading(false);
-    }
-  }, [handleRequestLogClose, onAuthRequired, showTopNotice, t]);
+    triggerBrowserURLDownload(getUsageEventRequestLogDownloadURL(normalizedEventId));
+    showTopNotice('success', t('usage_stats.request_events_log_download_success'));
+    handleRequestLogClose();
+  }, [handleRequestLogClose, showTopNotice, t]);
 
   const refreshActiveTab = useCallback(async () => {
     if (activeTab === 'events') {
@@ -2039,12 +2034,11 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                   onVisibleColumnIdsChange={setEventsVisibleColumnIds}
                   onRequestLogOpen={handleRequestLogOpen}
                   requestLogLoadingEventId={requestLogLoadingEventId}
-	                  requestLogResponse={requestLogResponse}
-	                  requestLogError={requestLogError}
-	                  onRequestLogClose={handleRequestLogClose}
-	                  onRequestLogDownload={(eventId) => void handleRequestLogDownload(eventId)}
-	                  requestLogDownloading={requestLogDownloading}
-	                />
+                  requestLogResponse={requestLogResponse}
+                  requestLogError={requestLogError}
+                  onRequestLogClose={handleRequestLogClose}
+                  onRequestLogDownload={handleRequestLogDownload}
+                />
               </>
             )}
 

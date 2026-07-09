@@ -371,11 +371,6 @@ export interface UsageEventsExportFile {
   filename: string
 }
 
-export interface UsageEventRequestLogFile {
-  blob: Blob
-  filename: string
-}
-
 function buildUsageEventsParams(range: string, start?: string, end?: string, options?: FetchUsageEventsOptions, includePagination = true): URLSearchParams {
   const params = new URLSearchParams()
   params.set('range', range)
@@ -450,15 +445,8 @@ export async function fetchUsageEventRequestLog(eventId: string, signal?: AbortS
   return response.json()
 }
 
-export async function downloadUsageEventRequestLog(eventId: string): Promise<UsageEventRequestLogFile> {
-  const response = await apiFetch(apiPath(`/usage/events/${encodeURIComponent(eventId)}/request-log/download`), { cache: 'no-store' })
-  if (!response.ok) {
-    await parseApiError(response, `Failed to download usage event request log: ${response.status}`)
-  }
-  return {
-    blob: await response.blob(),
-    filename: parseAttachmentFilename(response.headers.get('Content-Disposition'), `request-log-${eventId}.log`),
-  }
+export function getUsageEventRequestLogDownloadURL(eventId: string): string {
+  return apiPath(`/usage/events/${encodeURIComponent(eventId)}/request-log/download`)
 }
 
 export async function exportUsageEvents(range: string, start: string | undefined, end: string | undefined, format: UsageEventsExportFormat, options?: FetchUsageEventsOptions): Promise<UsageEventsExportFile> {

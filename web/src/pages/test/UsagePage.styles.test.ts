@@ -162,6 +162,14 @@ describe('UsagePage toolbar styles', () => {
     expect(eventsEffect).toContain('}, [activeTab, loadEvents]);')
   })
 
+  it('uses the native request log download URL instead of fetching a blob into memory', () => {
+    expect(apiClientSource).toContain('getUsageEventRequestLogDownloadURL')
+    expect(apiClientSource).not.toContain('downloadUsageEventRequestLog')
+    expect(usagePageSource).toContain('triggerBrowserURLDownload')
+    expect(usagePageSource).toContain('getUsageEventRequestLogDownloadURL(normalizedEventId)')
+    expect(usagePageSource).not.toContain('downloadUsageEventRequestLog(normalizedEventId)')
+  })
+
   it('removes stale header control styles after the Overview chart cleanup', () => {
     expect(usagePageStyles).not.toContain('.syncSwitcher')
     expect(usagePageStyles).not.toContain('.syncPill')

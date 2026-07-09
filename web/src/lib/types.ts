@@ -280,7 +280,6 @@ export interface UsageEventRequestLogResponse {
   too_large?: boolean
   downloadable?: boolean
   sections: UsageEventRequestLogSection[]
-  raw?: string
 }
 
 export interface UsageEventModelFilterOptionsResponse {

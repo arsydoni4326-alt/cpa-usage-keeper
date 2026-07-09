@@ -785,28 +785,14 @@ export function RequestEventsDetailsCard({
   const requestLogOpen = Boolean(requestLogResponse || requestLogError || requestLogLoadingEventId);
   const requestLogTooLarge = requestLogResponse?.too_large === true || (requestLogResponse?.previewable === false && requestLogResponse?.downloadable === true);
   const requestLogTitle = requestLogTooLarge ? t('usage_stats.request_events_log_too_large_title') : t('usage_stats.request_events_log_title');
-  const requestLogRaw = requestLogResponse?.raw ?? '';
   const requestLogSections = requestLogResponse?.sections ?? [];
-  const handleDownloadRequestLog = useCallback(() => {
-    if (!requestLogRaw || typeof window === 'undefined' || typeof document === 'undefined') return;
-    const blob = new Blob([requestLogRaw], { type: 'text/plain;charset=utf-8' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = requestLogResponse?.filename || `${requestLogResponse?.request_id || 'request-log'}.log`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
-  }, [requestLogRaw, requestLogResponse?.filename, requestLogResponse?.request_id]);
+  const requestLogDownloadable = Boolean(requestLogResponse?.downloadable && String(requestLogResponse?.event_id ?? '').trim() && onRequestLogDownload);
   const handleRequestLogDownloadAction = useCallback(() => {
     const eventId = String(requestLogResponse?.event_id ?? '').trim();
     if (eventId && onRequestLogDownload) {
       onRequestLogDownload(eventId);
-      return;
     }
-    handleDownloadRequestLog();
-  }, [handleDownloadRequestLog, onRequestLogDownload, requestLogResponse?.event_id]);
+  }, [onRequestLogDownload, requestLogResponse?.event_id]);
 
   const modelOptions = useMemo(() => {
     const options = [
@@ -1215,11 +1201,11 @@ export function RequestEventsDetailsCard({
               <Button variant="secondary" size="sm" className={styles.usagePillAction} onClick={onRequestLogClose ?? (() => undefined)}>
                 {t('common.cancel')}
               </Button>
-              <Button variant="primary" size="sm" className={styles.usagePillAction} onClick={handleRequestLogDownloadAction} loading={requestLogDownloading}>
+              <Button variant="primary" size="sm" className={styles.usagePillAction} onClick={handleRequestLogDownloadAction} loading={requestLogDownloading} disabled={!requestLogDownloadable}>
                 {requestLogDownloading ? t('common.loading') : t('usage_stats.request_events_log_download')}
               </Button>
             </>
-          ) : requestLogRaw ? (
+          ) : requestLogDownloadable ? (
             <Button variant="secondary" size="sm" className={styles.usagePillAction} onClick={handleRequestLogDownloadAction} loading={requestLogDownloading}>
               {requestLogDownloading ? t('common.loading') : t('usage_stats.request_events_log_download')}
             </Button>

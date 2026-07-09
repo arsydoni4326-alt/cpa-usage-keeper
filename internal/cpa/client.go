@@ -20,9 +20,10 @@ import (
 )
 
 type Client struct {
-	baseURL       string
-	managementKey string
-	httpClient    *http.Client
+	baseURL          string
+	managementKey    string
+	httpClient       *http.Client
+	streamHTTPClient *http.Client
 }
 
 type RequestLogResult struct {
@@ -132,18 +133,23 @@ func (c *Client) doManagementJSONRequestWithBody(ctx context.Context, method str
 }
 
 func NewClient(baseURL, managementKey string, timeout time.Duration, tlsSkipVerify bool) *Client {
-	httpClient := &http.Client{
-		Timeout: timeout,
-	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
 	if tlsSkipVerify {
-		transport := http.DefaultTransport.(*http.Transport).Clone()
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-		httpClient.Transport = transport
+	}
+	httpClient := &http.Client{
+		Timeout:   timeout,
+		Transport: transport,
+	}
+	streamTransport := transport.Clone()
+	if timeout > 0 {
+		streamTransport.ResponseHeaderTimeout = timeout
 	}
 	return &Client{
-		baseURL:       strings.TrimRight(strings.TrimSpace(baseURL), "/"),
-		managementKey: strings.TrimSpace(managementKey),
-		httpClient:    httpClient,
+		baseURL:          strings.TrimRight(strings.TrimSpace(baseURL), "/"),
+		managementKey:    strings.TrimSpace(managementKey),
+		httpClient:       httpClient,
+		streamHTTPClient: &http.Client{Transport: streamTransport},
 	}
 }
 
@@ -166,25 +172,27 @@ func (c *Client) fetchRequestLogByID(ctx context.Context, requestID string, maxB
 	}
 	defer resp.Body.Close()
 
+	result.StatusCode = resp.StatusCode
+	result.ContentType = strings.TrimSpace(resp.Header.Get("Content-Type"))
+	result.Filename = filenameFromContentDisposition(resp.Header.Get("Content-Disposition"))
+	result.ContentLength = resp.ContentLength
+	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices && maxBodyBytes > 0 && resp.ContentLength > maxBodyBytes {
+		result.BodyTruncated = true
+		return result, nil
+	}
+
 	reader := io.Reader(resp.Body)
 	if maxBodyBytes > 0 {
 		reader = io.LimitReader(resp.Body, maxBodyBytes+1)
 	}
 	body, err := io.ReadAll(reader)
 	if err != nil {
-		result.StatusCode = resp.StatusCode
 		return result, fmt.Errorf("read management request log response: %w", err)
 	}
-	result.StatusCode = resp.StatusCode
 	result.Body = body
-	result.ContentType = strings.TrimSpace(resp.Header.Get("Content-Type"))
-	result.Filename = filenameFromContentDisposition(resp.Header.Get("Content-Disposition"))
-	result.ContentLength = resp.ContentLength
-	if result.ContentLength < 0 {
-		result.ContentLength = int64(len(body))
-	}
 	if maxBodyBytes > 0 && int64(len(body)) > maxBodyBytes {
 		result.BodyTruncated = true
+	} else if result.ContentLength < 0 {
 		result.ContentLength = int64(len(body))
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
@@ -200,7 +208,11 @@ func (c *Client) OpenRequestLogByID(ctx context.Context, requestID string) (*Req
 		return result, err
 	}
 
-	resp, err := c.httpClient.Do(req)
+	httpClient := c.streamHTTPClient
+	if httpClient == nil {
+		httpClient = c.httpClient
+	}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return result, fmt.Errorf("request management request log: %w", err)
 	}

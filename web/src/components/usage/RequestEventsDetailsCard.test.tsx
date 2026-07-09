@@ -291,7 +291,6 @@ describe('RequestEventsDetailsCard pagination', () => {
           { title: 'REQUEST INFO', content: 'URL: /v1/responses' },
           { title: 'API RESPONSE ERROR', content: '{"error":"quota exceeded"}' },
         ],
-        raw: '=== REQUEST INFO ===\nURL: /v1/responses\n',
       },
       onRequestLogClose: () => undefined,
     });

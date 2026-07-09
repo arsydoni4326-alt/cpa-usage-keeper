@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -48,7 +49,6 @@ type RequestLogResponse struct {
 	TooLarge     bool
 	Downloadable bool
 	Sections     []RequestLogSection
-	Raw          string
 }
 
 type RequestLogDownload struct {
@@ -72,24 +72,34 @@ type requestLogService struct {
 
 	mu            sync.Mutex
 	cache         map[string]requestLogCacheEntry
+	inflight      map[string]*requestLogInflight
 	cacheSequence int64
 	cacheBytes    int
 }
 
 type requestLogCacheEntry struct {
-	response  RequestLogResponse
-	err       error
-	expiresAt time.Time
-	createdAt time.Time
-	sequence  int64
+	response    RequestLogResponse
+	raw         string
+	contentType string
+	err         error
+	expiresAt   time.Time
+	createdAt   time.Time
+	sequence    int64
+}
+
+type requestLogInflight struct {
+	done  chan struct{}
+	entry requestLogCacheEntry
+	err   error
 }
 
 func NewRequestLogService(db *gorm.DB, client RequestLogClient) RequestLogProvider {
 	return &requestLogService{
-		db:     db,
-		client: client,
-		now:    time.Now,
-		cache:  map[string]requestLogCacheEntry{},
+		db:       db,
+		client:   client,
+		now:      time.Now,
+		cache:    map[string]requestLogCacheEntry{},
+		inflight: map[string]*requestLogInflight{},
 	}
 }
 
@@ -112,22 +122,33 @@ func (s *requestLogService) GetUsageEventRequestLog(ctx context.Context, eventID
 	}
 
 	if cached, ok := s.getCached(requestID); ok {
-		cached.response.EventID = eventID
-		cached.response.Cached = true
-		return cached.response, cached.err
+		return s.responseFromCacheEntry(cached, eventID, true), cached.err
+	}
+
+	inflight, leader := s.beginFetch(requestID)
+	if !leader {
+		<-inflight.done
+		if inflight.err != nil {
+			return RequestLogResponse{}, inflight.err
+		}
+		return s.responseFromCacheEntry(inflight.entry, eventID, true), inflight.entry.err
 	}
 
 	result, err := s.client.FetchRequestLogByID(ctx, requestID)
 	if err != nil {
 		if result != nil && result.StatusCode == http.StatusNotFound {
 			response := RequestLogResponse{EventID: eventID, RequestID: requestID, Available: false}
-			s.setCached(requestID, response, ErrRequestLogUnavailable, requestLogNegativeCacheTTL)
+			entry := s.setCached(requestID, response, "", "", ErrRequestLogUnavailable, requestLogNegativeCacheTTL)
+			s.finishFetch(requestID, entry, nil)
 			return response, ErrRequestLogUnavailable
 		}
+		s.finishFetch(requestID, requestLogCacheEntry{}, err)
 		return RequestLogResponse{}, err
 	}
 	if result == nil {
-		return RequestLogResponse{}, fmt.Errorf("request log result is nil")
+		err := fmt.Errorf("request log result is nil")
+		s.finishFetch(requestID, requestLogCacheEntry{}, err)
+		return RequestLogResponse{}, err
 	}
 	if result.BodyTruncated || len(result.Body) > requestLogMaxBytes {
 		response := RequestLogResponse{
@@ -139,7 +160,8 @@ func (s *requestLogService) GetUsageEventRequestLog(ctx context.Context, eventID
 			TooLarge:     true,
 			Downloadable: true,
 		}
-		s.setCached(requestID, response, nil, requestLogCacheTTL)
+		entry := s.setCached(requestID, response, "", strings.TrimSpace(result.ContentType), nil, requestLogCacheTTL)
+		s.finishFetch(requestID, entry, nil)
 		return response, nil
 	}
 
@@ -152,9 +174,9 @@ func (s *requestLogService) GetUsageEventRequestLog(ctx context.Context, eventID
 		Previewable:  true,
 		Downloadable: true,
 		Sections:     ParseRequestLogSections(raw),
-		Raw:          raw,
 	}
-	s.setCached(requestID, response, nil, requestLogCacheTTL)
+	entry := s.setCached(requestID, response, raw, strings.TrimSpace(result.ContentType), nil, requestLogCacheTTL)
+	s.finishFetch(requestID, entry, nil)
 	return response, nil
 }
 
@@ -174,6 +196,21 @@ func (s *requestLogService) DownloadUsageEventRequestLog(ctx context.Context, ev
 	}
 	if requestID == "" {
 		return RequestLogDownload{EventID: eventID, Downloadable: false}, ErrRequestLogMissingID
+	}
+	if cached, ok := s.getCached(requestID); ok {
+		if cached.err != nil {
+			return RequestLogDownload{EventID: eventID, RequestID: requestID, Downloadable: false}, cached.err
+		}
+		if cached.raw != "" {
+			return RequestLogDownload{
+				EventID:      eventID,
+				RequestID:    requestID,
+				Filename:     strings.TrimSpace(cached.response.Filename),
+				ContentType:  strings.TrimSpace(cached.contentType),
+				Body:         io.NopCloser(bytes.NewBufferString(cached.raw)),
+				Downloadable: true,
+			}, nil
+		}
 	}
 	result, err := s.client.OpenRequestLogByID(ctx, requestID)
 	if err != nil {
@@ -204,12 +241,13 @@ func (s *requestLogService) getCached(requestID string) (requestLogCacheEntry, b
 	}
 	if !s.now().Before(entry.expiresAt) {
 		delete(s.cache, requestID)
+		s.cacheBytes -= requestLogCacheEntrySize(entry)
 		return requestLogCacheEntry{}, false
 	}
 	return entry, true
 }
 
-func (s *requestLogService) setCached(requestID string, response RequestLogResponse, err error, ttl time.Duration) {
+func (s *requestLogService) setCached(requestID string, response RequestLogResponse, raw string, contentType string, err error, ttl time.Duration) requestLogCacheEntry {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := s.now()
@@ -217,15 +255,23 @@ func (s *requestLogService) setCached(requestID string, response RequestLogRespo
 	if previous, ok := s.cache[requestID]; ok {
 		s.cacheBytes -= requestLogCacheEntrySize(previous)
 	}
-	s.cache[requestID] = requestLogCacheEntry{
-		response:  response,
-		err:       err,
-		expiresAt: now.Add(ttl),
-		createdAt: now,
-		sequence:  s.cacheSequence,
+	response.EventID = 0
+	response.Cached = false
+	response.Sections = nil
+	entry := requestLogCacheEntry{
+		response:    response,
+		raw:         raw,
+		contentType: strings.TrimSpace(contentType),
+		err:         err,
+		expiresAt:   now.Add(ttl),
+		createdAt:   now,
+		sequence:    s.cacheSequence,
 	}
-	s.cacheBytes += requestLogCacheEntrySize(s.cache[requestID])
+	s.cache[requestID] = entry
+	s.cacheBytes += requestLogCacheEntrySize(entry)
 	s.pruneCacheLocked(now)
+	entry = s.cache[requestID]
+	return entry
 }
 
 func (s *requestLogService) pruneCacheLocked(now time.Time) {
@@ -254,11 +300,45 @@ func (s *requestLogService) pruneCacheLocked(now time.Time) {
 }
 
 func requestLogCacheEntrySize(entry requestLogCacheEntry) int {
-	size := len(entry.response.Raw) + len(entry.response.Filename) + len(entry.response.RequestID)
-	for _, section := range entry.response.Sections {
-		size += len(section.Title) + len(section.Content)
+	return len(entry.raw) + len(entry.contentType) + len(entry.response.Filename) + len(entry.response.RequestID)
+}
+
+func (s *requestLogService) beginFetch(requestID string) (*requestLogInflight, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.inflight == nil {
+		s.inflight = map[string]*requestLogInflight{}
 	}
-	return size
+	if inflight, ok := s.inflight[requestID]; ok {
+		return inflight, false
+	}
+	inflight := &requestLogInflight{done: make(chan struct{})}
+	s.inflight[requestID] = inflight
+	return inflight, true
+}
+
+func (s *requestLogService) finishFetch(requestID string, entry requestLogCacheEntry, err error) {
+	s.mu.Lock()
+	inflight := s.inflight[requestID]
+	if inflight != nil {
+		inflight.entry = entry
+		inflight.err = err
+		delete(s.inflight, requestID)
+	}
+	s.mu.Unlock()
+	if inflight != nil {
+		close(inflight.done)
+	}
+}
+
+func (s *requestLogService) responseFromCacheEntry(entry requestLogCacheEntry, eventID int64, cached bool) RequestLogResponse {
+	response := entry.response
+	response.EventID = eventID
+	response.Cached = cached
+	if response.Previewable && entry.raw != "" {
+		response.Sections = ParseRequestLogSections(entry.raw)
+	}
+	return response
 }
 
 func RequestLogPreviewMaxBytes() int {

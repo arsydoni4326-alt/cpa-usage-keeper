@@ -282,7 +282,6 @@ func TestUsageEventRequestLogReturnsStructuredLog(t *testing.T) {
 			Title:   "REQUEST INFO",
 			Content: "URL: /v1/responses",
 		}},
-		Raw: "=== REQUEST INFO ===\nURL: /v1/responses\n",
 	}}
 	router := NewRouter(nil, nil, provider, nil, AuthConfig{}, nil, "", OptionalProviders{RequestLogs: requestLogProvider})
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/usage/events/42/request-log", nil)
@@ -299,6 +298,9 @@ func TestUsageEventRequestLogReturnsStructuredLog(t *testing.T) {
 	}
 	if !contains(body, `"title":"REQUEST INFO"`) || !contains(body, `"content":"URL: /v1/responses"`) {
 		t.Fatalf("expected parsed request log sections in response: %s", body)
+	}
+	if contains(body, `"raw":`) {
+		t.Fatalf("expected preview response not to include raw log body: %s", body)
 	}
 	if requestLogProvider.calls != 1 || requestLogProvider.eventID != 42 {
 		t.Fatalf("expected provider call with event id 42, got calls=%d eventID=%d", requestLogProvider.calls, requestLogProvider.eventID)
@@ -388,6 +390,42 @@ func TestUsageEventRequestLogDownloadStreamsAttachment(t *testing.T) {
 	}
 	if requestLogProvider.downloadCalls != 1 || requestLogProvider.downloadEventID != 42 {
 		t.Fatalf("expected download provider call with event id 42, got calls=%d eventID=%d", requestLogProvider.downloadCalls, requestLogProvider.downloadEventID)
+	}
+}
+
+func TestUsageEventRequestLogDownloadSanitizesAttachmentFilename(t *testing.T) {
+	provider := &usageEventsStub{}
+	unsafeFilename := "bad\r\nX-Bad: yes; evil/../名.log"
+	requestLogProvider := &requestLogProviderStub{downloadResponse: service.RequestLogDownload{
+		EventID:      42,
+		RequestID:    "req-log-42",
+		Filename:     unsafeFilename,
+		ContentType:  "text/plain",
+		Body:         io.NopCloser(strings.NewReader("raw")),
+		Downloadable: true,
+	}}
+	router := NewRouter(nil, nil, provider, nil, AuthConfig{}, nil, "", OptionalProviders{RequestLogs: requestLogProvider})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/usage/events/42/request-log/download", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d body=%s", resp.Code, resp.Body.String())
+	}
+	disposition := resp.Header().Get("Content-Disposition")
+	if strings.ContainsAny(disposition, "\r\n") {
+		t.Fatalf("content disposition must not contain raw CR/LF: %q", disposition)
+	}
+	match := regexp.MustCompile(`filename="([^"]+)"`).FindStringSubmatch(disposition)
+	if len(match) != 2 {
+		t.Fatalf("expected sanitized filename parameter, got %q", disposition)
+	}
+	if strings.ContainsAny(match[1], "\r\n;:/\\\"") {
+		t.Fatalf("fallback filename contains unsafe header/path characters: %q in %q", match[1], disposition)
+	}
+	if !contains(disposition, `filename*=UTF-8''bad%0D%0AX-Bad:%20yes%3B%20evil%2F..%2F%E5%90%8D.log`) {
+		t.Fatalf("expected RFC5987 filename* parameter preserving encoded original filename, got %q", disposition)
 	}
 }
 

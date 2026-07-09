@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -94,6 +95,7 @@ func TestFetchRequestLogByIDLimitsPreviewBody(t *testing.T) {
 	previewLimit := int64(16)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Disposition", `attachment; filename="large-request.log"`)
+		w.(http.Flusher).Flush()
 		_, _ = w.Write([]byte("0123456789abcdefX"))
 	}))
 	defer server.Close()
@@ -115,6 +117,82 @@ func TestFetchRequestLogByIDLimitsPreviewBody(t *testing.T) {
 	}
 	if result.Filename != "large-request.log" {
 		t.Fatalf("unexpected filename %q", result.Filename)
+	}
+}
+
+func TestFetchRequestLogByIDSkipsBodyWhenContentLengthExceedsPreviewLimit(t *testing.T) {
+	previewLimit := int64(16)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Disposition", `attachment; filename="large-request.log"`)
+		w.Header().Set("Content-Length", "17")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "management-secret", 2*time.Second, false)
+	result, err := client.fetchRequestLogByID(context.Background(), "req-large", previewLimit)
+
+	if err != nil {
+		t.Fatalf("fetchRequestLogByID returned error: %v", err)
+	}
+	if !result.BodyTruncated {
+		t.Fatalf("expected content-length oversized response to be marked truncated")
+	}
+	if len(result.Body) != 0 {
+		t.Fatalf("expected oversized response body not to be read, got %d bytes", len(result.Body))
+	}
+	if result.ContentLength != 17 {
+		t.Fatalf("expected original content length 17, got %d", result.ContentLength)
+	}
+}
+
+func TestFetchRequestLogByIDKeepsUnknownContentLengthWhenPreviewBodyTruncated(t *testing.T) {
+	previewLimit := int64(16)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Disposition", `attachment; filename="large-request.log"`)
+		w.(http.Flusher).Flush()
+		_, _ = w.Write([]byte("0123456789abcdefX"))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "management-secret", 2*time.Second, false)
+	result, err := client.fetchRequestLogByID(context.Background(), "req-large", previewLimit)
+
+	if err != nil {
+		t.Fatalf("fetchRequestLogByID returned error: %v", err)
+	}
+	if !result.BodyTruncated {
+		t.Fatalf("expected oversized response to be marked truncated")
+	}
+	if result.ContentLength != -1 {
+		t.Fatalf("expected unknown content length to stay -1 after truncation, got %d", result.ContentLength)
+	}
+}
+
+func TestOpenRequestLogByIDDoesNotTimeoutWhileStreamingBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Disposition", `attachment; filename="slow-request.log"`)
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		time.Sleep(80 * time.Millisecond)
+		_, _ = w.Write([]byte("late body"))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "management-secret", 20*time.Millisecond, false)
+	stream, err := client.OpenRequestLogByID(context.Background(), "req-slow")
+	if err != nil {
+		t.Fatalf("OpenRequestLogByID returned error before streaming body: %v", err)
+	}
+	defer stream.Body.Close()
+
+	body, err := io.ReadAll(stream.Body)
+	if err != nil {
+		t.Fatalf("expected stream body read to outlive client request timeout, got %v", err)
+	}
+	if string(body) != "late body" {
+		t.Fatalf("unexpected stream body %q", string(body))
 	}
 }
 

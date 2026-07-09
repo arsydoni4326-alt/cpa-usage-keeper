@@ -4,8 +4,8 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -85,7 +85,6 @@ type usageEventRequestLogPayload struct {
 	TooLarge     bool                          `json:"too_large,omitempty"`
 	Downloadable bool                          `json:"downloadable,omitempty"`
 	Sections     []usageEventRequestLogSection `json:"sections"`
-	Raw          string                        `json:"raw,omitempty"`
 }
 
 type usageEventRequestLogSection struct {
@@ -241,7 +240,7 @@ func registerUsageEventsRoute(
 			return
 		}
 		defer response.Body.Close()
-		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, sanitizeAttachmentFilename(filename)))
+		c.Header("Content-Disposition", requestLogAttachmentDisposition(filename))
 		c.DataFromReader(http.StatusOK, -1, contentType, response.Body, nil)
 	})
 
@@ -382,7 +381,6 @@ func buildUsageEventRequestLogPayload(response service.RequestLogResponse) usage
 		TooLarge:     response.TooLarge,
 		Downloadable: response.Downloadable,
 		Sections:     sections,
-		Raw:          response.Raw,
 	}
 }
 
@@ -606,11 +604,33 @@ func usageEventsExportFilename(format string) string {
 
 func sanitizeAttachmentFilename(filename string) string {
 	filename = strings.TrimSpace(filename)
-	filename = strings.NewReplacer("\\", "-", "/", "-", `"`, "").Replace(filename)
-	if filename == "" {
+	var builder strings.Builder
+	for _, r := range filename {
+		if r < 0x20 || r == 0x7f || r > 0x7e {
+			builder.WriteByte('_')
+			continue
+		}
+		switch r {
+		case '\\', '/', '"', ';', ':':
+			builder.WriteByte('_')
+		default:
+			builder.WriteRune(r)
+		}
+	}
+	sanitized := strings.TrimSpace(builder.String())
+	if sanitized == "" {
 		return "request-log.log"
 	}
-	return filename
+	return sanitized
+}
+
+func requestLogAttachmentDisposition(filename string) string {
+	original := strings.TrimSpace(filename)
+	fallback := sanitizeAttachmentFilename(original)
+	if original == "" {
+		original = fallback
+	}
+	return `attachment; filename="` + fallback + `"; filename*=UTF-8''` + url.PathEscape(original)
 }
 
 func usageEventExportCSVRecord(event usageEventExportPayload) []string {
