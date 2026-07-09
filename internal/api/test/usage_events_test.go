@@ -3,6 +3,7 @@ package test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"math"
@@ -43,6 +44,10 @@ type requestLogProviderStub struct {
 	downloadEventID  int64
 	downloadCalls    int
 	downloadClosed   *bool
+}
+
+type requestLogDownloadTokenPayload struct {
+	DownloadURL string `json:"download_url"`
 }
 
 func (s *requestLogProviderStub) GetUsageEventRequestLog(_ context.Context, eventID int64) (service.RequestLogResponse, error) {
@@ -393,6 +398,59 @@ func TestUsageEventRequestLogDownloadStreamsAttachment(t *testing.T) {
 	}
 }
 
+func TestUsageEventRequestLogDownloadTokenStreamsAttachmentOnce(t *testing.T) {
+	provider := &usageEventsStub{}
+	requestLogProvider := &requestLogProviderStub{downloadResponse: service.RequestLogDownload{
+		EventID:      42,
+		RequestID:    "req-log-42",
+		Filename:     "token-request.log",
+		ContentType:  "text/plain; charset=utf-8",
+		Body:         io.NopCloser(bytes.NewBufferString("token raw log")),
+		Downloadable: true,
+	}}
+	router := NewRouter(nil, nil, provider, nil, AuthConfig{}, nil, "", OptionalProviders{RequestLogs: requestLogProvider})
+	issueReq := httptest.NewRequest(http.MethodPost, "/api/v1/usage/events/42/request-log/download-token", nil)
+	issueReq.Header.Set("X-CPA-Usage-Keeper-Request", "fetch")
+	issueResp := httptest.NewRecorder()
+
+	router.ServeHTTP(issueResp, issueReq)
+
+	if issueResp.Code != http.StatusOK {
+		t.Fatalf("expected token status 200, got %d body=%s", issueResp.Code, issueResp.Body.String())
+	}
+	var payload requestLogDownloadTokenPayload
+	if err := json.NewDecoder(issueResp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode token response: %v", err)
+	}
+	if payload.DownloadURL == "" || !contains(payload.DownloadURL, "/api/v1/usage/events/42/request-log/download-file?token=") {
+		t.Fatalf("unexpected download URL %q", payload.DownloadURL)
+	}
+
+	downloadReq := httptest.NewRequest(http.MethodGet, payload.DownloadURL, nil)
+	downloadResp := httptest.NewRecorder()
+	router.ServeHTTP(downloadResp, downloadReq)
+
+	if downloadResp.Code != http.StatusOK {
+		t.Fatalf("expected download status 200, got %d body=%s", downloadResp.Code, downloadResp.Body.String())
+	}
+	if downloadResp.Body.String() != "token raw log" {
+		t.Fatalf("unexpected download body %q", downloadResp.Body.String())
+	}
+	if requestLogProvider.downloadCalls != 1 {
+		t.Fatalf("expected one provider download call, got %d", requestLogProvider.downloadCalls)
+	}
+
+	reuseReq := httptest.NewRequest(http.MethodGet, payload.DownloadURL, nil)
+	reuseResp := httptest.NewRecorder()
+	router.ServeHTTP(reuseResp, reuseReq)
+	if reuseResp.Code != http.StatusUnauthorized {
+		t.Fatalf("expected reused token status 401, got %d body=%s", reuseResp.Code, reuseResp.Body.String())
+	}
+	if requestLogProvider.downloadCalls != 1 {
+		t.Fatalf("expected reused token not to call provider, got %d calls", requestLogProvider.downloadCalls)
+	}
+}
+
 func TestUsageEventRequestLogDownloadSanitizesAttachmentFilename(t *testing.T) {
 	provider := &usageEventsStub{}
 	unsafeFilename := "bad\r\nX-Bad: yes; evil/../名.log"
@@ -424,8 +482,11 @@ func TestUsageEventRequestLogDownloadSanitizesAttachmentFilename(t *testing.T) {
 	if strings.ContainsAny(match[1], "\r\n;:/\\\"") {
 		t.Fatalf("fallback filename contains unsafe header/path characters: %q in %q", match[1], disposition)
 	}
-	if !contains(disposition, `filename*=UTF-8''bad%0D%0AX-Bad:%20yes%3B%20evil%2F..%2F%E5%90%8D.log`) {
-		t.Fatalf("expected RFC5987 filename* parameter preserving encoded original filename, got %q", disposition)
+	if strings.Contains(disposition, "%0D") || strings.Contains(disposition, "%0A") || strings.Contains(disposition, "%2F") || strings.Contains(disposition, "%3B") {
+		t.Fatalf("filename* must not preserve encoded control/path/header separators, got %q", disposition)
+	}
+	if !contains(disposition, `filename*=UTF-8''bad__X-Bad_%20yes_%20evil_.._%E5%90%8D.log`) {
+		t.Fatalf("expected RFC5987 filename* parameter to preserve safe Unicode only, got %q", disposition)
 	}
 }
 

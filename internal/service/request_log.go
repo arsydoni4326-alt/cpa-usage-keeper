@@ -26,7 +26,6 @@ const (
 var (
 	ErrRequestLogUnavailable = errors.New("request log unavailable")
 	ErrRequestLogMissingID   = errors.New("usage event request id missing")
-	ErrRequestLogTooLarge    = errors.New("request log too large")
 )
 
 type RequestLogClient interface {
@@ -127,14 +126,18 @@ func (s *requestLogService) GetUsageEventRequestLog(ctx context.Context, eventID
 
 	inflight, leader := s.beginFetch(requestID)
 	if !leader {
-		<-inflight.done
+		select {
+		case <-inflight.done:
+		case <-ctx.Done():
+			return RequestLogResponse{}, ctx.Err()
+		}
 		if inflight.err != nil {
 			return RequestLogResponse{}, inflight.err
 		}
 		return s.responseFromCacheEntry(inflight.entry, eventID, true), inflight.entry.err
 	}
 
-	result, err := s.client.FetchRequestLogByID(ctx, requestID)
+	result, err := s.client.FetchRequestLogByID(context.WithoutCancel(ctx), requestID)
 	if err != nil {
 		if result != nil && result.StatusCode == http.StatusNotFound {
 			response := RequestLogResponse{EventID: eventID, RequestID: requestID, Available: false}
@@ -160,7 +163,7 @@ func (s *requestLogService) GetUsageEventRequestLog(ctx context.Context, eventID
 			TooLarge:     true,
 			Downloadable: true,
 		}
-		entry := s.setCached(requestID, response, "", strings.TrimSpace(result.ContentType), nil, requestLogCacheTTL)
+		entry := s.setCached(requestID, response, "", strings.TrimSpace(result.ContentType), nil, requestLogNegativeCacheTTL)
 		s.finishFetch(requestID, entry, nil)
 		return response, nil
 	}

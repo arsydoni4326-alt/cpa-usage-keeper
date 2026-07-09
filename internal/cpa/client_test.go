@@ -196,6 +196,34 @@ func TestOpenRequestLogByIDDoesNotTimeoutWhileStreamingBody(t *testing.T) {
 	}
 }
 
+func TestOpenRequestLogByIDTimesOutStalledStreamBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Disposition", `attachment; filename="stalled-request.log"`)
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		time.Sleep(200 * time.Millisecond)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "management-secret", 2*time.Second, false)
+	client.streamIdleTimeout = 20 * time.Millisecond
+	stream, err := client.OpenRequestLogByID(context.Background(), "req-stalled")
+	if err != nil {
+		t.Fatalf("OpenRequestLogByID returned error before streaming body: %v", err)
+	}
+	defer stream.Body.Close()
+
+	startedAt := time.Now()
+	_, err = io.ReadAll(stream.Body)
+	if err == nil {
+		t.Fatalf("expected stalled stream body read to fail")
+	}
+	if time.Since(startedAt) > time.Second {
+		t.Fatalf("expected stalled stream body to fail quickly, took %s", time.Since(startedAt))
+	}
+}
+
 func TestFetchManagementAPIKeysAllowsEmptyArray(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"cpa-usage-keeper/internal/cpa/dto/apicall"
@@ -20,10 +21,11 @@ import (
 )
 
 type Client struct {
-	baseURL          string
-	managementKey    string
-	httpClient       *http.Client
-	streamHTTPClient *http.Client
+	baseURL           string
+	managementKey     string
+	httpClient        *http.Client
+	streamHTTPClient  *http.Client
+	streamIdleTimeout time.Duration
 }
 
 type RequestLogResult struct {
@@ -132,6 +134,8 @@ func (c *Client) doManagementJSONRequestWithBody(ctx context.Context, method str
 	})
 }
 
+const defaultRequestLogStreamIdleTimeout = 30 * time.Second
+
 func NewClient(baseURL, managementKey string, timeout time.Duration, tlsSkipVerify bool) *Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	if tlsSkipVerify {
@@ -146,11 +150,19 @@ func NewClient(baseURL, managementKey string, timeout time.Duration, tlsSkipVeri
 		streamTransport.ResponseHeaderTimeout = timeout
 	}
 	return &Client{
-		baseURL:          strings.TrimRight(strings.TrimSpace(baseURL), "/"),
-		managementKey:    strings.TrimSpace(managementKey),
-		httpClient:       httpClient,
-		streamHTTPClient: &http.Client{Transport: streamTransport},
+		baseURL:           strings.TrimRight(strings.TrimSpace(baseURL), "/"),
+		managementKey:     strings.TrimSpace(managementKey),
+		httpClient:        httpClient,
+		streamHTTPClient:  &http.Client{Transport: streamTransport},
+		streamIdleTimeout: requestLogStreamIdleTimeout(timeout),
 	}
+}
+
+func requestLogStreamIdleTimeout(timeout time.Duration) time.Duration {
+	if timeout > defaultRequestLogStreamIdleTimeout {
+		return timeout
+	}
+	return defaultRequestLogStreamIdleTimeout
 }
 
 func (c *Client) FetchRequestLogByID(ctx context.Context, requestID string) (*RequestLogResult, error) {
@@ -224,8 +236,48 @@ func (c *Client) OpenRequestLogByID(ctx context.Context, requestID string) (*Req
 		_ = resp.Body.Close()
 		return result, fmt.Errorf("management request log request returned status %d", resp.StatusCode)
 	}
-	result.Body = resp.Body
+	result.Body = newIdleTimeoutReadCloser(resp.Body, c.streamIdleTimeout)
 	return result, nil
+}
+
+type idleTimeoutReadCloser struct {
+	body    io.ReadCloser
+	timeout time.Duration
+
+	mu       sync.Mutex
+	timedOut bool
+}
+
+func newIdleTimeoutReadCloser(body io.ReadCloser, timeout time.Duration) io.ReadCloser {
+	if body == nil || timeout <= 0 {
+		return body
+	}
+	return &idleTimeoutReadCloser{body: body, timeout: timeout}
+}
+
+func (r *idleTimeoutReadCloser) Read(p []byte) (int, error) {
+	timer := time.AfterFunc(r.timeout, func() {
+		r.mu.Lock()
+		r.timedOut = true
+		r.mu.Unlock()
+		_ = r.body.Close()
+	})
+	n, err := r.body.Read(p)
+	timer.Stop()
+	if err != nil && r.readTimedOut() {
+		return n, fmt.Errorf("read management request log stream body: %w", context.DeadlineExceeded)
+	}
+	return n, err
+}
+
+func (r *idleTimeoutReadCloser) Close() error {
+	return r.body.Close()
+}
+
+func (r *idleTimeoutReadCloser) readTimedOut() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.timedOut
 }
 
 func (c *Client) newRequestLogRequest(ctx context.Context, requestID string) (*http.Request, error) {

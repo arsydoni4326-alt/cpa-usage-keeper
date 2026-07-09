@@ -28,4 +28,13 @@ describe('Modal scroll lock', () => {
     expect(modalSource).toMatch(/if \(notifyParent\) \{\n\s+onClose\(\);\n\s+\}\n\s+closeTimerRef\.current = window\.setTimeout/);
     expect(modalSource).not.toMatch(/window\.setTimeout\(\(\) => \{[\s\S]*?if \(notifyParent\) \{\n\s+onClose\(\);/);
   });
+
+  it('keeps the last rendered presentation while the close animation runs', () => {
+    expect(modalSource).toContain('interface ModalRenderSnapshot');
+    expect(modalSource).toContain('const renderSnapshotRef = useRef<ModalRenderSnapshot>');
+    expect(modalSource).toContain('const useClosingSnapshot = !open && isVisible;');
+    expect(modalSource).toContain('const renderSnapshot = useClosingSnapshot');
+    expect(modalSource).toContain("style={{ width: renderSnapshot.width, maxWidth: '100%' }}");
+    expect(modalSource).toContain('renderSnapshot.children');
+  });
 });

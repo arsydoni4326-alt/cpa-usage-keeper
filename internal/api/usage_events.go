@@ -92,6 +92,10 @@ type usageEventRequestLogSection struct {
 	Content string `json:"content"`
 }
 
+type usageEventRequestLogDownloadTokenPayload struct {
+	DownloadURL string `json:"download_url"`
+}
+
 type usageEventExportPayload struct {
 	ID                  string   `json:"id"`
 	Timestamp           string   `json:"timestamp"`
@@ -130,6 +134,7 @@ func registerUsageEventsRoute(
 	usageIdentityProvider service.UsageIdentityProvider,
 	cpaAPIKeyProvider service.CPAAPIKeyProvider,
 	requestLogProvider service.RequestLogProvider,
+	requestLogDownloadTokens *requestLogDownloadTokenStore,
 ) {
 	router.GET("/usage/events/filters/models", func(c *gin.Context) {
 		models, err := loadUsageEventModelFilterOptions(c, usageProvider)
@@ -195,9 +200,8 @@ func registerUsageEventsRoute(
 			writeInternalError(c, "request log provider is not configured", nil)
 			return
 		}
-		eventID, err := strconv.ParseInt(strings.TrimSpace(c.Param("id")), 10, 64)
-		if err != nil || eventID <= 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid usage event id"})
+		eventID, ok := parseUsageEventRequestLogEventID(c)
+		if !ok {
 			return
 		}
 		response, err := requestLogProvider.GetUsageEventRequestLog(c.Request.Context(), eventID)
@@ -208,40 +212,38 @@ func registerUsageEventsRoute(
 		c.JSON(http.StatusOK, buildUsageEventRequestLogPayload(response))
 	})
 
+	router.POST("/usage/events/:id/request-log/download-token", func(c *gin.Context) {
+		if requestLogProvider == nil {
+			writeInternalError(c, "request log provider is not configured", nil)
+			return
+		}
+		if requestLogDownloadTokens == nil {
+			writeInternalError(c, "request log download token store is not configured", nil)
+			return
+		}
+		eventID, ok := parseUsageEventRequestLogEventID(c)
+		if !ok {
+			return
+		}
+		token, err := requestLogDownloadTokens.issue(eventID)
+		if err != nil {
+			writeInternalError(c, "issue request log download token failed", err)
+			return
+		}
+		downloadURL := strings.TrimSuffix(c.Request.URL.Path, "/download-token") + "/download-file?token=" + url.QueryEscape(token)
+		c.JSON(http.StatusOK, usageEventRequestLogDownloadTokenPayload{DownloadURL: downloadURL})
+	})
+
 	router.GET("/usage/events/:id/request-log/download", func(c *gin.Context) {
 		if requestLogProvider == nil {
 			writeInternalError(c, "request log provider is not configured", nil)
 			return
 		}
-		eventID, err := strconv.ParseInt(strings.TrimSpace(c.Param("id")), 10, 64)
-		if err != nil || eventID <= 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid usage event id"})
+		eventID, ok := parseUsageEventRequestLogEventID(c)
+		if !ok {
 			return
 		}
-		response, err := requestLogProvider.DownloadUsageEventRequestLog(c.Request.Context(), eventID)
-		if err != nil {
-			writeUsageEventRequestLogError(c, err)
-			return
-		}
-		contentType := strings.TrimSpace(response.ContentType)
-		if contentType == "" {
-			contentType = "text/plain; charset=utf-8"
-		}
-		filename := strings.TrimSpace(response.Filename)
-		if filename == "" {
-			requestID := strings.TrimSpace(response.RequestID)
-			if requestID == "" {
-				requestID = strconv.FormatInt(eventID, 10)
-			}
-			filename = "request-log-" + requestID + ".log"
-		}
-		if response.Body == nil {
-			writeInternalError(c, "request log download body is empty", nil)
-			return
-		}
-		defer response.Body.Close()
-		c.Header("Content-Disposition", requestLogAttachmentDisposition(filename))
-		c.DataFromReader(http.StatusOK, -1, contentType, response.Body, nil)
+		streamUsageEventRequestLogDownload(c, requestLogProvider, eventID)
 	})
 
 	router.GET("/usage/events/export", func(c *gin.Context) {
@@ -294,6 +296,68 @@ func registerUsageEventsRoute(
 			writeUsageEventsExportError(c, err)
 		}
 	})
+}
+
+func registerUsageEventRequestLogDownloadTokenRoutes(
+	router gin.IRoutes,
+	requestLogProvider service.RequestLogProvider,
+	requestLogDownloadTokens *requestLogDownloadTokenStore,
+) {
+	router.GET("/usage/events/:id/request-log/download-file", func(c *gin.Context) {
+		if requestLogProvider == nil {
+			writeInternalError(c, "request log provider is not configured", nil)
+			return
+		}
+		if requestLogDownloadTokens == nil {
+			writeInternalError(c, "request log download token store is not configured", nil)
+			return
+		}
+		eventID, ok := parseUsageEventRequestLogEventID(c)
+		if !ok {
+			return
+		}
+		if !requestLogDownloadTokens.consume(strings.TrimSpace(c.Query("token")), eventID) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired request log download token"})
+			return
+		}
+		streamUsageEventRequestLogDownload(c, requestLogProvider, eventID)
+	})
+}
+
+func parseUsageEventRequestLogEventID(c *gin.Context) (int64, bool) {
+	eventID, err := strconv.ParseInt(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil || eventID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid usage event id"})
+		return 0, false
+	}
+	return eventID, true
+}
+
+func streamUsageEventRequestLogDownload(c *gin.Context, requestLogProvider service.RequestLogProvider, eventID int64) {
+	response, err := requestLogProvider.DownloadUsageEventRequestLog(c.Request.Context(), eventID)
+	if err != nil {
+		writeUsageEventRequestLogError(c, err)
+		return
+	}
+	contentType := strings.TrimSpace(response.ContentType)
+	if contentType == "" {
+		contentType = "text/plain; charset=utf-8"
+	}
+	filename := strings.TrimSpace(response.Filename)
+	if filename == "" {
+		requestID := strings.TrimSpace(response.RequestID)
+		if requestID == "" {
+			requestID = strconv.FormatInt(eventID, 10)
+		}
+		filename = "request-log-" + requestID + ".log"
+	}
+	if response.Body == nil {
+		writeInternalError(c, "request log download body is empty", nil)
+		return
+	}
+	defer response.Body.Close()
+	c.Header("Content-Disposition", requestLogAttachmentDisposition(filename))
+	c.DataFromReader(http.StatusOK, -1, contentType, response.Body, nil)
 }
 
 // Source 下拉提交的是 usage identity；为了兼容前端命名，API 收 source，但进入仓储前只转换成 auth_index 查询。
@@ -392,8 +456,6 @@ func writeUsageEventRequestLogError(c *gin.Context, err error) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "usage event request id missing"})
 	case errors.Is(err, service.ErrRequestLogUnavailable):
 		c.JSON(http.StatusNotFound, gin.H{"error": "request log unavailable"})
-	case errors.Is(err, service.ErrRequestLogTooLarge):
-		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request log too large"})
 	default:
 		writeInternalError(c, "load usage event request log failed", err)
 	}
@@ -624,13 +686,35 @@ func sanitizeAttachmentFilename(filename string) string {
 	return sanitized
 }
 
+func sanitizeAttachmentFilenameStar(filename string) string {
+	filename = strings.TrimSpace(filename)
+	var builder strings.Builder
+	for _, r := range filename {
+		if r < 0x20 || r == 0x7f {
+			builder.WriteByte('_')
+			continue
+		}
+		switch r {
+		case '\\', '/', '"', ';', ':':
+			builder.WriteByte('_')
+		default:
+			builder.WriteRune(r)
+		}
+	}
+	sanitized := strings.TrimSpace(builder.String())
+	if sanitized == "" {
+		return "request-log.log"
+	}
+	return sanitized
+}
+
 func requestLogAttachmentDisposition(filename string) string {
 	original := strings.TrimSpace(filename)
 	fallback := sanitizeAttachmentFilename(original)
 	if original == "" {
 		original = fallback
 	}
-	return `attachment; filename="` + fallback + `"; filename*=UTF-8''` + url.PathEscape(original)
+	return `attachment; filename="` + fallback + `"; filename*=UTF-8''` + url.PathEscape(sanitizeAttachmentFilenameStar(original))
 }
 
 func usageEventExportCSVRecord(event usageEventExportPayload) []string {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { appPath, deleteAuthFiles, exportUsageEvents, fetchAnalysis, fetchAuthSessions, fetchCpaApiKeyOptions, fetchCpaApiKeys, fetchCpaApiKeySettings, fetchKeyOverview, fetchKeyOverviewRealtime, fetchQuotaAutoRefreshSettings, fetchUsageOverview, fetchUsageOverviewRealtime, fetchUsageQuotaCache, fetchUsageQuotaInspectionStatus, fetchUpdateCheck, fetchUsageEventModelFilterOptions, fetchUsageEventRequestLog, fetchUsageEventSourceFilterOptions, fetchUsageEvents, fetchUsageIdentities, fetchUsageIdentitiesPage, fetchUsageQuotaRefreshTask, fetchVersion, getUsageEventRequestLogDownloadURL, loginWithCPAAPIKey, logout, refreshUsageQuotas, resetUsageQuota, revokeAuthSession, setAuthFilesDisabled, startUsageQuotaInspection, updateCpaApiKeyAlias, updateQuotaAutoRefreshSettings } from '../api';
+import { appPath, createUsageEventRequestLogDownloadURL, deleteAuthFiles, exportUsageEvents, fetchAnalysis, fetchAuthSessions, fetchCpaApiKeyOptions, fetchCpaApiKeys, fetchCpaApiKeySettings, fetchKeyOverview, fetchKeyOverviewRealtime, fetchQuotaAutoRefreshSettings, fetchUsageOverview, fetchUsageOverviewRealtime, fetchUsageQuotaCache, fetchUsageQuotaInspectionStatus, fetchUpdateCheck, fetchUsageEventModelFilterOptions, fetchUsageEventRequestLog, fetchUsageEventSourceFilterOptions, fetchUsageEvents, fetchUsageIdentities, fetchUsageIdentitiesPage, fetchUsageQuotaRefreshTask, fetchVersion, loginWithCPAAPIKey, logout, refreshUsageQuotas, resetUsageQuota, revokeAuthSession, setAuthFilesDisabled, startUsageQuotaInspection, updateCpaApiKeyAlias, updateQuotaAutoRefreshSettings } from '../api';
 
 const headerValue = (init: RequestInit | undefined, name: string): string | null => new Headers(init?.headers).get(name);
 
@@ -399,15 +399,22 @@ describe('fetchUsageEvents', () => {
     expect(response.request_id).toBe('req-log-42');
   });
 
-  it('builds a usage event request log download URL without fetching the file into memory', () => {
+  it('creates a usage event request log download URL without fetching the file into memory', async () => {
     vi.stubGlobal('window', { __APP_BASE_PATH__: undefined });
-    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ download_url: '/api/v1/usage/events/42/request-log/download-file?token=abc' }),
+    } as Response);
 
-    const url = getUsageEventRequestLogDownloadURL('42');
+    const url = await createUsageEventRequestLogDownloadURL('42');
     const parsed = new URL(url, 'http://localhost');
+    const [requestURL, init] = fetchMock.mock.calls[0];
 
-    expect(parsed.pathname).toBe('/api/v1/usage/events/42/request-log/download');
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(new URL(String(requestURL), 'http://localhost').pathname).toBe('/api/v1/usage/events/42/request-log/download-token');
+    expect(init).toMatchObject({ method: 'POST', credentials: 'include', cache: 'no-store' });
+    expect(parsed.pathname).toBe('/api/v1/usage/events/42/request-log/download-file');
+    expect(parsed.searchParams.get('token')).toBe('abc');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('passes credential page filters and sorting as query params', async () => {

@@ -22,6 +22,14 @@ interface ModalProps {
   closeDisabled?: boolean;
 }
 
+interface ModalRenderSnapshot {
+  title?: ReactNode;
+  footer?: ReactNode;
+  width: number | string;
+  className?: string;
+  children: ReactNode;
+}
+
 const CLOSE_ANIMATION_DURATION = 350;
 const MODAL_LOCK_CLASS = 'modal-open';
 const FOCUSABLE_SELECTOR = [
@@ -107,6 +115,11 @@ export function Modal({
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const renderSnapshotRef = useRef<ModalRenderSnapshot>({ title, footer, width, className, children });
+
+  if (open) {
+    renderSnapshotRef.current = { title, footer, width, className, children };
+  }
 
   const getFocusableElements = useCallback(() => {
     if (!modalRef.current) return [] as HTMLElement[];
@@ -272,18 +285,25 @@ export function Modal({
 
   if (!open && !isVisible) return null;
 
+  const useClosingSnapshot = !open && isVisible;
+  const renderSnapshot = useClosingSnapshot
+    ? renderSnapshotRef.current
+    : { title, footer, width, className, children };
+  const renderedTitle = renderSnapshot.title;
+  const renderedFooter = renderSnapshot.footer;
+  const renderedClassName = renderSnapshot.className;
   const overlayClass = `modal-overlay ${isClosing ? 'modal-overlay-closing' : 'modal-overlay-entering'}`;
-  const modalClass = `modal ${isClosing ? 'modal-closing' : 'modal-entering'}${className ? ` ${className}` : ''}`;
+  const modalClass = `modal ${isClosing ? 'modal-closing' : 'modal-entering'}${renderedClassName ? ` ${renderedClassName}` : ''}`;
 
   const modalContent = (
     <div ref={overlayRef} className={overlayClass} onMouseDown={handleOverlayMouseDown}>
       <div
         ref={modalRef}
         className={modalClass}
-        style={{ width, maxWidth: '100%' }}
+        style={{ width: renderSnapshot.width, maxWidth: '100%' }}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={title ? titleId : undefined}
+        aria-labelledby={renderedTitle ? titleId : undefined}
         tabIndex={-1}
       >
         <button
@@ -297,12 +317,12 @@ export function Modal({
           <IconX size={20} />
         </button>
         <div className="modal-header">
-          <div className="modal-title" id={title ? titleId : undefined}>
-            {title}
+          <div className="modal-title" id={renderedTitle ? titleId : undefined}>
+            {renderedTitle}
           </div>
         </div>
-        <div className="modal-body">{children}</div>
-        {footer && <div className="modal-footer">{footer}</div>}
+        <div className="modal-body">{renderSnapshot.children}</div>
+        {renderedFooter && <div className="modal-footer">{renderedFooter}</div>}
       </div>
     </div>
   );
