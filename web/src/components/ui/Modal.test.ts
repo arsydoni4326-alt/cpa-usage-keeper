@@ -32,11 +32,11 @@ describe('Modal scroll lock', () => {
 
   it('keeps the last rendered presentation while the close animation runs', () => {
     expect(modalSource).toContain('interface ModalRenderSnapshot');
-    expect(modalSource).toContain('const renderSnapshotRef = useRef<ModalRenderSnapshot>');
-    expect(modalSource).toContain('const useClosingSnapshot = !open && isVisible;');
-    expect(modalSource).toContain('const renderSnapshot = useClosingSnapshot');
-    expect(modalSource).toContain("style={{ width: renderSnapshot.width, maxWidth: '100%' }}");
-    expect(modalSource).toContain('renderSnapshot.children');
+    expect(modalSource).toContain('const [renderSnapshot, setRenderSnapshot] = useState<ModalRenderSnapshot>(currentSnapshot);');
+    expect(modalSource).toContain('startClose(true, currentSnapshot);');
+    expect(modalSource).toContain('const activeSnapshot = open ? currentSnapshot : renderSnapshot;');
+    expect(modalSource).toContain("style={{ width: activeSnapshot.width, maxWidth: '100%' }}");
+    expect(modalSource).toContain('activeSnapshot.children');
   });
 
   it('disables modal interactions while the close animation runs', () => {

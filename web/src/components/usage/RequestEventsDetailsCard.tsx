@@ -1020,7 +1020,7 @@ export function RequestEventsDetailsCard({
     ];
 
     return definitions;
-  }, [events, latencyHint, onRequestLogOpen, requestLogLoadingEventId, speedHint, t, ttftHint]);
+  }, [events, latencyHint, onRequestLogOpen, requestLogLoadingEventId, resultLocale, speedHint, t, ttftHint]);
 
   const visibleColumns = useMemo(
     () => columnDefinitions.filter((definition) => effectiveVisibleColumnIdSet.has(definition.id)),

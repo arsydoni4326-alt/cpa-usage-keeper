@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type MouseEvent,
@@ -115,11 +116,11 @@ export function Modal({
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-  const renderSnapshotRef = useRef<ModalRenderSnapshot>({ title, footer, width, className, children });
-
-  if (open) {
-    renderSnapshotRef.current = { title, footer, width, className, children };
-  }
+  const currentSnapshot: ModalRenderSnapshot = useMemo(
+    () => ({ title, footer, width, className, children }),
+    [children, className, footer, title, width]
+  );
+  const [renderSnapshot, setRenderSnapshot] = useState<ModalRenderSnapshot>(currentSnapshot);
 
   const getFocusableElements = useCallback(() => {
     if (!modalRef.current) return [] as HTMLElement[];
@@ -129,8 +130,11 @@ export function Modal({
   }, []);
 
   const startClose = useCallback(
-    (notifyParent: boolean) => {
+    (notifyParent: boolean, snapshot?: ModalRenderSnapshot) => {
       if (closeTimerRef.current !== null) return;
+      if (snapshot) {
+        setRenderSnapshot(snapshot);
+      }
       setIsClosing(true);
       if (notifyParent) {
         onClose();
@@ -154,6 +158,7 @@ export function Modal({
       }
       queueMicrotask(() => {
         if (cancelled) return;
+        setRenderSnapshot({ title, footer, width, className, children });
         setIsVisible(true);
         setIsClosing(false);
       });
@@ -167,11 +172,11 @@ export function Modal({
     return () => {
       cancelled = true;
     };
-  }, [open, isVisible, startClose]);
+  }, [children, className, currentSnapshot, footer, isVisible, open, startClose, title, width]);
 
   const handleClose = useCallback(() => {
-    startClose(true);
-  }, [startClose]);
+    startClose(true, currentSnapshot);
+  }, [currentSnapshot, startClose]);
 
   const handleOverlayMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
     if (closeDisabled || event.target !== event.currentTarget) return;
@@ -285,13 +290,10 @@ export function Modal({
 
   if (!open && !isVisible) return null;
 
-  const useClosingSnapshot = !open && isVisible;
-  const renderSnapshot = useClosingSnapshot
-    ? renderSnapshotRef.current
-    : { title, footer, width, className, children };
-  const renderedTitle = renderSnapshot.title;
-  const renderedFooter = renderSnapshot.footer;
-  const renderedClassName = renderSnapshot.className;
+  const activeSnapshot = open ? currentSnapshot : renderSnapshot;
+  const renderedTitle = activeSnapshot.title;
+  const renderedFooter = activeSnapshot.footer;
+  const renderedClassName = activeSnapshot.className;
   const overlayClass = `modal-overlay ${isClosing ? 'modal-overlay-closing' : 'modal-overlay-entering'}`;
   const modalClass = `modal ${isClosing ? 'modal-closing' : 'modal-entering'}${renderedClassName ? ` ${renderedClassName}` : ''}`;
 
@@ -300,7 +302,7 @@ export function Modal({
       <div
         ref={modalRef}
         className={modalClass}
-        style={{ width: renderSnapshot.width, maxWidth: '100%' }}
+        style={{ width: activeSnapshot.width, maxWidth: '100%' }}
         role="dialog"
         aria-modal="true"
         aria-labelledby={renderedTitle ? titleId : undefined}
@@ -321,7 +323,7 @@ export function Modal({
             {renderedTitle}
           </div>
         </div>
-        <div className="modal-body">{renderSnapshot.children}</div>
+        <div className="modal-body">{activeSnapshot.children}</div>
         {renderedFooter && <div className="modal-footer">{renderedFooter}</div>}
       </div>
     </div>
