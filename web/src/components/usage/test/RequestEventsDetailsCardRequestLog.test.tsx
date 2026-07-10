@@ -256,12 +256,15 @@ describe('RequestEventsDetailsCard request log virtualization', () => {
 
       const copyButton = document.querySelector<HTMLButtonElement>('button[aria-label="Copy Headers"]');
       expect(copyButton).not.toBeNull();
+      copyButton?.focus();
+      expect(document.activeElement).toBe(copyButton);
       await act(async () => copyButton?.click());
 
       expect(writeText).toHaveBeenCalledWith('Authorization: Bearer preview');
       expect(execCommand).toHaveBeenCalledWith('copy');
       expect(copyButton?.getAttribute('aria-label')).toBe('Headers copied');
       expect(document.querySelector('textarea[aria-hidden="true"]')).toBeNull();
+      expect(document.activeElement).toBe(copyButton);
     } finally {
       if (originalExecCommand) {
         Object.defineProperty(document, 'execCommand', originalExecCommand);

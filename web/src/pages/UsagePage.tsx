@@ -1618,6 +1618,12 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
 
 	  useHeaderRefresh(refreshActiveTab);
 
+  useEffect(() => () => {
+    requestLogDownloadGenerationRef.current += 1;
+    requestLogControllerRef.current?.abort();
+    requestLogControllerRef.current = null;
+  }, []);
+
 	  useEffect(() => {
 	    if (activeTab === 'events') return;
 	    handleRequestLogClose();

@@ -650,10 +650,13 @@ const copyRequestLogSectionContent = async (content: string) => {
   if (typeof document === 'undefined' || typeof document.execCommand !== 'function') {
     throw new Error('clipboard is not available');
   }
+  const previouslyFocused = document.activeElement instanceof HTMLElement
+    ? document.activeElement
+    : null;
   const textarea = document.createElement('textarea');
   textarea.value = content;
   textarea.readOnly = true;
-  textarea.setAttribute('aria-hidden', 'true');
+  textarea.tabIndex = -1;
   textarea.style.position = 'fixed';
   textarea.style.opacity = '0';
   textarea.style.pointerEvents = 'none';
@@ -668,6 +671,9 @@ const copyRequestLogSectionContent = async (content: string) => {
     }
   } finally {
     textarea.remove();
+    if (previouslyFocused?.isConnected) {
+      previouslyFocused.focus();
+    }
   }
 };
 
