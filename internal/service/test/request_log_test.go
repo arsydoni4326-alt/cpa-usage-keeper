@@ -31,6 +31,7 @@ type requestLogClientStub struct {
 	downloadErr    error
 	started        chan struct{}
 	block          chan struct{}
+	fetchCanceled  chan struct{}
 }
 
 func (s *requestLogClientStub) FetchRequestLogByID(ctx context.Context, _ string) (*cpa.RequestLogResult, error) {
@@ -40,6 +41,7 @@ func (s *requestLogClientStub) FetchRequestLogByID(ctx context.Context, _ string
 	err := s.err
 	started := s.started
 	block := s.block
+	fetchCanceled := s.fetchCanceled
 	s.mu.Unlock()
 	if started != nil {
 		select {
@@ -51,6 +53,12 @@ func (s *requestLogClientStub) FetchRequestLogByID(ctx context.Context, _ string
 		select {
 		case <-block:
 		case <-ctx.Done():
+			if fetchCanceled != nil {
+				select {
+				case fetchCanceled <- struct{}{}:
+				default:
+				}
+			}
 			return nil, ctx.Err()
 		}
 	}
@@ -202,6 +210,64 @@ func TestRequestLogServiceCoalescesConcurrentPreviewMisses(t *testing.T) {
 	}
 }
 
+func TestRequestLogServiceCancelsPreviewFetchWhenOnlyWaiterCancels(t *testing.T) {
+	db := openRequestLogTestDB(t)
+	if _, _, err := repository.InsertUsageEvents(db, []entities.UsageEvent{{
+		EventKey:  "event-singleflight-only-waiter-cancel",
+		RequestID: "req-singleflight-only-waiter-cancel",
+	}}); err != nil {
+		t.Fatalf("insert usage event: %v", err)
+	}
+
+	client := &requestLogClientStub{
+		result:        &cpa.RequestLogResult{StatusCode: http.StatusOK, Body: []byte("=== RAW LOG ===\nunused\n")},
+		started:       make(chan struct{}, 1),
+		block:         make(chan struct{}),
+		fetchCanceled: make(chan struct{}, 1),
+	}
+	provider := service.NewRequestLogService(db, client)
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := provider.GetUsageEventRequestLog(ctx, 1)
+		errCh <- err
+	}()
+	<-client.started
+	cancel()
+
+	select {
+	case err := <-errCh:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected canceled waiter to return context.Canceled, got %v", err)
+		}
+	case <-time.After(time.Second):
+		close(client.block)
+		<-errCh
+		t.Fatal("expected canceled waiter to return promptly")
+	}
+
+	select {
+	case <-client.fetchCanceled:
+	case <-time.After(time.Second):
+		close(client.block)
+		t.Fatal("expected the CPA fetch to be canceled after the last waiter left")
+	}
+
+	client.mu.Lock()
+	client.block = nil
+	client.mu.Unlock()
+	response, err := provider.GetUsageEventRequestLog(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("expected a fresh fetch after cancellation, got %v", err)
+	}
+	if len(response.Sections) != 1 || response.Sections[0].Content != "unused" {
+		t.Fatalf("unexpected retry response: %+v", response)
+	}
+	if client.fetchCalls() != 2 {
+		t.Fatalf("expected cancellation cleanup to allow a new fetch, got %d calls", client.fetchCalls())
+	}
+}
+
 func TestRequestLogServiceAllowsPreviewAtSixMiBLimit(t *testing.T) {
 	const sixMiB = 6 * 1024 * 1024
 	db := openRequestLogTestDB(t)
@@ -259,7 +325,7 @@ func TestRequestLogServiceTreatsOversizedBodyAsTooLargeWithoutTruncatedFlag(t *t
 	}
 }
 
-func TestRequestLogServiceCoalescedPreviewMissIgnoresLeaderCancellation(t *testing.T) {
+func TestRequestLogServiceCoalescedPreviewReturnsLeaderCancellationWithoutAbortingFollower(t *testing.T) {
 	db := openRequestLogTestDB(t)
 	if _, _, err := repository.InsertUsageEvents(db, []entities.UsageEvent{{
 		EventKey:  "event-singleflight-leader-cancel",
@@ -284,7 +350,6 @@ func TestRequestLogServiceCoalescedPreviewMissIgnoresLeaderCancellation(t *testi
 		leaderErr <- err
 	}()
 	<-client.started
-	cancelLeader()
 
 	followerErr := make(chan error, 1)
 	go func() {
@@ -295,16 +360,78 @@ func TestRequestLogServiceCoalescedPreviewMissIgnoresLeaderCancellation(t *testi
 		followerErr <- err
 	}()
 	time.Sleep(20 * time.Millisecond)
+	cancelLeader()
+	select {
+	case err := <-leaderErr:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("expected canceled leader to return context.Canceled, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Error("expected canceled leader to return promptly while the shared fetch continues")
+	}
 	close(client.block)
 
-	if err := <-leaderErr; err != nil {
-		t.Fatalf("expected leader cancellation not to cancel shared fetch, got %v", err)
-	}
 	if err := <-followerErr; err != nil {
 		t.Fatalf("expected follower to receive shared fetch result, got %v", err)
 	}
 	if client.fetchCalls() != 1 {
 		t.Fatalf("expected shared fetch to run once, got %d calls", client.fetchCalls())
+	}
+}
+
+func TestRequestLogServiceCancelsSharedPreviewAfterLastConcurrentWaiterLeaves(t *testing.T) {
+	db := openRequestLogTestDB(t)
+	if _, _, err := repository.InsertUsageEvents(db, []entities.UsageEvent{
+		{EventKey: "event-singleflight-all-cancel-1", RequestID: "req-singleflight-all-cancel"},
+		{EventKey: "event-singleflight-all-cancel-2", RequestID: "req-singleflight-all-cancel"},
+	}); err != nil {
+		t.Fatalf("insert usage events: %v", err)
+	}
+
+	client := &requestLogClientStub{
+		result:        &cpa.RequestLogResult{StatusCode: http.StatusOK, Body: []byte("=== RAW LOG ===\nunused\n")},
+		started:       make(chan struct{}, 1),
+		block:         make(chan struct{}),
+		fetchCanceled: make(chan struct{}, 1),
+	}
+	provider := service.NewRequestLogService(db, client)
+	leaderCtx, cancelLeader := context.WithCancel(context.Background())
+	followerCtx, cancelFollower := context.WithCancel(context.Background())
+	leaderErr := make(chan error, 1)
+	followerErr := make(chan error, 1)
+	go func() {
+		_, err := provider.GetUsageEventRequestLog(leaderCtx, 1)
+		leaderErr <- err
+	}()
+	<-client.started
+	go func() {
+		_, err := provider.GetUsageEventRequestLog(followerCtx, 2)
+		followerErr <- err
+	}()
+	time.Sleep(20 * time.Millisecond)
+
+	cancelLeader()
+	if err := <-leaderErr; !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected leader cancellation, got %v", err)
+	}
+	select {
+	case <-client.fetchCanceled:
+		t.Fatal("expected shared fetch to remain active while the follower is waiting")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	cancelFollower()
+	if err := <-followerErr; !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected follower cancellation, got %v", err)
+	}
+	select {
+	case <-client.fetchCanceled:
+	case <-time.After(time.Second):
+		close(client.block)
+		t.Fatal("expected the last waiter to cancel the shared fetch")
+	}
+	if client.fetchCalls() != 1 {
+		t.Fatalf("expected concurrent waiters to share one fetch, got %d calls", client.fetchCalls())
 	}
 }
 

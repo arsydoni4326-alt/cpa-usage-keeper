@@ -68,6 +68,9 @@ type requestLogService struct {
 
 type requestLogInflight struct {
 	done     chan struct{}
+	fetchCtx context.Context
+	cancel   context.CancelFunc
+	waiters  int
 	response RequestLogResponse
 	err      error
 }
@@ -99,38 +102,30 @@ func (s *requestLogService) GetUsageEventRequestLog(ctx context.Context, eventID
 	}
 
 	inflight, leader := s.beginFetch(requestID)
-	if !leader {
-		select {
-		case <-inflight.done:
-		case <-ctx.Done():
-			return RequestLogResponse{}, ctx.Err()
-		}
-		if inflight.err != nil {
-			return RequestLogResponse{}, inflight.err
-		}
-		response := inflight.response
-		response.EventID = eventID
-		return response, nil
+	if leader {
+		go s.fetchRequestLog(requestID, inflight)
 	}
+	return s.waitForRequestLogFetch(ctx, eventID, requestID, inflight)
+}
 
-	result, err := s.client.FetchRequestLogByID(context.WithoutCancel(ctx), requestID)
+func (s *requestLogService) fetchRequestLog(requestID string, inflight *requestLogInflight) {
+	result, err := s.client.FetchRequestLogByID(inflight.fetchCtx, requestID)
 	if err != nil {
 		if result != nil && result.StatusCode == http.StatusNotFound {
-			response := RequestLogResponse{EventID: eventID, RequestID: requestID, Available: false}
-			s.finishFetch(requestID, response, ErrRequestLogUnavailable)
-			return response, ErrRequestLogUnavailable
+			response := RequestLogResponse{RequestID: requestID, Available: false}
+			s.finishFetch(requestID, inflight, response, ErrRequestLogUnavailable)
+			return
 		}
-		s.finishFetch(requestID, RequestLogResponse{}, err)
-		return RequestLogResponse{}, err
+		s.finishFetch(requestID, inflight, RequestLogResponse{}, err)
+		return
 	}
 	if result == nil {
 		err := fmt.Errorf("request log result is nil")
-		s.finishFetch(requestID, RequestLogResponse{}, err)
-		return RequestLogResponse{}, err
+		s.finishFetch(requestID, inflight, RequestLogResponse{}, err)
+		return
 	}
 	if result.BodyTruncated || len(result.Body) > requestLogMaxBytes {
 		response := RequestLogResponse{
-			EventID:      eventID,
 			RequestID:    requestID,
 			Filename:     strings.TrimSpace(result.Filename),
 			Available:    true,
@@ -138,13 +133,12 @@ func (s *requestLogService) GetUsageEventRequestLog(ctx context.Context, eventID
 			TooLarge:     true,
 			Downloadable: true,
 		}
-		s.finishFetch(requestID, response, nil)
-		return response, nil
+		s.finishFetch(requestID, inflight, response, nil)
+		return
 	}
 
 	raw := string(result.Body)
 	response := RequestLogResponse{
-		EventID:      eventID,
 		RequestID:    requestID,
 		Filename:     strings.TrimSpace(result.Filename),
 		Available:    true,
@@ -152,8 +146,22 @@ func (s *requestLogService) GetUsageEventRequestLog(ctx context.Context, eventID
 		Downloadable: true,
 		Sections:     ParseRequestLogSections(raw),
 	}
-	s.finishFetch(requestID, response, nil)
-	return response, nil
+	s.finishFetch(requestID, inflight, response, nil)
+}
+
+func (s *requestLogService) waitForRequestLogFetch(ctx context.Context, eventID int64, requestID string, inflight *requestLogInflight) (RequestLogResponse, error) {
+	select {
+	case <-inflight.done:
+		if err := ctx.Err(); err != nil {
+			return RequestLogResponse{}, err
+		}
+	case <-ctx.Done():
+		s.releaseFetchWaiter(requestID, inflight)
+		return RequestLogResponse{}, ctx.Err()
+	}
+	response := inflight.response
+	response.EventID = eventID
+	return response, inflight.err
 }
 
 func (s *requestLogService) DownloadUsageEventRequestLog(ctx context.Context, eventID int64) (RequestLogDownload, error) {
@@ -201,25 +209,48 @@ func (s *requestLogService) beginFetch(requestID string) (*requestLogInflight, b
 		s.inflight = map[string]*requestLogInflight{}
 	}
 	if inflight, ok := s.inflight[requestID]; ok {
+		inflight.waiters++
 		return inflight, false
 	}
-	inflight := &requestLogInflight{done: make(chan struct{})}
+	fetchCtx, cancel := context.WithCancel(context.Background())
+	inflight := &requestLogInflight{
+		done:     make(chan struct{}),
+		fetchCtx: fetchCtx,
+		cancel:   cancel,
+		waiters:  1,
+	}
 	s.inflight[requestID] = inflight
 	return inflight, true
 }
 
-func (s *requestLogService) finishFetch(requestID string, response RequestLogResponse, err error) {
+func (s *requestLogService) releaseFetchWaiter(requestID string, inflight *requestLogInflight) {
 	s.mu.Lock()
-	inflight := s.inflight[requestID]
-	if inflight != nil {
-		inflight.response = response
-		inflight.err = err
+	if s.inflight[requestID] != inflight || inflight.waiters <= 0 {
+		s.mu.Unlock()
+		return
+	}
+	inflight.waiters--
+	if inflight.waiters > 0 {
+		s.mu.Unlock()
+		return
+	}
+	delete(s.inflight, requestID)
+	cancel := inflight.cancel
+	s.mu.Unlock()
+	cancel()
+}
+
+func (s *requestLogService) finishFetch(requestID string, inflight *requestLogInflight, response RequestLogResponse, err error) {
+	s.mu.Lock()
+	inflight.response = response
+	inflight.err = err
+	// The last waiter may have removed this entry and a replacement fetch may already exist.
+	if s.inflight[requestID] == inflight {
 		delete(s.inflight, requestID)
 	}
 	s.mu.Unlock()
-	if inflight != nil {
-		close(inflight.done)
-	}
+	inflight.cancel()
+	close(inflight.done)
 }
 
 func RequestLogPreviewMaxBytes() int {
