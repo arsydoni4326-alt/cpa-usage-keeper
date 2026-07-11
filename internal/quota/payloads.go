@@ -3,6 +3,7 @@ package quota
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -304,7 +305,7 @@ func parseXAIBillingConfig(object map[string]json.RawMessage) *XAIBillingConfig 
 	}
 	config := &XAIBillingConfig{
 		CurrentPeriod:      parseXAIBillingPeriod(objectField(object, "currentPeriod", "current_period")),
-		CreditUsagePercent: floatPtrField(object, "creditUsagePercent", "credit_usage_percent"),
+		CreditUsagePercent: xaiFloatPtrField(object, "creditUsagePercent", "credit_usage_percent"),
 		MonthlyLimit:       parseXAIMoneyField(object, "monthlyLimit", "monthly_limit"),
 		Used:               parseXAIMoneyField(object, "used"),
 		OnDemandCap:        parseXAIMoneyField(object, "onDemandCap", "on_demand_cap"),
@@ -319,7 +320,7 @@ func parseXAIBillingConfig(object map[string]json.RawMessage) *XAIBillingConfig 
 		}
 		config.ProductUsage = append(config.ProductUsage, XAIBillingProductUsage{
 			Product:      stringField(productObject, "product"),
-			UsagePercent: floatPtrField(productObject, "usagePercent", "usage_percent"),
+			UsagePercent: xaiFloatPtrField(productObject, "usagePercent", "usage_percent"),
 		})
 	}
 	for _, raw := range arrayField(object, "history") {
@@ -365,11 +366,19 @@ func parseXAIMoneyField(object map[string]json.RawMessage, keys ...string) XAIMo
 			continue
 		}
 		if valueObject := rawObject(raw); valueObject != nil {
-			return XAIMoneyValue{Val: floatPtrField(valueObject, "val")}
+			return XAIMoneyValue{Val: xaiFloatPtrField(valueObject, "val")}
 		}
-		return XAIMoneyValue{Val: floatPtrField(map[string]json.RawMessage{"value": raw}, "value")}
+		return XAIMoneyValue{Val: xaiFloatPtrField(map[string]json.RawMessage{"value": raw}, "value")}
 	}
 	return XAIMoneyValue{}
+}
+
+func xaiFloatPtrField(object map[string]json.RawMessage, keys ...string) *float64 {
+	value := floatPtrField(object, keys...)
+	if value == nil || math.IsNaN(*value) || math.IsInf(*value, 0) {
+		return nil
+	}
+	return value
 }
 
 func parseKimiUsageDetail(object map[string]json.RawMessage) *KimiUsageDetail {

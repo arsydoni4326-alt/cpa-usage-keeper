@@ -80,6 +80,49 @@ func TestSyncMetadataWritesXAIUserIDCandidatesOnlyForXAI(t *testing.T) {
 	}
 }
 
+func TestSyncMetadataMirrorsXAINullishNestedRecordFallback(t *testing.T) {
+	tests := []struct {
+		authIndex string
+		claims    string
+		want      string
+	}{
+		{authIndex: "null-oauth-fallback", claims: `{"oauth":null,"metadata":{"oauth":{"sub":"metadata-oauth"}}}`, want: "metadata-oauth"},
+		{authIndex: "invalid-oauth-blocks", claims: `{"oauth":false,"metadata":{"oauth":{"sub":"must-not-fallback"}}}`},
+		{authIndex: "invalid-metadata-oauth-blocks", claims: `{"metadata":{"oauth":[]},"attributes":{"oauth":{"sub":"must-not-fallback"}}}`},
+		{authIndex: "null-user-fallback", claims: `{"user":null,"metadata":{"user":{"id":"metadata-user"}}}`, want: "metadata-user"},
+		{authIndex: "invalid-user-blocks", claims: `{"user":123,"metadata":{"user":{"id":"must-not-fallback"}}}`},
+	}
+
+	files := make([]authfiles.AuthFile, 0, len(tests))
+	for _, tt := range tests {
+		files = append(files, decodeXAIAuthFile(t, tt.authIndex, "xai", tt.claims))
+	}
+	db := openXAIUserIDSyncDatabase(t)
+	syncer := service.NewSyncServiceWithOptions(db, service.SyncServiceOptions{
+		BaseURL:         "https://cpa.example.com",
+		MetadataFetcher: &xaiUserIDMetadataFetcher{files: files},
+	})
+	if err := syncer.SyncMetadata(context.Background()); err != nil {
+		t.Fatalf("SyncMetadata returned error: %v", err)
+	}
+
+	for _, tt := range tests {
+		row, err := repository.GetActiveAuthFileUsageIdentityByAuthIndex(context.Background(), db, tt.authIndex)
+		if err != nil {
+			t.Fatalf("read %s usage identity: %v", tt.authIndex, err)
+		}
+		if tt.want == "" {
+			if row.XAIUserID != nil {
+				t.Fatalf("expected invalid %s container to block fallback, got %q", tt.authIndex, *row.XAIUserID)
+			}
+			continue
+		}
+		if row.XAIUserID == nil || *row.XAIUserID != tt.want {
+			t.Fatalf("expected %s fallback %q, got %+v", tt.authIndex, tt.want, row.XAIUserID)
+		}
+	}
+}
+
 func TestSyncMetadataClearsXAIUserIDAfterSuccessfulResponseOmitsIt(t *testing.T) {
 	db := openXAIUserIDSyncDatabase(t)
 	fetcher := &xaiUserIDMetadataFetcher{files: []authfiles.AuthFile{

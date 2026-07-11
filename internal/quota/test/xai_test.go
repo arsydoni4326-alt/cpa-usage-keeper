@@ -184,6 +184,86 @@ func TestXAIProviderPreservesCacheableHTTPStatusWhenBothBillingRequestsFail(t *t
 	}
 }
 
+func TestXAIProviderSelectsSinglePrimaryErrorWhenBothBillingRequestsFail(t *testing.T) {
+	weeklyFailure := errors.New("weekly failure")
+	monthlyFailure := errors.New("monthly failure")
+	tests := []struct {
+		name       string
+		weeklyErr  error
+		monthlyErr error
+		assert     func(*testing.T, error)
+	}{
+		{
+			name:       "401 beats timeout",
+			weeklyErr:  context.DeadlineExceeded,
+			monthlyErr: quota.ProviderHTTPError{StatusCode: 401, Message: "token expired"},
+			assert: func(t *testing.T, err error) {
+				var httpErr quota.ProviderHTTPError
+				if !errors.As(err, &httpErr) || httpErr.StatusCode != 401 {
+					t.Fatalf("expected HTTP 401 primary error, got %v", err)
+				}
+				if errors.Is(err, context.DeadlineExceeded) {
+					t.Fatalf("timeout must not remain a second primary classification: %v", err)
+				}
+			},
+		},
+		{
+			name:       "402 beats cancellation",
+			weeklyErr:  context.Canceled,
+			monthlyErr: quota.ProviderHTTPError{StatusCode: 402, Message: "payment required"},
+			assert: func(t *testing.T, err error) {
+				var httpErr quota.ProviderHTTPError
+				if !errors.As(err, &httpErr) || httpErr.StatusCode != 402 {
+					t.Fatalf("expected HTTP 402 primary error, got %v", err)
+				}
+				if errors.Is(err, context.Canceled) {
+					t.Fatalf("cancellation must not remain a second primary classification: %v", err)
+				}
+			},
+		},
+		{
+			name:       "timeout beats other HTTP error",
+			weeklyErr:  quota.ProviderHTTPError{StatusCode: 500, Message: "weekly unavailable"},
+			monthlyErr: context.DeadlineExceeded,
+			assert: func(t *testing.T, err error) {
+				if !errors.Is(err, context.DeadlineExceeded) {
+					t.Fatalf("expected timeout primary error, got %v", err)
+				}
+				var httpErr quota.ProviderHTTPError
+				if errors.As(err, &httpErr) {
+					t.Fatalf("HTTP 500 must not remain a second primary classification: %v", err)
+				}
+			},
+		},
+		{
+			name:       "first other error wins",
+			weeklyErr:  weeklyFailure,
+			monthlyErr: monthlyFailure,
+			assert: func(t *testing.T, err error) {
+				if !errors.Is(err, weeklyFailure) || errors.Is(err, monthlyFailure) {
+					t.Fatalf("expected only the first other error, got %v", err)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configs := quota.DefaultProviderConfigs()
+			provider := quota.NewXAIProvider(xaiErrorManagementCaller{
+				weeklyErr:  tt.weeklyErr,
+				monthlyErr: tt.monthlyErr,
+			}, configs.XAIWeekly, configs.XAIMonthly)
+
+			_, err := provider.Check(context.Background(), quota.ProviderInput{Identity: entities.UsageIdentity{Identity: "xai-auth"}})
+			if err == nil {
+				t.Fatal("expected both failed billing requests to fail the provider check")
+			}
+			tt.assert(t, err)
+		})
+	}
+}
+
 func TestXAIProviderParsesWeeklyAndMonthlyBillingShapes(t *testing.T) {
 	weeklyJSON := `{"config":{"current_period":{"type":"weekly","start":"2026-07-06T00:00:00Z","end":"2026-07-13T00:00:00Z"},"credit_usage_percent":"37.5","product_usage":[{"product":"Grok 4","usage_percent":80},{"product":"Grok Code","usagePercent":"25"},{"product":"No Data","usage_percent":null}]}}`
 	monthlyJSON := `{"config":{"monthly_limit":{"val":"1000"},"used":1250,"on_demand_cap":{"val":500},"on_demand_used":{"val":"250"},"billing_period_start":"2026-07-01T00:00:00Z","billing_period_end":"2026-08-01T00:00:00Z"}}`
@@ -215,6 +295,42 @@ func TestXAIProviderParsesWeeklyAndMonthlyBillingShapes(t *testing.T) {
 	}
 	if monthly.BillingPeriodStart != "2026-07-01T00:00:00Z" || monthly.BillingPeriodEnd != "2026-08-01T00:00:00Z" {
 		t.Fatalf("unexpected monthly billing period: %#v", monthly)
+	}
+}
+
+func TestXAIProviderRejectsNonFiniteBillingNumbers(t *testing.T) {
+	tests := []struct {
+		name    string
+		weekly  *apicall.Response
+		monthly *apicall.Response
+	}{
+		{
+			name:    "weekly usage percent NaN",
+			weekly:  xaiJSONResponse(`{"config":{"creditUsagePercent":"NaN"}}`),
+			monthly: &apicall.Response{StatusCode: 500, BodyText: "monthly unavailable"},
+		},
+		{
+			name:    "product usage percent infinity",
+			weekly:  xaiJSONResponse(`{"config":{"productUsage":[{"product":"Grok Code","usagePercent":"+Inf"}]}}`),
+			monthly: &apicall.Response{StatusCode: 500, BodyText: "monthly unavailable"},
+		},
+		{
+			name:    "monthly money negative infinity",
+			weekly:  &apicall.Response{StatusCode: 500, BodyText: "weekly unavailable"},
+			monthly: xaiJSONResponse(`{"config":{"monthlyLimit":{"val":"-Inf"}}}`),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			caller := newXAIManagementCaller(tt.weekly, tt.monthly)
+			configs := quota.DefaultProviderConfigs()
+			provider := quota.NewXAIProvider(caller, configs.XAIWeekly, configs.XAIMonthly)
+
+			if _, err := provider.Check(context.Background(), quota.ProviderInput{Identity: entities.UsageIdentity{Identity: "xai-auth"}}); err == nil {
+				t.Fatal("expected non-finite xAI billing data to be rejected")
+			}
+		})
 	}
 }
 
@@ -250,6 +366,37 @@ func TestXAIProviderDistinguishesEmptyBillingFromExplicitZeroQuota(t *testing.T)
 			t.Fatalf("unexpected explicit zero weekly result: %#v", result.Weekly)
 		}
 	})
+}
+
+func TestXAIProviderRejectsPeriodOnlyBillingResponses(t *testing.T) {
+	tests := []struct {
+		name    string
+		weekly  *apicall.Response
+		monthly *apicall.Response
+	}{
+		{
+			name:    "weekly period only",
+			weekly:  xaiJSONResponse(`{"config":{"currentPeriod":{"type":"weekly","start":"2026-07-06T00:00:00Z","end":"2026-07-13T00:00:00Z"}}}`),
+			monthly: &apicall.Response{StatusCode: 500, BodyText: "monthly unavailable"},
+		},
+		{
+			name:    "monthly reset only",
+			weekly:  &apicall.Response{StatusCode: 500, BodyText: "weekly unavailable"},
+			monthly: xaiJSONResponse(`{"config":{"billingPeriodStart":"2026-07-01T00:00:00Z","billingPeriodEnd":"2026-08-01T00:00:00Z"}}`),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			caller := newXAIManagementCaller(tt.weekly, tt.monthly)
+			configs := quota.DefaultProviderConfigs()
+			provider := quota.NewXAIProvider(caller, configs.XAIWeekly, configs.XAIMonthly)
+
+			if _, err := provider.Check(context.Background(), quota.ProviderInput{Identity: entities.UsageIdentity{Identity: "xai-auth"}}); err == nil {
+				t.Fatal("expected period-only xAI billing data to be rejected")
+			}
+		})
+	}
 }
 
 func TestXAIProviderStartsBothEqualBillingSourcesWithoutBlocking(t *testing.T) {
@@ -430,11 +577,27 @@ type xaiManagementCaller struct {
 	responses map[string]*apicall.Response
 }
 
+type xaiErrorManagementCaller struct {
+	weeklyErr  error
+	monthlyErr error
+}
+
+func (c xaiErrorManagementCaller) CallManagementAPI(_ context.Context, request apicall.Request) (*apicall.Response, error) {
+	if request.URL == xaiWeeklyBillingURL {
+		return nil, c.weeklyErr
+	}
+	return nil, c.monthlyErr
+}
+
 func newXAIManagementCaller(weekly *apicall.Response, monthly *apicall.Response) *xaiManagementCaller {
 	return &xaiManagementCaller{responses: map[string]*apicall.Response{
 		xaiWeeklyBillingURL:  weekly,
 		xaiMonthlyBillingURL: monthly,
 	}}
+}
+
+func xaiJSONResponse(body string) *apicall.Response {
+	return &apicall.Response{StatusCode: 200, BodyText: body, Body: json.RawMessage(body)}
 }
 
 func (c *xaiManagementCaller) CallManagementAPI(_ context.Context, request apicall.Request) (*apicall.Response, error) {

@@ -58,6 +58,68 @@ func TestAuthFilePreservesXAIUserIDCandidates(t *testing.T) {
 	}
 }
 
+func TestAuthFileIgnoresNonObjectXAIContainers(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{name: "metadata string", input: `{"auth_index":"auth-1","metadata":"opaque"}`},
+		{name: "attributes array", input: `{"auth_index":"auth-1","attributes":[]}`},
+		{name: "oauth boolean", input: `{"auth_index":"auth-1","oauth":false}`},
+		{name: "user number", input: `{"auth_index":"auth-1","user":123}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var file authfiles.AuthFile
+			if err := json.Unmarshal([]byte(tt.input), &file); err != nil {
+				t.Fatalf("non-object xAI container must not fail AuthFile decoding: %v", err)
+			}
+			if file.AuthIndex != "auth-1" {
+				t.Fatalf("expected ordinary AuthFile fields to keep decoding, got %+v", file)
+			}
+		})
+	}
+}
+
+func TestAuthFileXAIClaimsUseExactJSONKeys(t *testing.T) {
+	var file authfiles.AuthFile
+	if err := json.Unmarshal([]byte(`{"SUB":"wrong-account","subject":"correct-account"}`), &file); err != nil {
+		t.Fatalf("unmarshal AuthFile: %v", err)
+	}
+	if file.Sub != nil {
+		t.Fatalf("expected uppercase SUB to be ignored, got %q", string(*file.Sub))
+	}
+	if file.Subject == nil || string(*file.Subject) != "correct-account" {
+		t.Fatalf("expected exact subject candidate, got %+v", file.Subject)
+	}
+}
+
+func TestAuthFileFormatsNumericXAIUserIDLikeJavaScript(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "fixed upper boundary", input: `{"sub":1e20}`, want: "100000000000000000000"},
+		{name: "scientific upper boundary", input: `{"sub":1e21}`, want: "1e+21"},
+		{name: "scientific lower boundary", input: `{"sub":1e-7}`, want: "1e-7"},
+		{name: "negative zero", input: `{"sub":-0}`, want: "0"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var file authfiles.AuthFile
+			if err := json.Unmarshal([]byte(tt.input), &file); err != nil {
+				t.Fatalf("unmarshal AuthFile: %v", err)
+			}
+			if file.Sub == nil || string(*file.Sub) != tt.want {
+				t.Fatalf("expected JavaScript number string %q, got %+v", tt.want, file.Sub)
+			}
+		})
+	}
+}
+
 func nestedString(value map[string]any, path ...string) string {
 	var current any = value
 	for _, key := range path {

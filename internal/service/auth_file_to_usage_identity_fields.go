@@ -51,20 +51,8 @@ func resolveXAIUserID(file authfiles.AuthFile) *string {
 	if file.Attributes != nil {
 		attributes = *file.Attributes
 	}
-	oauth := file.OAuth
-	if oauth == nil {
-		oauth = metadata.OAuth
-	}
-	if oauth == nil {
-		oauth = attributes.OAuth
-	}
-	user := file.User
-	if user == nil {
-		user = metadata.User
-	}
-	if user == nil {
-		user = attributes.User
-	}
+	oauth := file.ResolvedXAIOAuth()
+	user := file.ResolvedXAIUser()
 
 	var oauthSub *authfiles.AuthFileXAIUserIDValue
 	var oauthSubject *authfiles.AuthFileXAIUserIDValue

@@ -41,7 +41,7 @@ func (p xaiProvider) Check(ctx context.Context, input ProviderInput) (ProviderOu
 			Monthly: monthly,
 		}}, nil
 	}
-	return ProviderOutput{}, joinXAIBillingErrors(weeklyErr, monthlyErr)
+	return ProviderOutput{}, selectXAIBillingError(weeklyErr, monthlyErr)
 }
 
 type xaiBillingAttempt struct {
@@ -49,23 +49,26 @@ type xaiBillingAttempt struct {
 	err     error
 }
 
-func joinXAIBillingErrors(billingErrors ...error) error {
-	// 两个来源都失败时，优先保留 401/402，让现有失败缓存继续使用正确的 HTTP TTL。
-	for preferredIndex, err := range billingErrors {
+func selectXAIBillingError(billingErrors ...error) error {
+	// 只返回一个主错误，确保提示、HTTP 状态和失败缓存 TTL 来自同一分类。
+	for _, err := range billingErrors {
 		var httpErr ProviderHTTPError
 		if err == nil || !errors.As(err, &httpErr) || !isRefreshCacheableHTTPStatus(httpErr.StatusCode) {
 			continue
 		}
-		ordered := make([]error, 0, len(billingErrors))
-		ordered = append(ordered, err)
-		for index, candidate := range billingErrors {
-			if index != preferredIndex && candidate != nil {
-				ordered = append(ordered, candidate)
-			}
-		}
-		return errors.Join(ordered...)
+		return err
 	}
-	return errors.Join(billingErrors...)
+	for _, err := range billingErrors {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return err
+		}
+	}
+	for _, err := range billingErrors {
+		if err != nil {
+			return err
+		}
+	}
+	return errors.New("xAI billing requests failed")
 }
 
 func (p xaiProvider) requestBilling(ctx context.Context, input ProviderInput, config APICallConfig, period string) (*XAIBillingPayload, error) {
@@ -88,29 +91,21 @@ func (p xaiProvider) requestBilling(ctx context.Context, input ProviderInput, co
 	if err != nil {
 		return nil, err
 	}
-	if billing == nil || !hasXAIBillingData(billing.Config) {
+	if !hasXAIBillingQuotaRows(billing, period) {
 		return nil, fmt.Errorf("empty xAI %s billing response", period)
 	}
 	return billing, nil
 }
 
-func hasXAIBillingData(config *XAIBillingConfig) bool {
-	if config == nil {
+func hasXAIBillingQuotaRows(billing *XAIBillingPayload, period string) bool {
+	result := XAIResult{}
+	switch period {
+	case "weekly":
+		result.Weekly = billing
+	case "monthly":
+		result.Monthly = billing
+	default:
 		return false
 	}
-	if config.CreditUsagePercent != nil || config.MonthlyLimit.Val != nil || config.Used.Val != nil || config.OnDemandCap.Val != nil || config.OnDemandUsed.Val != nil {
-		return true
-	}
-	if strings.TrimSpace(config.BillingPeriodStart) != "" || strings.TrimSpace(config.BillingPeriodEnd) != "" {
-		return true
-	}
-	if period := config.CurrentPeriod; period != nil && (strings.TrimSpace(period.Type) != "" || strings.TrimSpace(period.Start) != "" || strings.TrimSpace(period.End) != "") {
-		return true
-	}
-	for _, product := range config.ProductUsage {
-		if strings.TrimSpace(product.Product) != "" && product.UsagePercent != nil {
-			return true
-		}
-	}
-	return false
+	return len(normalizeXAIQuotaRows(result)) > 0
 }
