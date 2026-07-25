@@ -126,6 +126,8 @@ func Configure(cfg config.Config) (io.Closer, error) {
 		errorWriter.maintenanceReporter = func(err error) {
 			reportInternalError("dedicated error log maintenance failed", err)
 		}
+		reportInternalError("combined log maintenance failed", dailyWriter.Maintain())
+		reportInternalError("dedicated error log maintenance failed", errorWriter.Maintain())
 		writer = io.MultiWriter(os.Stderr, NewPlainWriter(dailyWriter))
 		closer = multiCloser{dailyWriter, errorWriter}
 		errorHook = &errorFileHook{

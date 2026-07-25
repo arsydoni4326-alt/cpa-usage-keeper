@@ -68,7 +68,7 @@ func TestConfigureDuplicatesOnlyErrorLevelsToDedicatedDailyFile(t *testing.T) {
 	}
 }
 
-func TestConfigureKeepsCombinedAndErrorRetentionBoundaries(t *testing.T) {
+func TestConfigureCleansCombinedAndErrorRetentionOnInitialization(t *testing.T) {
 	logDir := t.TempDir()
 	now := time.Now()
 	expiredCombined := filepath.Join(logDir, "cpa-usage-keeper-"+now.AddDate(0, 0, -8).Format("2006-01-02")+".log")
@@ -83,13 +83,11 @@ func TestConfigureKeepsCombinedAndErrorRetentionBoundaries(t *testing.T) {
 	}
 
 	_ = captureConsole(t, config.Config{
-		LogLevel:         "info",
+		LogLevel:         "error",
 		LogFileEnabled:   true,
 		LogDir:           logDir,
 		LogRetentionDays: 7,
-	}, func() {
-		logrus.Info("trigger retention maintenance")
-	})
+	}, func() {})
 
 	for _, path := range []string{expiredCombined, expiredError} {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
