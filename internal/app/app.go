@@ -76,6 +76,35 @@ type App struct {
 // newUsageRecentEventCache 是最近事件缓存构造入口，测试可替换它来覆盖缓存初始化失败路径。
 var newUsageRecentEventCache = repository.NewUsageRecentEventCache
 
+type loggedInitializationError struct {
+	err error
+}
+
+func (e *loggedInitializationError) Error() string {
+	return e.err.Error()
+}
+
+func (e *loggedInitializationError) Unwrap() error {
+	return e.err
+}
+
+// IsInitializationErrorLogged 判断构造阶段是否已在释放日志资源前写入终止错误。
+func IsInitializationErrorLogged(err error) bool {
+	var logged *loggedInitializationError
+	return errors.As(err, &logged)
+}
+
+func failInitialization(logCloser io.Closer, err error) error {
+	logging.LogTerminalFatal("initialize app", err)
+	if closeErr := logCloser.Close(); closeErr != nil {
+		wrappedCloseErr := fmt.Errorf("close logging: %w", closeErr)
+		err = errors.Join(err, wrappedCloseErr)
+		// 文件日志已经进入关闭流程，额外将关闭失败写到恢复后的控制台输出，避免错误只留在返回值里。
+		logging.LogTerminalError("close logging after initialization failure", wrappedCloseErr)
+	}
+	return &loggedInitializationError{err: err}
+}
+
 func New() (*App, error) {
 	return NewWithOptions(Options{})
 }
@@ -99,8 +128,7 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 	db, readDB, err := repository.OpenDatabasePools(cfg)
 	// 任一数据库池构造失败时 repository 已回收局部资源，App 只需要释放日志句柄。
 	if err != nil {
-		_ = logCloser.Close()
-		return nil, err
+		return nil, failInitialization(logCloser, err)
 	}
 	// 最近事件缓存继续使用统一 DB；其 Query 会由 dbresolver 自动路由到 reader。
 	recentUsageCache, err := newUsageRecentEventCache(db, repository.UsageRecentEventCacheOptions{})
@@ -118,8 +146,7 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 			_ = closeGormDB(readDB)
 		}
 		_ = closeGormDB(db)
-		_ = logCloser.Close()
-		return nil, fmt.Errorf("load pricing snapshot: %w", err)
+		return nil, failInitialization(logCloser, fmt.Errorf("load pricing snapshot: %w", err))
 	}
 	pricingCatalog := pricing.NewCatalog(pricingSnapshot)
 
@@ -198,8 +225,7 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 			// 最后关闭唯一 writer，确保任何已开始的写操作先于日志资源结束。
 			_ = closeGormDB(db)
 			// 数据库资源全部回收后再关闭日志文件。
-			_ = logCloser.Close()
-			return nil, err
+			return nil, failInitialization(logCloser, err)
 		}
 		// 备份期间其它写入继续在 writer 池外排队；页面查询仍可使用独立 reader，不恢复旧版的全局读阻塞。
 		backupStore := newDatabaseBackupStore(sqlDB, cfg.BackupDir)
