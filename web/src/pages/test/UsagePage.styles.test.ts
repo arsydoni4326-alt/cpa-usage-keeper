@@ -655,14 +655,63 @@ describe('UsagePage toolbar styles', () => {
     expect(usagePageStyles).toContain('.signOutPill')
   })
 
-  it('keeps mobile tab labels on one line without changing desktop tab sizing', () => {
-    const desktopTabPillBlock = usagePageStyles.slice(
-      usagePageStyles.indexOf('.tabPill {'),
-      usagePageStyles.indexOf('.tabPillActive')
-    )
+  it('uses only a theme-tuned top highlight for the connected shell outline', () => {
+    const connectedTabBar = styleRuleBlock(usagePageStyles, '.tabBarConnected')
+    const darkConnectedTabBar = styleRuleBlock(usagePageStyles, ":global([data-theme='dark']) .tabBarConnected")
 
-    expect(usagePageStyles).toContain('@include mobile {\n  .tabPill {\n    white-space: nowrap;\n  }\n')
-    expect(desktopTabPillBlock).not.toContain('white-space: nowrap;')
+    expect(connectedTabBar).toContain('display: inline-flex;')
+    expect(connectedTabBar).toContain('align-items: stretch;')
+    expect(connectedTabBar).toContain('width: max-content;')
+    expect(connectedTabBar).toContain('max-width: 100%;')
+    expect(connectedTabBar).toContain('min-height: 40px;')
+    expect(connectedTabBar).toContain('padding: 4px;')
+    expect(connectedTabBar).toContain('gap: 0;')
+    expect(connectedTabBar).toContain('border: 1px solid transparent;')
+    expect(connectedTabBar).toContain('border-radius: 999px;')
+    expect(connectedTabBar).toContain('background: color-mix(in srgb, var(--bg-secondary) 78%, transparent);')
+    expect(connectedTabBar).toContain('box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 12%, transparent);')
+    expect(connectedTabBar).toContain('overflow-x: auto;')
+    expect(darkConnectedTabBar).toContain('border-color: transparent;')
+    expect(darkConnectedTabBar).toContain('box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);')
+  })
+
+  it('removes per-tab frames while keeping connected tab labels stable at every width', () => {
+    const connectedTabPill = styleRuleBlock(usagePageStyles, '.tabBarConnected .tabPill')
+
+    expect(connectedTabPill).toContain('min-height: 32px;')
+    expect(connectedTabPill).toContain('padding: 7px 12px;')
+    expect(connectedTabPill).toContain('border: 0;')
+    expect(connectedTabPill).toContain('border-radius: 999px;')
+    expect(connectedTabPill).toContain('background: transparent;')
+    expect(connectedTabPill).toContain('font-size: 12px;')
+    expect(connectedTabPill).toContain('font-weight: 700;')
+    expect(connectedTabPill).toContain('white-space: nowrap;')
+    expect(connectedTabPill).not.toContain('transform:')
+  })
+
+  it('widens simplified and traditional Chinese tabs without separating the connected segments', () => {
+    const connectedTabBar = styleRuleBlock(usagePageStyles, '.tabBarConnected')
+    const chineseTabPill = styleRuleBlock(usagePageStyles, '.tabBarConnected:lang(zh) .tabPill')
+
+    expect(usagePageSource).toContain('const { t, i18n } = useTranslation();')
+    expect(usagePageSource).toContain('lang={i18n.resolvedLanguage || i18n.language}')
+    expect(connectedTabBar).toContain('gap: 0;')
+    expect(chineseTabPill).toContain('padding-inline: 16px;')
+  })
+
+  it('highlights only the connected active tab with the themed surface and soft shadow', () => {
+    const connectedActiveTab = styleRuleBlock(usagePageStyles, '.tabBarConnected .tabPillActive')
+
+    expect(connectedActiveTab).toContain('color: var(--text-primary);')
+    expect(connectedActiveTab).toContain('background: var(--bg-primary);')
+    expect(connectedActiveTab).toContain('box-shadow: 0 6px 16px color-mix(in srgb, var(--text-primary) 10%, transparent);')
+    expect(connectedActiveTab).not.toContain('border-color:')
+  })
+
+  it('keeps the connected shell out of CPAMC embed and Key Overview', () => {
+    expect(usagePageSource).toContain("${!isEmbeddedInCPAMC ? styles.tabBarConnected : ''}")
+    expect(keyOverviewPageSource).not.toContain('tabBarConnected')
+    expect(keyOverviewPageStyles).not.toContain('.tabBarConnected')
   })
 
   it('lets API Key Settings content scroll inside the card instead of being clipped', () => {
