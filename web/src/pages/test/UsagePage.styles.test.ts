@@ -66,6 +66,19 @@ const styleRuleBlock = (source: string, selector: string) => {
 }
 
 describe('UsagePage toolbar styles', () => {
+  it('renders every authenticated page header logo at 20px without pill chrome', () => {
+    for (const pageStyles of [usagePageStyles, keyOverviewPageStyles]) {
+      const logo = styleRuleBlock(pageStyles, '.eyebrow')
+
+      expect(logo).toMatch(/padding:\s*0;/)
+      expect(logo).toMatch(/border-radius:\s*0;/)
+      expect(logo).toMatch(/border:\s*0;/)
+      expect(logo).toMatch(/background:\s*transparent;/)
+      expect(logo).toMatch(/font-size:\s*20px;/)
+      expect(logo).not.toContain('box-shadow')
+    }
+  })
+
   it('keeps ranking filters out of the shared top toolbar so only Refresh remains there', () => {
     expect(usagePageSource).not.toContain("import { RankingToolbar }")
     expect(usagePageSource).not.toContain('<RankingToolbar')
