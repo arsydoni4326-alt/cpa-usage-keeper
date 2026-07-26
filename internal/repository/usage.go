@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"database/sql"
 	"fmt"
 	"math"
 	"sort"
@@ -12,14 +11,12 @@ import (
 	"cpa-usage-keeper/internal/helper"
 	"cpa-usage-keeper/internal/pricing"
 	"cpa-usage-keeper/internal/repository/dto"
-	"cpa-usage-keeper/internal/repository/percentile"
 	"cpa-usage-keeper/internal/timeutil"
 	"gorm.io/gorm"
 )
 
 // usageEventProjectionColumns 限制 usage_events 查询列，避免 Overview 和列表页把 RawJSON 等大字段读入内存。
 const usageEventProjectionColumns = "id, api_group_key, provider, auth_type, request_id, model, model_alias, reasoning_effort, service_tier, response_service_tier, executor_type, endpoint, timestamp, source, auth_index, failed, latency_ms, ttft_ms, input_tokens, output_tokens, reasoning_tokens, cache_read_tokens, cache_creation_tokens, total_tokens"
-const analysisLatencyMaxDisplayPoints = 2500
 
 // usageOverviewBoundaryEventProjectionColumns 只包含非 Custom Overview 边界卡片计算需要的字段。
 const usageOverviewBoundaryEventProjectionColumns = "api_group_key, model, model_alias, timestamp, failed, input_tokens, output_tokens, reasoning_tokens, cache_read_tokens, cache_creation_tokens, total_tokens"
@@ -458,108 +455,11 @@ type analysisIdentityInfo struct {
 
 type analysisIdentityLookup map[entities.UsageIdentityAuthType]map[string]analysisIdentityInfo
 
-// BuildAnalysisLatencyDiagnosticsWithFilter 从 raw usage_events 独立构建延迟诊断，不阻塞聚合表分析结果。
-func BuildAnalysisLatencyDiagnosticsWithFilter(db *gorm.DB, filter dto.UsageQueryFilter) (dto.AnalysisLatencyDiagnosticsRecord, error) {
-	empty := emptyAnalysisLatencyDiagnosticsRecord()
-	if db == nil {
-		return empty, fmt.Errorf("database is nil")
-	}
-	if filter.StartTime == nil || filter.EndTime == nil {
-		return empty, fmt.Errorf("analysis latency requires start_time and end_time")
-	}
-	// SQL 先减少无效行的扫描传输；Go 侧继续做空值和正数防御，避免异常数据进入统计。
-	query := db.Model(&entities.UsageEvent{}).
-		Select("latency_ms, ttft_ms").
-		Where("failed = ?", false).
-		Where("generate = ?", true).
-		Where("ttft_ms > 0").
-		Where("latency_ms > 0")
-	query = applyUsageAnalysisTabQuery(query, filter)
-
-	rows, err := query.Rows()
-	if err != nil {
-		if isMissingUsageEventsTableError(err) {
-			return empty, nil
-		}
-		return empty, fmt.Errorf("load analysis latency diagnostics: %w", err)
-	}
-	defer rows.Close()
-
-	ttftValues := []int64{}
-	latencyValues := []int64{}
-	var maxTTFTMS int64
-	var maxLatencyMS int64
-	for rows.Next() {
-		var latencyMS int64
-		var ttftMS sql.NullInt64
-		if err := rows.Scan(&latencyMS, &ttftMS); err != nil {
-			return empty, fmt.Errorf("scan analysis latency diagnostics: %w", err)
-		}
-		if !ttftMS.Valid || ttftMS.Int64 <= 0 || latencyMS <= 0 {
-			continue
-		}
-		// 保留原始 int64 值，避免为毫秒字段引入额外 int32 转换。
-		ttftValues = append(ttftValues, ttftMS.Int64)
-		latencyValues = append(latencyValues, latencyMS)
-		if ttftMS.Int64 > maxTTFTMS {
-			maxTTFTMS = ttftMS.Int64
-		}
-		if latencyMS > maxLatencyMS {
-			maxLatencyMS = latencyMS
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return empty, fmt.Errorf("iterate analysis latency diagnostics: %w", err)
-	}
-	return buildAnalysisLatencyDiagnostics(ttftValues, latencyValues, maxTTFTMS, maxLatencyMS), nil
-}
-
 func emptyAnalysisLatencyDiagnosticsRecord() dto.AnalysisLatencyDiagnosticsRecord {
 	return dto.AnalysisLatencyDiagnosticsRecord{
 		Points:  []dto.AnalysisLatencyPointRecord{},
 		Density: []dto.AnalysisLatencyDensityCellRecord{},
 	}
-}
-
-func isMissingUsageEventsTableError(err error) bool {
-	if err == nil {
-		return false
-	}
-	message := strings.ToLower(err.Error())
-	return strings.Contains(message, "usage_events") && (strings.Contains(message, "no such table") || strings.Contains(message, "doesn't exist"))
-}
-
-func buildAnalysisLatencyDiagnostics(ttftValues, latencyValues []int64, maxTTFTMS, maxLatencyMS int64) dto.AnalysisLatencyDiagnosticsRecord {
-	result := emptyAnalysisLatencyDiagnosticsRecord()
-	if len(ttftValues) == 0 {
-		return result
-	}
-
-	// p95 基于完整样本计算；前端散点只做确定性抽样，避免浏览器绘制过多点。
-	result.TotalPoints = int64(len(ttftValues))
-	result.MaxTTFTMS = maxTTFTMS
-	result.MaxLatencyMS = maxLatencyMS
-	// p95 选择会原地重排切片，必须先复制确定性散点以保留查询顺序和样本配对。
-	result.Points, result.Sampled = sampleAnalysisLatencyPoints(ttftValues, latencyValues)
-	result.P95TTFTMS = percentile.NearestRank(ttftValues, 0.95)
-	result.P95LatencyMS = percentile.NearestRank(latencyValues, 0.95)
-	return result
-}
-
-func sampleAnalysisLatencyPoints(ttftValues, latencyValues []int64) ([]dto.AnalysisLatencyPointRecord, bool) {
-	if len(ttftValues) <= analysisLatencyMaxDisplayPoints {
-		points := make([]dto.AnalysisLatencyPointRecord, 0, len(ttftValues))
-		for index, ttft := range ttftValues {
-			points = append(points, dto.AnalysisLatencyPointRecord{TTFTMS: ttft, LatencyMS: latencyValues[index]})
-		}
-		return points, false
-	}
-	points := make([]dto.AnalysisLatencyPointRecord, 0, analysisLatencyMaxDisplayPoints)
-	for index := 0; index < analysisLatencyMaxDisplayPoints; index++ {
-		sourceIndex := int(math.Floor(float64(index) * float64(len(ttftValues)-1) / float64(analysisLatencyMaxDisplayPoints-1)))
-		points = append(points, dto.AnalysisLatencyPointRecord{TTFTMS: ttftValues[sourceIndex], LatencyMS: latencyValues[sourceIndex]})
-	}
-	return points, true
 }
 
 func loadAnalysisProjectionIdentityLookup(db *gorm.DB, rows []analysisOverviewStatProjection) (analysisIdentityLookup, error) {

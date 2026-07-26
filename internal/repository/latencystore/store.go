@@ -31,6 +31,52 @@ type decodedRow struct {
 	SamplePoints  *latency.SampleSet
 }
 
+// DiagnosticsAggregate 是查询端合并后的只读诊断状态，不包含任何待写回字段。
+type DiagnosticsAggregate struct {
+	SampleCount   int64
+	MaxTTFTMS     int64
+	MaxLatencyMS  int64
+	TTFTSketch    *latency.Sketch
+	LatencySketch *latency.Sketch
+	SamplePoints  *latency.SampleSet
+}
+
+// MergeDiagnosticsRows 严格解码并合并查询命中的 Latency rows；任一坏行都不暴露部分结果。
+func MergeDiagnosticsRows(rows []entities.UsageLatencyStat) (DiagnosticsAggregate, error) {
+	aggregate := DiagnosticsAggregate{
+		TTFTSketch:    latency.NewSketch(),
+		LatencySketch: latency.NewSketch(),
+		SamplePoints:  latency.NewSampleSet(),
+	}
+	for index, row := range rows {
+		decoded, err := decodeLatencyRow(row)
+		if err != nil {
+			return DiagnosticsAggregate{}, fmt.Errorf("decode latency diagnostics row %d: %w", index, err)
+		}
+		if aggregate.SampleCount > math.MaxInt64-row.SampleCount {
+			return DiagnosticsAggregate{}, fmt.Errorf("sample count overflow")
+		}
+		// 三种可合并表示必须全部成功，避免 P95 与真实配对点来自不同的行集合。
+		if err := aggregate.TTFTSketch.Merge(decoded.TTFTSketch); err != nil {
+			return DiagnosticsAggregate{}, fmt.Errorf("merge TTFT sketch row %d: %w", index, err)
+		}
+		if err := aggregate.LatencySketch.Merge(decoded.LatencySketch); err != nil {
+			return DiagnosticsAggregate{}, fmt.Errorf("merge latency sketch row %d: %w", index, err)
+		}
+		if err := aggregate.SamplePoints.Merge(decoded.SamplePoints); err != nil {
+			return DiagnosticsAggregate{}, fmt.Errorf("merge sample points row %d: %w", index, err)
+		}
+		aggregate.SampleCount += row.SampleCount
+		aggregate.MaxTTFTMS = max(aggregate.MaxTTFTMS, row.MaxTTFTMS)
+		aggregate.MaxLatencyMS = max(aggregate.MaxLatencyMS, row.MaxLatencyMS)
+	}
+	// 合并后再次核对全局计数，防止单行合法但跨行累计状态出现不一致。
+	if aggregate.TTFTSketch.Count() != uint64(aggregate.SampleCount) || aggregate.LatencySketch.Count() != uint64(aggregate.SampleCount) {
+		return DiagnosticsAggregate{}, fmt.Errorf("merged latency payload counts do not match sample_count %d", aggregate.SampleCount)
+	}
+	return aggregate, nil
+}
+
 // ApplyRows 保留 migration 的同事务入口；运行时使用 PrepareRows 与 WritePreparedRows 分离 Reader/Writer。
 func ApplyRows(tx *gorm.DB, rows []entities.UsageLatencyStat, now time.Time) error {
 	prepared, err := PrepareRows(tx, rows, now)
