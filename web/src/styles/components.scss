@@ -602,6 +602,10 @@ textarea {
     padding: $spacing-md;
   }
 
+  .card-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .card-flush > .card-header {
     padding: 18px;
   }

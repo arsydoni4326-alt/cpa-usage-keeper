@@ -25,11 +25,11 @@ export function Card({ title, subtitle, titleMeta, extra, variant = 'default', c
             <div className="keeper-card-heading">
               {(title || titleMeta) && (
                 <div className="keeper-card-title-track">
-                  {title && <div className="keeper-card-title">{title}</div>}
+                  {title && <h3 className="keeper-card-title">{title}</h3>}
                   {titleMeta && <div className="keeper-card-title-meta">{titleMeta}</div>}
                 </div>
               )}
-              {subtitle && <div className="keeper-card-subtitle">{subtitle}</div>}
+              {subtitle && <p className="keeper-card-subtitle">{subtitle}</p>}
             </div>
           )}
           {extra && <div className="keeper-card-actions">{extra}</div>}

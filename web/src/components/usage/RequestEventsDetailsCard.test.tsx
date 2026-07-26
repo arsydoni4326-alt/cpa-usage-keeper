@@ -76,7 +76,7 @@ describe('RequestEventsDetailsCard pagination', () => {
     expect(html).toContain('keeper-card-title');
     expect(html).toContain('keeper-card-title-meta');
     expect(html).toContain('keeper-card-subtitle');
-    expect(html).toMatch(/class="keeper-card-subtitle">[^<]+<\/div>/);
+    expect(html).toMatch(/class="keeper-card-subtitle">[^<]+<\/p>/);
   });
 
   it('renders the title without the Event Stream eyebrow', () => {
