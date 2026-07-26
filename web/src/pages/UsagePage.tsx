@@ -760,7 +760,7 @@ export const triggerBrowserURLDownload = (url: string) => {
 };
 
 export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const isMobile = useMediaQuery('(max-width: 768px)');
   const isEmbeddedInCPAMC = isCPAMCEmbed();
   const theme = useThemeStore((state) => state.theme);
@@ -1891,7 +1891,12 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
             )}
 
             <div className={styles.toolbarRow}>
-              <div className={styles.tabBar} role="tablist" aria-label={t('usage_stats.tabs_aria_label')}>
+              <div
+                className={`${styles.tabBar} ${!isEmbeddedInCPAMC ? styles.tabBarConnected : ''}`.trim()}
+                role="tablist"
+                aria-label={t('usage_stats.tabs_aria_label')}
+                lang={i18n.resolvedLanguage || i18n.language}
+              >
                 {tabOptions.map((option) => (
                   <button
                     key={option.value}
