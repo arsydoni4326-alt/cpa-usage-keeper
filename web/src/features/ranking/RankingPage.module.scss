@@ -474,7 +474,7 @@
   gap: 8px;
   margin-top: 6px;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.45;
   text-align: left;
 }
@@ -928,13 +928,14 @@
   }
 
   .leaderboardHeader {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      'toolbar toolbar'
-      'title profile';
-    align-items: center;
-    column-gap: 12px;
-    row-gap: 10px;
+      'title'
+      'toolbar'
+      'profile';
+    align-items: stretch;
+    column-gap: 0;
+    row-gap: 14px;
     padding: 0;
   }
 
@@ -969,22 +970,32 @@
     width: 100%;
   }
 
+  .leaderboardTitle {
+    width: 100%;
+  }
+
   .boardMeta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
     justify-content: flex-start;
     text-align: left;
   }
 
   .leaderboardHeaderActions {
-    justify-content: flex-end;
+    justify-content: center;
+    justify-self: center;
+    max-width: 100%;
     width: auto;
+    margin-right: 0;
   }
 
   .profileActionShell {
-    max-width: min(210px, 46vw);
+    max-width: 100%;
   }
 
   .profileActionShellActive {
-    max-width: min(260px, 52vw);
+    max-width: 100%;
   }
 
   .toolbar {
