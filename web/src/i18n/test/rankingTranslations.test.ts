@@ -68,4 +68,29 @@ describe('Ranking translations', () => {
   it('clearly states that pausing stops ranking data uploads', () => {
     expect(i18n.t('ranking.pause_confirm_body', { lng: 'zh' })).toContain('停止同步排名数据');
   });
+
+  it('capitalizes every word in the English pause action only', () => {
+    expect(i18n.t('ranking.pause', { lng: 'en' })).toBe('Pause Participation');
+    expect(i18n.t('ranking.pause', { lng: 'zh' })).toBe('暂停参与');
+    expect(i18n.t('ranking.pause', { lng: 'zh-TW' })).toBe('暫停參與');
+  });
+
+  it('capitalizes every word in English Ranking metric options only', () => {
+    const expectedEnglishMetrics = {
+      'ranking.metric_overall': 'Overall Ranking',
+      'ranking.metric_total_tokens': 'Total Token',
+      'ranking.metric_request_count': 'Requests',
+      'ranking.metric_cache_read_rate': 'Cache Read Rate',
+      'ranking.metric_ttft_average': 'Average Time To First Token',
+      'ranking.metric_latency_average': 'Average Total Latency',
+      'ranking.metric_peak_tpm': 'Peak TPM',
+      'ranking.metric_peak_rpm': 'Peak RPM',
+    } as const;
+
+    for (const [key, label] of Object.entries(expectedEnglishMetrics)) {
+      expect(i18n.t(key, { lng: 'en' })).toBe(label);
+    }
+    expect(i18n.t('ranking.metric_cache_read_rate', { lng: 'zh' })).toBe('缓存读取率');
+    expect(i18n.t('ranking.metric_cache_read_rate', { lng: 'zh-TW' })).toBe('快取讀取率');
+  });
 });
