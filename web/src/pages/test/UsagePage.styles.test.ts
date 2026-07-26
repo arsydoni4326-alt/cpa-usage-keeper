@@ -66,6 +66,13 @@ const styleRuleBlock = (source: string, selector: string) => {
 }
 
 describe('UsagePage toolbar styles', () => {
+  it('keeps ranking filters out of the shared top toolbar so only Refresh remains there', () => {
+    expect(usagePageSource).not.toContain("import { RankingToolbar }")
+    expect(usagePageSource).not.toContain('<RankingToolbar')
+    expect(usagePageStyles).not.toContain('.rankingToolbarSlot')
+    expect(usagePageSource).toContain('className={styles.refreshSwitcher}')
+  })
+
   it('removes obsolete Last Updated presentation and API plumbing', () => {
     expect(usagePageSource).not.toContain('lastSyncAt')
     expect(usagePageSource).not.toContain('status?.last_run_at')
@@ -88,6 +95,33 @@ describe('UsagePage toolbar styles', () => {
   it('lets dashboard page frames consume the mode-specific width cap', () => {
     expect(usagePageStyles).toMatch(/\.pageFrame\s*\{[\s\S]*?width:\s*min\(var\(--keeper-page-max-width, 1245px\), 100%\);/)
     expect(keyOverviewPageStyles).toMatch(/\.pageFrame\s*\{[\s\S]*?width:\s*min\(var\(--keeper-page-max-width, 1245px\), 100%\);/)
+  })
+
+  it('fills the available viewport consistently before the shared footer', () => {
+    for (const pageStyles of [usagePageStyles, keyOverviewPageStyles]) {
+      const shell = styleRuleBlock(pageStyles, '.pageShell')
+      const frame = styleRuleBlock(pageStyles, '.pageFrame')
+      const content = styleRuleBlock(pageStyles, '.contentColumn')
+      const container = styleRuleBlock(pageStyles, '.container')
+
+      expect(shell).toContain('min-height: 100svh;')
+      expect(shell).toContain('display: flex;')
+      expect(shell).toContain('flex-direction: column;')
+      expect(frame).toContain('flex: 1 1 auto;')
+      expect(content).toContain('flex: 1 1 auto;')
+      expect(content).toContain('display: flex;')
+      expect(content).toContain('flex-direction: column;')
+      expect(container).toContain('flex: 1 1 auto;')
+      expect(pageStyles).toMatch(/\.container\s*>\s*:last-child\s*\{[\s\S]*?flex:\s*1 0 auto;/)
+    }
+  })
+
+  it('lets short request, credential, and settings cards reach the common bottom gutter', () => {
+    expect(usagePageStyles).toMatch(/\.requestEventsCard:global\(\.card\)\s*\{[\s\S]*?flex:\s*1 0 auto;/)
+    expect(usagePageStyles).toMatch(/\.credentialsSections,\s*\n\.settingsSections\s*\{[\s\S]*?flex:\s*1 0 auto;/)
+    expect(usagePageStyles).toMatch(/\.credentialsSections\s*>\s*:last-child,\s*\n\.settingsSections\s*>\s*:last-child\s*\{[\s\S]*?flex:\s*1 0 auto;/)
+    expect(credentialStyles).toMatch(/\.credentialSectionCard\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-direction:\s*column;/)
+    expect(credentialStyles).toMatch(/\.credentialEmptyState\s*\{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?align-items:\s*center;[\s\S]*?justify-content:\s*center;/)
   })
 
   it('uses shell density variables for dashboard spacing without root zoom', () => {
@@ -488,6 +522,7 @@ describe('UsagePage toolbar styles', () => {
   it('keeps normal-mode range controls mounted in a stable transition slot', () => {
     expect(usagePageSource).toContain("${!isEmbeddedInCPAMC ? styles.toolbarActionsRightAnimated : ''}")
     expect(usagePageSource).toContain('{(!isEmbeddedInCPAMC || showRangeControls) && (')
+    expect(usagePageSource).not.toContain("activeTab !== 'ranking' &&")
     expect(usagePageSource).toContain('showRangeControls ? styles.usageFilterTransitionOpen : \'\'')
     expect(usagePageSource).toContain('inert={!showRangeControls}')
     expect(usagePageSource).toContain('<div className={styles.usageFilterBar}>')
@@ -604,12 +639,12 @@ describe('UsagePage toolbar styles', () => {
     expect(typesSource).not.toContain('latency_diagnostics: AnalysisLatencyDiagnostics')
   })
 
-  it('renames the Analysis tab label and places it before Request Events', () => {
+  it('keeps Analysis before Ranking and Request Events', () => {
     expect(i18nSource).toContain("tab_analysis: 'Analysis'")
     expect(i18nSource).not.toContain("tab_analysis: 'API & Models'")
     expect(i18nSource).not.toContain("tab_analysis: 'API 与模型'")
     expect(i18nSource).not.toContain("tab_analysis: 'API 與模型'")
-    expect(usagePageSource).toContain("const USAGE_TAB_OPTIONS = ['overview', 'analysis', 'events', 'auth-files', 'ai-provider', 'settings'] as const")
+    expect(usagePageSource).toContain("const USAGE_TAB_OPTIONS = ['overview', 'analysis', 'ranking', 'events', 'auth-files', 'ai-provider', 'settings'] as const")
   })
 
   it('keeps Sign out as the rightmost header action after Check Updates', () => {
@@ -620,14 +655,63 @@ describe('UsagePage toolbar styles', () => {
     expect(usagePageStyles).toContain('.signOutPill')
   })
 
-  it('keeps mobile tab labels on one line without changing desktop tab sizing', () => {
-    const desktopTabPillBlock = usagePageStyles.slice(
-      usagePageStyles.indexOf('.tabPill {'),
-      usagePageStyles.indexOf('.tabPillActive')
-    )
+  it('uses only a theme-tuned top highlight for the connected shell outline', () => {
+    const connectedTabBar = styleRuleBlock(usagePageStyles, '.tabBarConnected')
+    const darkConnectedTabBar = styleRuleBlock(usagePageStyles, ":global([data-theme='dark']) .tabBarConnected")
 
-    expect(usagePageStyles).toContain('@include mobile {\n  .tabPill {\n    white-space: nowrap;\n  }\n')
-    expect(desktopTabPillBlock).not.toContain('white-space: nowrap;')
+    expect(connectedTabBar).toContain('display: inline-flex;')
+    expect(connectedTabBar).toContain('align-items: stretch;')
+    expect(connectedTabBar).toContain('width: max-content;')
+    expect(connectedTabBar).toContain('max-width: 100%;')
+    expect(connectedTabBar).toContain('min-height: 40px;')
+    expect(connectedTabBar).toContain('padding: 4px;')
+    expect(connectedTabBar).toContain('gap: 0;')
+    expect(connectedTabBar).toContain('border: 1px solid transparent;')
+    expect(connectedTabBar).toContain('border-radius: 999px;')
+    expect(connectedTabBar).toContain('background: color-mix(in srgb, var(--bg-secondary) 78%, transparent);')
+    expect(connectedTabBar).toContain('box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 12%, transparent);')
+    expect(connectedTabBar).toContain('overflow-x: auto;')
+    expect(darkConnectedTabBar).toContain('border-color: transparent;')
+    expect(darkConnectedTabBar).toContain('box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);')
+  })
+
+  it('removes per-tab frames while keeping connected tab labels stable at every width', () => {
+    const connectedTabPill = styleRuleBlock(usagePageStyles, '.tabBarConnected .tabPill')
+
+    expect(connectedTabPill).toContain('min-height: 32px;')
+    expect(connectedTabPill).toContain('padding: 7px 12px;')
+    expect(connectedTabPill).toContain('border: 0;')
+    expect(connectedTabPill).toContain('border-radius: 999px;')
+    expect(connectedTabPill).toContain('background: transparent;')
+    expect(connectedTabPill).toContain('font-size: 12px;')
+    expect(connectedTabPill).toContain('font-weight: 700;')
+    expect(connectedTabPill).toContain('white-space: nowrap;')
+    expect(connectedTabPill).not.toContain('transform:')
+  })
+
+  it('widens simplified and traditional Chinese tabs without separating the connected segments', () => {
+    const connectedTabBar = styleRuleBlock(usagePageStyles, '.tabBarConnected')
+    const chineseTabPill = styleRuleBlock(usagePageStyles, '.tabBarConnected:lang(zh) .tabPill')
+
+    expect(usagePageSource).toContain('const { t, i18n } = useTranslation();')
+    expect(usagePageSource).toContain('lang={i18n.resolvedLanguage || i18n.language}')
+    expect(connectedTabBar).toContain('gap: 0;')
+    expect(chineseTabPill).toContain('padding-inline: 16px;')
+  })
+
+  it('highlights only the connected active tab with the themed surface and soft shadow', () => {
+    const connectedActiveTab = styleRuleBlock(usagePageStyles, '.tabBarConnected .tabPillActive')
+
+    expect(connectedActiveTab).toContain('color: var(--text-primary);')
+    expect(connectedActiveTab).toContain('background: var(--bg-primary);')
+    expect(connectedActiveTab).toContain('box-shadow: 0 6px 16px color-mix(in srgb, var(--text-primary) 10%, transparent);')
+    expect(connectedActiveTab).not.toContain('border-color:')
+  })
+
+  it('keeps the connected shell out of CPAMC embed and Key Overview', () => {
+    expect(usagePageSource).toContain("${!isEmbeddedInCPAMC ? styles.tabBarConnected : ''}")
+    expect(keyOverviewPageSource).not.toContain('tabBarConnected')
+    expect(keyOverviewPageStyles).not.toContain('.tabBarConnected')
   })
 
   it('lets API Key Settings content scroll inside the card instead of being clipped', () => {
