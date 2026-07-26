@@ -43,8 +43,8 @@ const resources = {
         no_requests: 'No requests'
       },
       auth: {
-        login_title: 'CPA Usage Statistics Dashboard',
-        login_subtitle: 'Preserve CPA request history, aggregate usage analytics, and inspect request health, model activity, and API statistics from a protected console.',
+        login_title: 'CPA USAGE KEEPER',
+        login_subtitle: 'Every flow leaves a trace.',
         console_kicker: 'Access control',
         console_title: 'Choose your console',
         console_hint: 'Administrators manage the full dashboard. API Key viewers see analytics scoped to their own key.',
@@ -749,8 +749,8 @@ const resources = {
         no_requests: '暂无请求'
       },
       auth: {
-        login_title: 'CPA 用量统计\n仪表盘',
-        login_subtitle: '持续保存 CPA 请求记录，聚合用量分析，并在受保护的控制台中查看请求健康、模型活动与 API 统计。',
+        login_title: 'CPA USAGE KEEPER',
+        login_subtitle: '万千流转，皆有迹可循。',
         console_kicker: '访问控制',
         console_title: '选择访问方式',
         console_hint: '管理员可进入完整控制台；API Key 查看者只能查看该 API Key 对应的只读概览。',
@@ -1455,8 +1455,8 @@ const resources = {
         no_requests: '尚無請求'
       },
       auth: {
-        login_title: 'CPA 用量統計\n儀表板',
-        login_subtitle: '持續保存 CPA 請求記錄，彙整用量分析，並在受保護的控制台中查看請求健康、模型活動與 API 統計。',
+        login_title: 'CPA USAGE KEEPER',
+        login_subtitle: '萬千流轉，皆有跡可循。',
         console_kicker: '存取控制',
         console_title: '選擇存取方式',
         console_hint: '管理員可進入完整控制台；API Key 檢視者只能查看該 API Key 對應的唯讀總覽。',
