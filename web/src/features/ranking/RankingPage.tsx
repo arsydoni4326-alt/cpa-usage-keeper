@@ -583,7 +583,9 @@ function LeaderboardCard({
     <article className={`card ${styles.leaderboardCard}`.trim()} aria-busy={loading}>
       <header className={styles.leaderboardHeader}>
         <div className={styles.leaderboardTitle} data-ranking-header-title>
-          <h2>{t(`ranking.metric_${metric}`)}</h2>
+          <div className="keeper-card-title-track">
+            <h2 className="keeper-card-title">{t(`ranking.metric_${metric}`)}</h2>
+          </div>
           {board && (
             <div className={styles.boardMeta}>
               {board.stale && <span className={styles.staleBadge} data-ranking-stale>{t('ranking.stale')} · {board.period_key}</span>}

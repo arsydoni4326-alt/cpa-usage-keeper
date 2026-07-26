@@ -77,15 +77,6 @@ export interface PricingDraftInput {
   multiplier: string;
 }
 
-function PriceSettingsTitle({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <div className={styles.sectionTitleBlock}>
-      <h3 className={styles.sectionTitle}>{title}</h3>
-      <p className={styles.sectionSubtitle}>{subtitle}</p>
-    </div>
-  );
-}
-
 const parsePriceValue = (value: string): number | null => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
@@ -552,12 +543,8 @@ export function PriceSettingsCard({
   return (
     <>
       <Card
-        title={
-          <PriceSettingsTitle
-            title={t('usage_stats.model_price_settings_title')}
-            subtitle={t('usage_stats.model_price_settings_subtitle')}
-          />
-        }
+        title={t('usage_stats.model_price_settings_title')}
+        subtitle={t('usage_stats.model_price_settings_subtitle')}
         className={`${styles.detailsFixedCard} ${styles.pricingFixedCard}`}
       >
         <div className={styles.pricingSection}>
