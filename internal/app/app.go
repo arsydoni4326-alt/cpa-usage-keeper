@@ -19,6 +19,7 @@ import (
 	"cpa-usage-keeper/internal/poller"
 	"cpa-usage-keeper/internal/pricing"
 	"cpa-usage-keeper/internal/quota"
+	"cpa-usage-keeper/internal/ranking"
 	"cpa-usage-keeper/internal/repository"
 	"cpa-usage-keeper/internal/service"
 	webui "cpa-usage-keeper/web"
@@ -60,6 +61,7 @@ type App struct {
 	RedisProcess Runner
 	// UsageAggregation 是唯一串行调度三类派生聚合事务的后台 runner。
 	UsageAggregation  Runner
+	Ranking           Runner
 	Maintenance       *StorageCleanupRunner
 	MetadataSync      *MetadataSyncRunner
 	QuotaService      QuotaRunner
@@ -129,6 +131,25 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 	// 任一数据库池构造失败时 repository 已回收局部资源，App 只需要释放日志句柄。
 	if err != nil {
 		return nil, failInitialization(logCloser, err)
+	}
+	// Ranking 完全复用现有 app_settings 和统一 DB；构造阶段不访问中心，默认 disabled 没有外部请求。
+	rankingService, err := ranking.NewService(ranking.NewStore(db), ranking.NewAggregator(db), ranking.NewClient())
+	if err != nil {
+		if readDB != db {
+			_ = closeGormDB(readDB)
+		}
+		_ = closeGormDB(db)
+		_ = logCloser.Close()
+		return nil, err
+	}
+	rankingRunner, err := ranking.NewRunner(rankingService)
+	if err != nil {
+		if readDB != db {
+			_ = closeGormDB(readDB)
+		}
+		_ = closeGormDB(db)
+		_ = logCloser.Close()
+		return nil, err
 	}
 	// 最近事件缓存继续使用统一 DB；其 Query 会由 dbresolver 自动路由到 reader。
 	recentUsageCache, err := newUsageRecentEventCache(db, repository.UsageRecentEventCacheOptions{})
@@ -273,6 +294,7 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 		RedisIngest:       redisIngestRunner,
 		RedisProcess:      redisProcessRunner,
 		UsageAggregation:  usageAggregationRunner,
+		Ranking:           rankingRunner,
 		Maintenance:       NewStorageCleanupRunner(syncService),
 		MetadataSync:      metadataSyncRunner,
 		QuotaService:      quotaService,
@@ -295,6 +317,7 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 				CPAAPIKeys:    cpaAPIKeyService,
 				AuthFiles:     authFilesManagementService,
 				RequestLogs:   requestLogService,
+				Ranking:       rankingService,
 				Status: api.StatusRouteConfig{
 					CPAPublicURL:               cfg.CPAPublicURL,
 					CPARequestLogAccessEnabled: cfg.CPARequestLogAccessEnabled,
@@ -404,6 +427,14 @@ func (a *App) Run() error {
 			// runner 错误只终止该后台任务，不影响 HTTP 或已提交 usage 数据。
 			if err := a.UsageAggregation.Run(ctx); err != nil {
 				logrus.Errorf("usage aggregation stopped: %v", err)
+			}
+		})
+	}
+	if a.Ranking != nil {
+		a.startBackgroundTask(func() {
+			// 排名中心故障只能终止本次可选同步任务，不能影响 Keeper HTTP 或 usage 采集。
+			if err := a.Ranking.Run(ctx); err != nil {
+				logrus.Errorf("ranking synchronization stopped: %v", err)
 			}
 		})
 	}

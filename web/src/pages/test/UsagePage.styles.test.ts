@@ -66,6 +66,13 @@ const styleRuleBlock = (source: string, selector: string) => {
 }
 
 describe('UsagePage toolbar styles', () => {
+  it('keeps ranking filters out of the shared top toolbar so only Refresh remains there', () => {
+    expect(usagePageSource).not.toContain("import { RankingToolbar }")
+    expect(usagePageSource).not.toContain('<RankingToolbar')
+    expect(usagePageStyles).not.toContain('.rankingToolbarSlot')
+    expect(usagePageSource).toContain('className={styles.refreshSwitcher}')
+  })
+
   it('removes obsolete Last Updated presentation and API plumbing', () => {
     expect(usagePageSource).not.toContain('lastSyncAt')
     expect(usagePageSource).not.toContain('status?.last_run_at')
@@ -88,6 +95,33 @@ describe('UsagePage toolbar styles', () => {
   it('lets dashboard page frames consume the mode-specific width cap', () => {
     expect(usagePageStyles).toMatch(/\.pageFrame\s*\{[\s\S]*?width:\s*min\(var\(--keeper-page-max-width, 1245px\), 100%\);/)
     expect(keyOverviewPageStyles).toMatch(/\.pageFrame\s*\{[\s\S]*?width:\s*min\(var\(--keeper-page-max-width, 1245px\), 100%\);/)
+  })
+
+  it('fills the available viewport consistently before the shared footer', () => {
+    for (const pageStyles of [usagePageStyles, keyOverviewPageStyles]) {
+      const shell = styleRuleBlock(pageStyles, '.pageShell')
+      const frame = styleRuleBlock(pageStyles, '.pageFrame')
+      const content = styleRuleBlock(pageStyles, '.contentColumn')
+      const container = styleRuleBlock(pageStyles, '.container')
+
+      expect(shell).toContain('min-height: 100svh;')
+      expect(shell).toContain('display: flex;')
+      expect(shell).toContain('flex-direction: column;')
+      expect(frame).toContain('flex: 1 1 auto;')
+      expect(content).toContain('flex: 1 1 auto;')
+      expect(content).toContain('display: flex;')
+      expect(content).toContain('flex-direction: column;')
+      expect(container).toContain('flex: 1 1 auto;')
+      expect(pageStyles).toMatch(/\.container\s*>\s*:last-child\s*\{[\s\S]*?flex:\s*1 0 auto;/)
+    }
+  })
+
+  it('lets short request, credential, and settings cards reach the common bottom gutter', () => {
+    expect(usagePageStyles).toMatch(/\.requestEventsCard:global\(\.card\)\s*\{[\s\S]*?flex:\s*1 0 auto;/)
+    expect(usagePageStyles).toMatch(/\.credentialsSections,\s*\n\.settingsSections\s*\{[\s\S]*?flex:\s*1 0 auto;/)
+    expect(usagePageStyles).toMatch(/\.credentialsSections\s*>\s*:last-child,\s*\n\.settingsSections\s*>\s*:last-child\s*\{[\s\S]*?flex:\s*1 0 auto;/)
+    expect(credentialStyles).toMatch(/\.credentialSectionCard\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-direction:\s*column;/)
+    expect(credentialStyles).toMatch(/\.credentialEmptyState\s*\{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?align-items:\s*center;[\s\S]*?justify-content:\s*center;/)
   })
 
   it('uses shell density variables for dashboard spacing without root zoom', () => {
@@ -488,6 +522,7 @@ describe('UsagePage toolbar styles', () => {
   it('keeps normal-mode range controls mounted in a stable transition slot', () => {
     expect(usagePageSource).toContain("${!isEmbeddedInCPAMC ? styles.toolbarActionsRightAnimated : ''}")
     expect(usagePageSource).toContain('{(!isEmbeddedInCPAMC || showRangeControls) && (')
+    expect(usagePageSource).not.toContain("activeTab !== 'ranking' &&")
     expect(usagePageSource).toContain('showRangeControls ? styles.usageFilterTransitionOpen : \'\'')
     expect(usagePageSource).toContain('inert={!showRangeControls}')
     expect(usagePageSource).toContain('<div className={styles.usageFilterBar}>')
@@ -604,12 +639,12 @@ describe('UsagePage toolbar styles', () => {
     expect(typesSource).not.toContain('latency_diagnostics: AnalysisLatencyDiagnostics')
   })
 
-  it('renames the Analysis tab label and places it before Request Events', () => {
+  it('keeps Analysis before Ranking and Request Events', () => {
     expect(i18nSource).toContain("tab_analysis: 'Analysis'")
     expect(i18nSource).not.toContain("tab_analysis: 'API & Models'")
     expect(i18nSource).not.toContain("tab_analysis: 'API 与模型'")
     expect(i18nSource).not.toContain("tab_analysis: 'API 與模型'")
-    expect(usagePageSource).toContain("const USAGE_TAB_OPTIONS = ['overview', 'analysis', 'events', 'auth-files', 'ai-provider', 'settings'] as const")
+    expect(usagePageSource).toContain("const USAGE_TAB_OPTIONS = ['overview', 'analysis', 'ranking', 'events', 'auth-files', 'ai-provider', 'settings'] as const")
   })
 
   it('keeps Sign out as the rightmost header action after Check Updates', () => {
