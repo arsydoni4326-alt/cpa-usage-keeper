@@ -128,8 +128,8 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 		RefreshWorkerLimit: cfg.QuotaRefreshWorkerLimit,
 		PricingCatalog:     pricingCatalog,
 	})
-	// 单 writer aggregation runner 复用同一个数据库和 quota appender，并在 App.Run 时主动追平。
-	usageAggregationRunner := poller.NewUsageAggregationRunner(db, quotaService)
+	// 单 writer aggregation runner 只维护 rollups/Identity，并在 App.Run 时主动追平。
+	usageAggregationRunner := poller.NewUsageAggregationRunner(db)
 	// syncService 仍然是 metadata 和 usage 处理共享的业务服务入口。
 	syncService := service.NewSyncServiceWithOptions(db, service.SyncServiceOptions{
 		BaseURL:                   cfg.CPABaseURL,
@@ -139,6 +139,8 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 		RecentUsageEvents: recentUsageCache,
 		// usage 与 metadata 提交后只唤醒单 writer runner，不在前台链路执行派生聚合。
 		UsageAggregationNotifier: usageAggregationRunner,
+		// Header 独立进入 Quota worker 的惰性一分钟窗口，不再等待 Overview 水位。
+		UsageHeaderQuota: quotaService,
 	})
 	// metadataSyncRunner 提前创建，保证控制消息和后台任务使用同一个调度器实例。
 	metadataSyncRunner := NewMetadataSyncRunner(syncService, cfg.MetadataSyncInterval)
