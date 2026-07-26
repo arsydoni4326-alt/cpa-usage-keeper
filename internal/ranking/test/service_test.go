@@ -255,6 +255,9 @@ func TestServicePauseStopsSyncAndResumeKeepsIdentity(t *testing.T) {
 	if err := service.RunOnce(context.Background()); err != nil {
 		t.Fatalf("paused RunOnce returned error: %v", err)
 	}
+	if err := service.SyncNow(context.Background()); !errors.Is(err, ranking.ErrParticipation) {
+		t.Fatalf("paused SyncNow error = %v, want participation conflict", err)
+	}
 	if center.selfCalls != 0 || center.reportCalls != 0 || aggregator.latest != 0 || len(aggregator.ranges) != 0 {
 		t.Fatalf("paused state performed synchronization: center=%+v aggregator=%+v", center, aggregator)
 	}
@@ -335,7 +338,7 @@ func TestServiceCachesLeaderboardsAndMetadataForThirtySeconds(t *testing.T) {
 }
 
 func TestServiceRejectsUnsupportedProfileWithoutPersistingIdentity(t *testing.T) {
-	for _, name := range []string{"Keeper.Name", "Keeper Name", "Keeper😀", "123-456-7890", "abcdefghijklmnopq"} {
+	for _, name := range []string{"Keeper.Name", "Keeper Name", "Keeper😀", "123-456-7890", "١٢٣٤٥٦٧٨٩٠", "abcdefghijklmnopq"} {
 		t.Run(name, func(t *testing.T) {
 			store := ranking.NewStore(openRankingDatabase(t))
 			center := &centerStub{}

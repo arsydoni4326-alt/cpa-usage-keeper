@@ -164,8 +164,17 @@ func (s *Service) Join(ctx context.Context, displayName string, avatarID uint8) 
 	return status, nil
 }
 
-// RunOnce 仅为 active 参与者校准中心序号并完成一次昨日/今日同步；并发触发时直接跳过。
+// RunOnce 供后台调度使用；未参与或暂停时静默跳过，避免把正常空闲状态记录成任务错误。
 func (s *Service) RunOnce(ctx context.Context) error {
+	return s.runOnce(ctx, false)
+}
+
+// SyncNow 供管理员手动触发；只有 active 状态才返回成功，避免把静默跳过误报为已上报。
+func (s *Service) SyncNow(ctx context.Context) error {
+	return s.runOnce(ctx, true)
+}
+
+func (s *Service) runOnce(ctx context.Context, requireActive bool) error {
 	if !s.operationMu.TryLock() {
 		return ErrSyncInProgress
 	}
@@ -177,9 +186,15 @@ func (s *Service) RunOnce(ctx context.Context) error {
 	}
 	switch state.Status {
 	case StatusDisabled, StatusPaused, StatusDeleted:
+		if requireActive {
+			return ErrParticipation
+		}
 		return nil
 	case StatusJoining:
 		// 注册失败后只允许管理员手动重试，避免后台任务消耗中心注册限流。
+		if requireActive {
+			return ErrParticipation
+		}
 		return nil
 	case StatusActive:
 	default:
@@ -698,7 +713,7 @@ func containsPhonePattern(name string) bool {
 	digits := 0
 	for _, character := range name {
 		switch {
-		case character >= '0' && character <= '9':
+		case unicode.IsDigit(character):
 			digits++
 			if digits >= 10 {
 				return true

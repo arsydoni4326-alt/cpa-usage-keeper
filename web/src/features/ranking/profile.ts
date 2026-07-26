@@ -7,10 +7,12 @@ export interface NormalizedRankingDisplayName {
 
 export const RANKING_DISPLAY_NAME_MAX_LENGTH = 16;
 
+const unicodeDecimalDigit = /\p{Nd}/u;
+
 const containsPhonePattern = (value: string): boolean => {
   let digits = 0;
   for (const character of value) {
-    if (character >= '0' && character <= '9') {
+    if (unicodeDecimalDigit.test(character)) {
       digits += 1;
       if (digits >= 10) return true;
       continue;

@@ -667,6 +667,34 @@ describe('useRankingData', () => {
     expect(latest?.status?.status).toBe('deleted');
   });
 
+  it('does not let an older status request overwrite a completed participation action', async () => {
+    const pendingStatus = deferred<RankingStatusResponse>();
+    let statusCalls = 0;
+    const api = createAPI({
+      status: async () => {
+        statusCalls += 1;
+        return statusCalls === 1
+          ? { status: 'active', display_name: 'Keeper_01', avatar_id: 7 }
+          : pendingStatus.promise;
+      },
+      pause: async () => ({ status: 'paused', display_name: 'Keeper_01', avatar_id: 7 }),
+    });
+    await renderHook(true, api);
+
+    let refreshPromise: Promise<unknown> = Promise.resolve();
+    await act(async () => {
+      refreshPromise = latest?.refreshStatus() ?? Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => latest?.pause());
+    expect(latest?.status?.status).toBe('paused');
+
+    pendingStatus.resolve({ status: 'active', display_name: 'Keeper_01', avatar_id: 7 });
+    await act(async () => refreshPromise);
+
+    expect(latest?.status?.status).toBe('paused');
+  });
+
   it('does not refresh the center leaderboard for local-only pause and resume actions', async () => {
     let leaderboardCalls = 0;
     const api = createAPI({

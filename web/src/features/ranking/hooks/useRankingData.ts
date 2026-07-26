@@ -114,6 +114,13 @@ export function useRankingData({
     }
   }, [onAuthRequired]);
 
+  const invalidateStatusLoad = useCallback(() => {
+    const controller = statusControllerRef.current;
+    statusControllerRef.current = null;
+    controller?.abort();
+    setStatusLoading(false);
+  }, []);
+
   const loadStatus = useCallback(async () => {
     statusControllerRef.current?.abort();
     const controller = new AbortController();
@@ -328,6 +335,8 @@ export function useRankingData({
     operation: (signal: AbortSignal) => Promise<RankingStatusResponse>,
   ) => {
     if (action) return null;
+    // 操作结果必须成为最新状态；先废弃旧查询，并在成功落盘前再次废弃操作期间启动的查询。
+    invalidateStatusLoad();
     const controller = new AbortController();
     actionControllerRef.current = controller;
     setAction(nextAction);
@@ -335,6 +344,7 @@ export function useRankingData({
     try {
       const nextStatus = await operation(controller.signal);
       if (actionControllerRef.current !== controller) return null;
+      invalidateStatusLoad();
       setStatus(nextStatus);
       if (enabledRef.current && nextAction !== 'pause' && nextAction !== 'resume') {
         await loadLeaderboard(period, metric, { silent: true });
@@ -354,7 +364,7 @@ export function useRankingData({
         setAction(null);
       }
     }
-  }, [action, loadLeaderboard, loadStatus, metric, notifyAuthentication, period]);
+  }, [action, invalidateStatusLoad, loadLeaderboard, loadStatus, metric, notifyAuthentication, period]);
 
   const join = useCallback(
     (profile: RankingProfileRequest) => runAction('join', (signal) => api.join(profile, signal)),

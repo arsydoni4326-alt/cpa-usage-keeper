@@ -18,6 +18,7 @@ type rankingProviderStub struct {
 	joinName     string
 	joinAvatarID uint8
 	joinErr      error
+	syncErr      error
 	runCalls     int
 	pauseCalls   int
 	resumeCalls  int
@@ -40,9 +41,9 @@ func (s *rankingProviderStub) Join(_ context.Context, name string, avatarID uint
 	return s.status, nil
 }
 
-func (s *rankingProviderStub) RunOnce(context.Context) error {
+func (s *rankingProviderStub) SyncNow(context.Context) error {
 	s.runCalls++
-	return nil
+	return s.syncErr
 }
 
 func (s *rankingProviderStub) Pause(context.Context) (ranking.LocalStatus, error) {
@@ -117,6 +118,18 @@ func TestRankingJoinAndManualSyncUseLocalService(t *testing.T) {
 	router.ServeHTTP(syncResponse, httptest.NewRequest(http.MethodPost, "/api/v1/ranking/sync", nil))
 	if syncResponse.Code != http.StatusOK || provider.runCalls != 1 {
 		t.Fatalf("unexpected sync result: status=%d body=%s calls=%d", syncResponse.Code, syncResponse.Body.String(), provider.runCalls)
+	}
+}
+
+func TestRankingManualSyncRejectsInactiveParticipation(t *testing.T) {
+	provider := &rankingProviderStub{status: ranking.LocalStatus{
+		Status: ranking.StatusPaused, DisplayName: "Keeper_01", AvatarID: 7, ParticipantID: "p_example",
+	}, syncErr: ranking.ErrParticipation}
+	response := httptest.NewRecorder()
+	rankingRouter(provider).ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/ranking/sync", nil))
+
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), `"error":"ranking_participation_state_conflict"`) {
+		t.Fatalf("inactive sync result: status=%d body=%s calls=%d", response.Code, response.Body.String(), provider.runCalls)
 	}
 }
 

@@ -12,7 +12,7 @@ import (
 type Provider interface {
 	Status(context.Context) (ranking.LocalStatus, error)
 	Join(context.Context, string, uint8) (ranking.LocalStatus, error)
-	RunOnce(context.Context) error
+	SyncNow(context.Context) error
 	Pause(context.Context) (ranking.LocalStatus, error)
 	Resume(context.Context) (ranking.LocalStatus, error)
 	Exit(context.Context) (ranking.LocalStatus, error)
@@ -60,7 +60,7 @@ func RegisterRoutes(router gin.IRoutes, provider Provider) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "ranking_unavailable"})
 			return
 		}
-		if err := provider.RunOnce(c.Request.Context()); err != nil {
+		if err := provider.SyncNow(c.Request.Context()); err != nil {
 			writeProviderError(c, err)
 			return
 		}

@@ -25,7 +25,7 @@ func (*rankingRouteProviderStub) Join(context.Context, string, uint8) (ranking.L
 	return ranking.LocalStatus{}, nil
 }
 
-func (*rankingRouteProviderStub) RunOnce(context.Context) error { return nil }
+func (*rankingRouteProviderStub) SyncNow(context.Context) error { return nil }
 
 func (*rankingRouteProviderStub) Pause(context.Context) (ranking.LocalStatus, error) {
 	return ranking.LocalStatus{}, nil
