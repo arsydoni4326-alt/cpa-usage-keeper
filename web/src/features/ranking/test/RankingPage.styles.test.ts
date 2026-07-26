@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const styles = readFileSync(new URL('../RankingPage.module.scss', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../RankingPage.tsx', import.meta.url), 'utf8');
 
 const rule = (selector: string, fromIndex = 0) => {
   const start = styles.indexOf(selector, fromIndex);
@@ -14,6 +15,13 @@ const rule = (selector: string, fromIndex = 0) => {
 };
 
 describe('Ranking table context styles', () => {
+  it('uses the global card title track instead of local card primitives', () => {
+    expect(source).toContain('keeper-card-title-track');
+    expect(source).toContain('keeper-card-title');
+    expect(rule('.leaderboardCard:global(.card)')).not.toContain('border-radius: 24px;');
+    expect(rule('.leaderboardCard:global(.card)')).not.toContain('padding: 20px;');
+  });
+
   it('keeps the header and first two columns visible without introducing a fixed table height', () => {
     const tableHeader = rule('.table thead th');
     const rankColumn = rule('.rankColumn');
@@ -61,6 +69,8 @@ describe('Ranking table context styles', () => {
     expect(rule('.periodButton')).toContain('border-radius: 999px;');
     expect(rule('.periodButton')).toContain('padding: 6px 8px;');
     expect(rule('.periodButton')).toContain('width: 100%;');
+    expect(rule('.periodButton')).toContain('font-size: 12px;');
+    expect(rule('.periodButton')).not.toContain('font-size: 14px;');
     expect(rule('.periodButton')).toContain('text-align: center;');
     expect(rule('.periodButton')).not.toContain('border-bottom:');
     expect(rule('.periodButtonActive')).toContain('border-color: color-mix(');
@@ -69,6 +79,7 @@ describe('Ranking table context styles', () => {
     expect(rule('.metricControl')).toContain('min-height: 40px;');
     expect(rule('.metricSelect')).toContain('height: 40px;');
     expect(rule('.metricSelect')).toContain('border-radius: 999px;');
+    expect(rule('.metricSelect')).not.toContain('font-size: 14px;');
     expect(rule('.metricWidthSizer')).toContain('visibility: hidden;');
   });
 
@@ -241,12 +252,11 @@ describe('Ranking table context styles', () => {
     const header = rule('.leaderboardHeader');
     const meta = rule('.boardMeta');
     expect(cardSelectors).toEqual(['.leaderboardCard:global(.card) {']);
-    expect(card).toContain('padding: 20px;');
-    expect(card).toContain('border-radius: 24px;');
+    expect(card).not.toContain('padding: 20px;');
+    expect(card).not.toContain('border-radius: 24px;');
     expect(card).toContain('gap: 14px;');
     expect(card).toContain('overflow: hidden;');
     expect(header).toContain('padding: 0;');
-    expect(header).toContain('margin: 0;');
     expect(meta).toContain('margin-top: 6px;');
     expect(meta).toContain('font-size: 13px;');
     expect(meta).toContain('line-height: 1.45;');
