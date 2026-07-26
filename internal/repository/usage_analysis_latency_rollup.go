@@ -73,14 +73,10 @@ func BuildAnalysisLatencyDiagnosticsWithFilter(db *gorm.DB, filter dto.UsageQuer
 
 func analysisLatencyBucketType(filter dto.UsageQueryFilter, start, end time.Time) (entities.UsageLatencyBucketType, error) {
 	if filter.Range == "custom" && strings.TrimSpace(filter.CustomUnit) == "day" {
-		calendarDays, err := analysisLatencyCalendarDays(start, end)
-		if err != nil {
+		if _, err := analysisLatencyCalendarDays(start, end); err != nil {
 			return "", err
 		}
-		// Custom day 必须按本地自然日计数，不能用固定 24 小时跨越 DST。
-		if calendarDays <= analysisLatencyHourRangeMaxDays {
-			return entities.UsageLatencyBucketHour, nil
-		}
+		// Custom 天已经是完整自然日区间，始终读取长期保留的 day 桶。
 		return entities.UsageLatencyBucketDay, nil
 	}
 	if end.Sub(start) <= analysisLatencyHourRangeMaxDays*24*time.Hour {

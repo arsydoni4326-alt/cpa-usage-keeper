@@ -18,35 +18,63 @@ import (
 	"gorm.io/plugin/dbresolver"
 )
 
-func TestAnalysisLatencyRollupBucketSelectionUsesHourThroughThirtyCalendarDays(t *testing.T) {
+func TestAnalysisLatencyRollupCustomDayAlwaysUsesDayBuckets(t *testing.T) {
 	testCases := []struct {
-		name        string
-		timezone    string
-		start       func(*time.Location) time.Time
-		calendarDay int
-		wantBucket  entities.UsageLatencyBucketType
-		wantTTFT    int64
+		name         string
+		timezone     string
+		start        func(*time.Location) time.Time
+		calendarDays int
+		now          func(*time.Location, time.Time) time.Time
+		seedHour     bool
+		wantTTFT     int64
 	}{
 		{
-			name: "thirty days in Asia Shanghai", timezone: "Asia/Shanghai", calendarDay: 30,
+			name: "one day including today", timezone: "Asia/Shanghai", calendarDays: 1,
+			start: func(location *time.Location) time.Time {
+				return time.Date(2026, 7, 26, 0, 0, 0, 0, location)
+			},
+			now: func(_ *time.Location, end time.Time) time.Time {
+				return end.Add(-14 * time.Hour)
+			},
+			seedHour: true, wantTTFT: 1100,
+		},
+		{
+			name: "thirty days in Asia Shanghai", timezone: "Asia/Shanghai", calendarDays: 30,
 			start: func(location *time.Location) time.Time {
 				return time.Date(2026, 6, 1, 0, 0, 0, 0, location)
 			},
-			wantBucket: entities.UsageLatencyBucketHour, wantTTFT: 1300,
+			seedHour: true, wantTTFT: 2300,
 		},
 		{
-			name: "thirty one days in Asia Shanghai", timezone: "Asia/Shanghai", calendarDay: 31,
+			name: "thirty one days in Asia Shanghai", timezone: "Asia/Shanghai", calendarDays: 31,
 			start: func(location *time.Location) time.Time {
 				return time.Date(2026, 6, 1, 0, 0, 0, 0, location)
 			},
-			wantBucket: entities.UsageLatencyBucketDay, wantTTFT: 2310,
+			seedHour: true, wantTTFT: 3310,
 		},
 		{
-			name: "thirty days across DST fallback", timezone: "America/New_York", calendarDay: 30,
+			name: "three hundred sixty five days", timezone: "Asia/Shanghai", calendarDays: 365,
+			start: func(location *time.Location) time.Time {
+				return time.Date(2025, 7, 27, 0, 0, 0, 0, location)
+			},
+			seedHour: true, wantTTFT: 4365,
+		},
+		{
+			name: "thirty days across DST fallback", timezone: "America/New_York", calendarDays: 30,
 			start: func(location *time.Location) time.Time {
 				return time.Date(2026, 10, 20, 0, 0, 0, 0, location)
 			},
-			wantBucket: entities.UsageLatencyBucketHour, wantTTFT: 3300,
+			seedHour: true, wantTTFT: 5330,
+		},
+		{
+			name: "historical single day with only retained daily data", timezone: "Asia/Shanghai", calendarDays: 1,
+			start: func(location *time.Location) time.Time {
+				return time.Date(2026, 3, 28, 0, 0, 0, 0, location)
+			},
+			now: func(location *time.Location, _ time.Time) time.Time {
+				return time.Date(2026, 7, 26, 10, 0, 0, 0, location)
+			},
+			wantTTFT: 6120,
 		},
 	}
 
@@ -55,19 +83,23 @@ func TestAnalysisLatencyRollupBucketSelectionUsesHourThroughThirtyCalendarDays(t
 			location := setAnalysisLatencyTestTimezone(t, testCase.timezone)
 			db := openTestDatabase(t)
 			start := testCase.start(location)
-			end := start.AddDate(0, 0, testCase.calendarDay)
-			hourTTFT := int64(1300 + caseIndex*1000)
-			dayTTFT := hourTTFT + 1
-			if testCase.wantBucket == entities.UsageLatencyBucketDay {
-				dayTTFT = testCase.wantTTFT
-			} else {
-				hourTTFT = testCase.wantTTFT
+			end := start.AddDate(0, 0, testCase.calendarDays)
+			now := end.Add(-time.Second)
+			if testCase.now != nil {
+				now = testCase.now(location, end)
 			}
-			seedAnalysisLatencyRows(t, db, end.Add(-time.Second), entities.UsageLatencyBucketHour, []entities.UsageEvent{
-				analysisLatencyEvent(int64(100+caseIndex*10), "target", start.AddDate(0, 0, testCase.calendarDay-1).Add(12*time.Hour), hourTTFT, hourTTFT*10),
-			})
-			seedAnalysisLatencyRows(t, db, end.Add(-time.Second), entities.UsageLatencyBucketDay, []entities.UsageEvent{
-				analysisLatencyEvent(int64(101+caseIndex*10), "target", start.AddDate(0, 0, 1).Add(12*time.Hour), dayTTFT, dayTTFT*10),
+			if testCase.seedHour {
+				hourTTFT := testCase.wantTTFT + 1
+				hourEventTime := end.Add(-time.Hour)
+				if hourEventTime.After(now) {
+					hourEventTime = now.Add(-time.Hour)
+				}
+				seedAnalysisLatencyRows(t, db, now, entities.UsageLatencyBucketHour, []entities.UsageEvent{
+					analysisLatencyEvent(int64(100+caseIndex*10), "target", hourEventTime, hourTTFT, hourTTFT*10),
+				})
+			}
+			seedAnalysisLatencyRows(t, db, now, entities.UsageLatencyBucketDay, []entities.UsageEvent{
+				analysisLatencyEvent(int64(101+caseIndex*10), "target", start.Add(time.Hour), testCase.wantTTFT, testCase.wantTTFT*10),
 			})
 
 			diagnostics, err := repository.BuildAnalysisLatencyDiagnosticsWithFilter(db, repodto.UsageQueryFilter{
@@ -84,27 +116,6 @@ func TestAnalysisLatencyRollupBucketSelectionUsesHourThroughThirtyCalendarDays(t
 func TestAnalysisLatencyRollupSupportsAllAnalysisRangeKinds(t *testing.T) {
 	location := setAnalysisLatencyTestTimezone(t, "Asia/Shanghai")
 
-	t.Run("365 day custom range uses day buckets", func(t *testing.T) {
-		db := openTestDatabase(t)
-		today := time.Date(2026, 7, 26, 0, 0, 0, 0, location)
-		start := today.AddDate(0, 0, -364)
-		end := today.AddDate(0, 0, 1)
-		seedAnalysisLatencyRows(t, db, today.Add(12*time.Hour), entities.UsageLatencyBucketDay, []entities.UsageEvent{
-			analysisLatencyEvent(2001, "target", start.AddDate(0, 0, 180).Add(12*time.Hour), 3650, 36500),
-		})
-		seedAnalysisLatencyRows(t, db, today.Add(12*time.Hour), entities.UsageLatencyBucketHour, []entities.UsageEvent{
-			analysisLatencyEvent(2002, "target", today.Add(10*time.Hour), 30, 300),
-		})
-
-		diagnostics, err := repository.BuildAnalysisLatencyDiagnosticsWithFilter(db, repodto.UsageQueryFilter{
-			Range: "custom", CustomUnit: "day", StartTime: &start, EndTime: &end, EndExclusive: true,
-		})
-		if err != nil {
-			t.Fatalf("BuildAnalysisLatencyDiagnosticsWithFilter returned error: %v", err)
-		}
-		assertSingleAnalysisLatencyPoint(t, diagnostics, 3650, 36500)
-	})
-
 	t.Run("custom hour keeps exact aligned bucket range", func(t *testing.T) {
 		db := openTestDatabase(t)
 		start := time.Date(2026, 7, 26, 8, 0, 0, 0, location)
@@ -116,6 +127,9 @@ func TestAnalysisLatencyRollupSupportsAllAnalysisRangeKinds(t *testing.T) {
 			analysisLatencyEvent(2104, "target", end.Add(10*time.Minute), 14, 140),
 		}
 		seedAnalysisLatencyRows(t, db, end.Add(time.Hour), entities.UsageLatencyBucketHour, events)
+		seedAnalysisLatencyRows(t, db, end.Add(time.Hour), entities.UsageLatencyBucketDay, []entities.UsageEvent{
+			analysisLatencyEvent(2110, "target", start.Add(30*time.Minute), 999, 9990),
+		})
 
 		diagnostics, err := repository.BuildAnalysisLatencyDiagnosticsWithFilter(db, repodto.UsageQueryFilter{
 			Range: "custom", CustomUnit: "hour", StartTime: &start, EndTime: &end, EndExclusive: true,
@@ -126,22 +140,49 @@ func TestAnalysisLatencyRollupSupportsAllAnalysisRangeKinds(t *testing.T) {
 		assertAnalysisLatencyPointSet(t, diagnostics, [][2]int64{{8, 80}, {13, 130}})
 	})
 
-	t.Run("today includes existing hour buckets", func(t *testing.T) {
-		db := openTestDatabase(t)
-		start := time.Date(2026, 7, 26, 0, 0, 0, 0, location)
-		end := start.AddDate(0, 0, 1).Add(-time.Nanosecond)
-		seedAnalysisLatencyRows(t, db, end, entities.UsageLatencyBucketHour, []entities.UsageEvent{
-			analysisLatencyEvent(2201, "target", start.Add(10*time.Hour+10*time.Minute), 2600, 26000),
-		})
+	for caseIndex, testCase := range []struct {
+		name      string
+		rangeName string
+		start     time.Time
+		end       time.Time
+	}{
+		{
+			name: "rolling thirty days", rangeName: "30d",
+			start: time.Date(2026, 6, 26, 10, 30, 0, 0, location),
+			end:   time.Date(2026, 7, 26, 10, 30, 0, 0, location),
+		},
+		{
+			name: "today", rangeName: "today",
+			start: time.Date(2026, 7, 26, 0, 0, 0, 0, location),
+			end:   time.Date(2026, 7, 26, 23, 59, 59, int(time.Second-time.Nanosecond), location),
+		},
+		{
+			name: "yesterday", rangeName: "yesterday",
+			start: time.Date(2026, 7, 25, 0, 0, 0, 0, location),
+			end:   time.Date(2026, 7, 25, 23, 59, 59, int(time.Second-time.Nanosecond), location),
+		},
+	} {
+		t.Run(testCase.name+" uses hour buckets", func(t *testing.T) {
+			db := openTestDatabase(t)
+			hourTTFT := int64(2600 + caseIndex*100)
+			dayTTFT := hourTTFT + 1
+			eventTime := testCase.start.Add(12*time.Hour + 10*time.Minute)
+			seedAnalysisLatencyRows(t, db, testCase.end, entities.UsageLatencyBucketHour, []entities.UsageEvent{
+				analysisLatencyEvent(int64(2201+caseIndex*10), "target", eventTime, hourTTFT, hourTTFT*10),
+			})
+			seedAnalysisLatencyRows(t, db, testCase.end, entities.UsageLatencyBucketDay, []entities.UsageEvent{
+				analysisLatencyEvent(int64(2202+caseIndex*10), "target", eventTime, dayTTFT, dayTTFT*10),
+			})
 
-		diagnostics, err := repository.BuildAnalysisLatencyDiagnosticsWithFilter(db, repodto.UsageQueryFilter{
-			Range: "today", StartTime: &start, EndTime: &end,
+			diagnostics, err := repository.BuildAnalysisLatencyDiagnosticsWithFilter(db, repodto.UsageQueryFilter{
+				Range: testCase.rangeName, StartTime: &testCase.start, EndTime: &testCase.end,
+			})
+			if err != nil {
+				t.Fatalf("BuildAnalysisLatencyDiagnosticsWithFilter returned error: %v", err)
+			}
+			assertSingleAnalysisLatencyPoint(t, diagnostics, hourTTFT, hourTTFT*10)
 		})
-		if err != nil {
-			t.Fatalf("BuildAnalysisLatencyDiagnosticsWithFilter returned error: %v", err)
-		}
-		assertSingleAnalysisLatencyPoint(t, diagnostics, 2600, 26000)
-	})
+	}
 }
 
 func TestAnalysisLatencyRollupAlignsRollingBoundsUpAndNeverQueriesUsageEvents(t *testing.T) {
