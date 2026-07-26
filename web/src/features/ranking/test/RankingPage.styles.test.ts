@@ -142,16 +142,20 @@ describe('Ranking table context styles', () => {
     expect(rule('.profileActionAvatar')).toContain('flex: 0 0 22px;');
   });
 
-  it('keeps the filters above the title and profile entry on mobile', () => {
+  it('stacks the header in scan order with compact time text and a centered profile entry on mobile', () => {
     const mobileStart = styles.indexOf('@include mobile');
     const mobileEnd = styles.indexOf('@media (prefers-reduced-motion', mobileStart);
     const mobile = styles.slice(mobileStart, mobileEnd);
 
-    expect(mobile).toContain("'toolbar toolbar'");
-    expect(mobile).toContain("'title profile'");
+    expect(mobile).toContain("grid-template-areas:\n      'title'\n      'toolbar'\n      'profile';");
+    expect(mobile).toMatch(/\.boardMeta\s*\{[\s\S]*?align-items:\s*flex-start;/);
+    expect(mobile).toMatch(/\.boardMeta\s*\{[\s\S]*?flex-direction:\s*column;/);
     expect(mobile).toContain('.leaderboardHeaderToolbar');
     expect(mobile).toContain('justify-self: stretch;');
-    expect(mobile).toContain('max-width: min(260px, 52vw);');
+    expect(mobile).toMatch(/\.leaderboardHeaderActions\s*\{[\s\S]*?justify-content:\s*center;/);
+    expect(mobile).toMatch(/\.leaderboardHeaderActions\s*\{[\s\S]*?justify-self:\s*center;/);
+    expect(mobile).toMatch(/\.leaderboardHeaderActions\s*\{[\s\S]*?margin-right:\s*0;/);
+    expect(mobile).toMatch(/\.profileActionShellActive\s*\{[\s\S]*?max-width:\s*100%;/);
   });
 
   it('gives loading, empty, and error content a tall centered viewport', () => {
@@ -258,7 +262,7 @@ describe('Ranking table context styles', () => {
     expect(card).toContain('overflow: hidden;');
     expect(header).toContain('padding: 0;');
     expect(meta).toContain('margin-top: 6px;');
-    expect(meta).toContain('font-size: 13px;');
+    expect(meta).toContain('font-size: 12px;');
     expect(meta).toContain('line-height: 1.45;');
 
     const mobileStart = styles.indexOf('@include mobile');
