@@ -2,7 +2,9 @@
 @use '../styles/mixins' as *;
 
 .pageShell {
-  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
   background:
     radial-gradient(1200px 520px at 12% -8%, rgba($primary-color, 0.12), transparent 58%),
     radial-gradient(880px 480px at 100% 0%, rgba(0, 0, 0, 0.06), transparent 52%),
@@ -17,6 +19,7 @@
 .pageFrame {
   width: min(var(--keeper-page-max-width, 1245px), 100%);
   margin: 0 auto;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: var(--keeper-page-frame-gap, 18px);
@@ -185,16 +188,25 @@
 
 .contentColumn {
   width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .container {
   width: 100%;
   min-height: 100%;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 20px;
   position: relative;
   padding: 8px 0 0;
+}
+
+.container > :last-child {
+  flex: 1 0 auto;
 }
 
 .toolbarRow {
