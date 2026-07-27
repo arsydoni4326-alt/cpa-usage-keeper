@@ -126,7 +126,9 @@ describe('Ranking table context styles', () => {
     expect(rule('.leaderboardTitle')).toContain('grid-area: title;');
     expect(rule('.leaderboardTitle')).toContain('align-self: start;');
     expect(rule('.leaderboardHeaderActions')).toContain('grid-area: profile;');
-    expect(rule('.leaderboardHeaderActions')).toContain('margin-right: -4px;');
+    expect(rule('.leaderboardHeaderActions')).toContain(
+      'margin-right: calc(var(--keeper-card-header-padding-x) - var(--keeper-card-padding));',
+    );
     expect(rule('.toolbar')).toContain('column-gap: 16px;');
     expect(rule('.toolbar')).toContain('row-gap: 10px;');
   });

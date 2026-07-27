@@ -416,7 +416,7 @@
   justify-content: flex-end;
   align-self: start;
   justify-self: end;
-  margin-right: -4px;
+  margin-right: calc(var(--keeper-card-header-padding-x) - var(--keeper-card-padding));
   flex: 0 0 auto;
   min-width: 0;
 }
