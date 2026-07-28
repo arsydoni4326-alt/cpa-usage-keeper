@@ -6,37 +6,80 @@
   </picture>
 </p>
 
-# CPA Usage Keeper
+<p align="center">
+  <a href="./README.md"><strong>English</strong></a> ｜ <a href="./README.zh.md">简体中文</a>
+</p>
 
-[中文说明](./README.zh.md)
+<h1 align="center">CPA Usage Keeper</h1>
+
+<p align="center">Every flow leaves a trace.</p>
+
+<p align="center">
+  <a href="https://github.com/Willxup/cpa-usage-keeper/releases/latest"><img src="https://img.shields.io/github/v/release/Willxup/cpa-usage-keeper?style=flat-square" alt="Latest release" /></a>
+  <a href="https://github.com/Willxup/cpa-usage-keeper/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Willxup/cpa-usage-keeper/ci.yml?branch=main&amp;style=flat-square&amp;label=CI" alt="CI status" /></a>
+  <a href="https://github.com/Willxup/cpa-usage-keeper/pkgs/container/cpa-usage-keeper"><img src="https://img.shields.io/badge/Docker-GHCR-2496ED?style=flat-square&amp;logo=docker&amp;logoColor=white" alt="Docker image on GHCR" /></a>
+  <a href="https://github.com/Willxup/homebrew-cpa-usage-keeper"><img src="https://img.shields.io/badge/Homebrew-supported-FBB040?style=flat-square&amp;logo=homebrew&amp;logoColor=black" alt="Homebrew supported" /></a>
+  <a href="https://github.com/Willxup/cpa-usage-keeper/releases/latest"><img src="https://img.shields.io/badge/Linux-FCC624?style=flat-square&amp;logo=linux&amp;logoColor=black" alt="Linux supported" /></a>
+  <a href="https://github.com/Willxup/cpa-usage-keeper/releases/latest"><img src="https://img.shields.io/badge/macOS-A2AAAD?style=flat-square&amp;logo=apple&amp;logoColor=black" alt="macOS supported" /></a>
+  <a href="https://github.com/Willxup/cpa-usage-keeper/releases/latest"><img src="https://img.shields.io/badge/Windows-0078D4?style=flat-square&amp;logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTIgMy41IDExIDJ2OUgyem0xMC0xLjdMMjIgLjNWMTFIMTJ6TTIgMTJoOXY5TDIgMTkuNXptMTAgMGgxMHYxMC43bC0xMC0xLjV6Ii8+PC9zdmc%2B" alt="Windows supported" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/Willxup/cpa-usage-keeper?style=flat-square" alt="MIT License" /></a>
+</p>
 
 CPA Usage Keeper is a standalone CPA usage persistence and dashboard service.
 
 It relies on [CLIProxyAPI (CPA)](https://github.com/router-for-me/CLIProxyAPI) as the backend CPA data source and adds persistent storage and statistical analysis capabilities on top of CPA. The service consumes events from the CPA Redis usage queue into SQLite, periodically pulls CPA metadata, exposes aggregation APIs, and serves a built-in web dashboard for usage, pricing, request health, and model/API statistics.
 
-<p float="left">
-  <img src="https://images.bitskyline.com/i/2026/06/xwjnop.png" width="49%" />
-  <img src="https://images.bitskyline.com/i/2026/06/xwk25d.png" width="49%" />
+## Screenshots
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/screenshots/overview-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="./assets/screenshots/overview-light.png" />
+    <img src="./assets/screenshots/overview-light.png" alt="CPA Usage Keeper Overview" width="49%" />
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/screenshots/analysis-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="./assets/screenshots/analysis-light.png" />
+    <img src="./assets/screenshots/analysis-light.png" alt="CPA Usage Keeper Analysis" width="49%" />
+  </picture>
 </p>
-<p float="left">
-  <img src="https://images.bitskyline.com/i/2026/06/xw9jj4.png" width="49%" />
-  <img src="https://images.bitskyline.com/i/2026/06/xybv3z.png" width="49%" />
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/screenshots/auth-files-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="./assets/screenshots/auth-files-light.png" />
+    <img src="./assets/screenshots/auth-files-light.png" alt="CPA Usage Keeper Auth Files" width="49%" />
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/screenshots/ai-provider-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="./assets/screenshots/ai-provider-light.png" />
+    <img src="./assets/screenshots/ai-provider-light.png" alt="CPA Usage Keeper AI Provider" width="49%" />
+  </picture>
+</p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/screenshots/ranking-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="./assets/screenshots/ranking-light.png" />
+    <img src="./assets/screenshots/ranking-light.png" alt="CPA Usage Keeper Ranking" width="49%" />
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/screenshots/login-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="./assets/screenshots/login-light.png" />
+    <img src="./assets/screenshots/login-light.png" alt="CPA Usage Keeper Login" width="49%" />
+  </picture>
 </p>
 
 ## Features
 
-- Persist CPA usage data to SQLite
-- Dashboard for request volume, tokens, cost, cache usage, success rate, and request performance
-- Filter usage details by time range, model, API Key, source, and request result
-- Request Events for per-request details, filtering, pagination, export, and customizable display
-- Analysis page for usage trends, cost analysis, model/API Key/AI Provider composition, and hourly heatmaps
-- Standalone API Key usage page for querying usage by CPA API Key
-- Credentials page for Auth File and AI Provider usage, with quota lookup, refresh, inspection, and sorting
-- Provider quota window usage and quota display across supported providers
-- Maintain model prices for cost estimation and reporting
-- Automatically sync CPA Auth Files, API Keys, AI Providers, and other metadata changes
-- Optional password login protection, SQLite backups, Docker/Docker Compose, and systemd deployment
-- Embed the Keeper dashboard into CPAMC through the CPA plugin
+- Persist CPA usage data in SQLite, with optional scheduled backups
+- Track requests, tokens, cost, cache usage, success rate, RPM/TPM, and latency, with filters for time range, model, API Key, source, and result
+- Inspect and export request-level events with configurable table columns
+- Analyze usage trends, cost composition, model/API Key/AI Provider mix, hourly heatmaps, and latency diagnostics
+- Monitor Auth Files and AI Providers with usage metrics, health inspection, and quota refresh
+- Opt into community rankings by overall score, tokens, requests, cache rate, average TTFT/latency, or peak TPM/RPM
+- Open a read-only usage view scoped to an individual CPA API Key
+- Sync CPA Auth Files, API Keys, and AI Providers automatically, and maintain model pricing for cost estimates
+- Deploy with Docker/Docker Compose, Homebrew, binaries, or systemd, with optional password protection
+- Embed the Keeper dashboard in CPAMC through the CPA plugin
 
 ## Sponsors and Special Thanks
 

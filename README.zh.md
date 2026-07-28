@@ -6,37 +6,80 @@
   </picture>
 </p>
 
-# CPA Usage Keeper
+<p align="center">
+  <a href="./README.md">English</a> ｜ <a href="./README.zh.md"><strong>简体中文</strong></a>
+</p>
 
-[English README](./README.md)
+<h1 align="center">CPA Usage Keeper</h1>
+
+<p align="center">万千流转，皆有迹可循。</p>
+
+<p align="center">
+  <a href="https://github.com/Willxup/cpa-usage-keeper/releases/latest"><img src="https://img.shields.io/github/v/release/Willxup/cpa-usage-keeper?style=flat-square" alt="最新版本" /></a>
+  <a href="https://github.com/Willxup/cpa-usage-keeper/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Willxup/cpa-usage-keeper/ci.yml?branch=main&amp;style=flat-square&amp;label=CI" alt="CI 状态" /></a>
+  <a href="https://github.com/Willxup/cpa-usage-keeper/pkgs/container/cpa-usage-keeper"><img src="https://img.shields.io/badge/Docker-GHCR-2496ED?style=flat-square&amp;logo=docker&amp;logoColor=white" alt="GHCR Docker 镜像" /></a>
+  <a href="https://github.com/Willxup/homebrew-cpa-usage-keeper"><img src="https://img.shields.io/badge/Homebrew-supported-FBB040?style=flat-square&amp;logo=homebrew&amp;logoColor=black" alt="支持 Homebrew" /></a>
+  <a href="https://github.com/Willxup/cpa-usage-keeper/releases/latest"><img src="https://img.shields.io/badge/Linux-FCC624?style=flat-square&amp;logo=linux&amp;logoColor=black" alt="支持 Linux" /></a>
+  <a href="https://github.com/Willxup/cpa-usage-keeper/releases/latest"><img src="https://img.shields.io/badge/macOS-A2AAAD?style=flat-square&amp;logo=apple&amp;logoColor=black" alt="支持 macOS" /></a>
+  <a href="https://github.com/Willxup/cpa-usage-keeper/releases/latest"><img src="https://img.shields.io/badge/Windows-0078D4?style=flat-square&amp;logo=data:image/svg%2Bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTIgMy41IDExIDJ2OUgyem0xMC0xLjdMMjIgLjNWMTFIMTJ6TTIgMTJoOXY5TDIgMTkuNXptMTAgMGgxMHYxMC43bC0xMC0xLjV6Ii8+PC9zdmc%2B" alt="支持 Windows" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/Willxup/cpa-usage-keeper?style=flat-square" alt="MIT License" /></a>
+</p>
 
 `CPA Usage Keeper` 是一个独立的 CPA 用量持久化与可视化服务。
 
 它依赖 [CLIProxyAPI（CPA）](https://github.com/router-for-me/CLIProxyAPI) 作为后端 CPA 数据来源，目标是在 CPA 之上补充持久化存储与统计分析能力。服务会从 CPA Redis usage 队列消费事件并写入 SQLite，定时拉取 CPA metadata，暴露聚合 API，并提供内置 Web Dashboard 用于查看 usage、pricing、request health 和 model/API 维度的统计信息。
 
-<p float="left">
-  <img src="https://images.bitskyline.com/i/2026/06/xwjnop.png" width="49%" />
-  <img src="https://images.bitskyline.com/i/2026/06/xwk25d.png" width="49%" />
+## 界面预览
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/screenshots/overview-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="./assets/screenshots/overview-light.png" />
+    <img src="./assets/screenshots/overview-light.png" alt="CPA Usage Keeper 总览" width="49%" />
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/screenshots/analysis-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="./assets/screenshots/analysis-light.png" />
+    <img src="./assets/screenshots/analysis-light.png" alt="CPA Usage Keeper 分析" width="49%" />
+  </picture>
 </p>
-<p float="left">
-  <img src="https://images.bitskyline.com/i/2026/06/xw9jj4.png" width="49%" />
-  <img src="https://images.bitskyline.com/i/2026/06/xybv3z.png" width="49%" />
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/screenshots/auth-files-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="./assets/screenshots/auth-files-light.png" />
+    <img src="./assets/screenshots/auth-files-light.png" alt="CPA Usage Keeper Auth Files" width="49%" />
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/screenshots/ai-provider-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="./assets/screenshots/ai-provider-light.png" />
+    <img src="./assets/screenshots/ai-provider-light.png" alt="CPA Usage Keeper AI Provider" width="49%" />
+  </picture>
+</p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/screenshots/ranking-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="./assets/screenshots/ranking-light.png" />
+    <img src="./assets/screenshots/ranking-light.png" alt="CPA Usage Keeper 排名" width="49%" />
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/screenshots/login-dark.png" />
+    <source media="(prefers-color-scheme: light)" srcset="./assets/screenshots/login-light.png" />
+    <img src="./assets/screenshots/login-light.png" alt="CPA Usage Keeper 登录页" width="49%" />
+  </picture>
 </p>
 
 ## 功能特性
 
-- 持久保存 CPA usage 数据到 SQLite
-- Dashboard 查看请求量、Token、成本、缓存、成功率和请求性能
-- 支持按时间范围、模型、API Key、来源和请求结果筛选用量明细
-- Request Events 提供请求级明细查看、筛选、分页、导出和自定义显示
-- 分析页面提供用量趋势、成本分析、模型/API Key/AI Provider 构成和时段热力图
-- API Key 独立查询页，可按 CPA API Key 查看专属用量
-- 凭证页面展示 Auth File 与 AI Provider 使用情况，支持限额查询、刷新、巡检和排序
-- 支持多 Provider quota 窗口用量与限额展示
-- 可维护模型价格，用于成本估算和统计展示
-- 自动同步 CPA Auth Files、API Keys、AI Providers 等 metadata 变化
-- 可选密码登录保护、SQLite 备份、Docker/Docker Compose 和 systemd 部署
-- 可通过 CPA 插件将 Keeper Dashboard 内嵌到 CPAMC 中使用
+- 将 CPA 用量持久保存到 SQLite，并支持可选的定时备份
+- 统计请求量、Token、成本、缓存、成功率、RPM/TPM 和延迟，并可按时间、模型、API Key、来源及结果筛选
+- 查看和导出请求级事件，并自定义表格列
+- 分析用量趋势、成本构成、模型/API Key/AI Provider 占比、时段热力图和延迟诊断
+- 监控 Auth Files 与 AI Providers 的用量、健康状态和限额，支持健康巡检与限额刷新
+- 可选择加入社区排名，按综合得分、Token、请求量、缓存率、平均 TTFT/延迟或峰值 TPM/RPM 对比表现
+- 为单个 CPA API Key 提供独立的只读用量视图
+- 自动同步 CPA Auth Files、API Keys 和 AI Providers，并维护模型价格用于成本估算
+- 支持 Docker/Docker Compose、Homebrew、二进制和 systemd 部署，并可启用密码保护
+- 通过 CPA 插件将 Keeper Dashboard 嵌入 CPAMC
 
 ## 赞助与特别感谢
 
