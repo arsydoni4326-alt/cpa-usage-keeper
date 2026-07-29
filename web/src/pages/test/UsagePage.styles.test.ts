@@ -1294,6 +1294,17 @@ describe('UsagePage toolbar styles', () => {
       expect(block).toMatch(/renderCell:[\s\S]*<td[^>]*styles\.requestEventsNoWrapCell/)
     })
 
+    const clientMetadataRenderer = requestEventsSource.slice(
+      requestEventsSource.indexOf('const renderClientMetadataCell'),
+      requestEventsSource.indexOf('\n  const modelOptions'),
+    )
+    expect(clientMetadataRenderer).toMatch(/<td[\s\S]*styles\.requestEventsNoWrapCell/)
+    ;['client_ip', 'x_forwarded_for', 'user_agent'].forEach((columnId) => {
+      const block = requestEventColumnDefinitionBlock(columnId)
+      expect(block).toMatch(/header:\s*<th[^>]*styles\.requestEventsNoWrapCell/)
+      expect(block).toContain('renderClientMetadataCell(')
+    })
+
     ;['api_key', 'source', 'model'].forEach((columnId) => {
       expect(requestEventColumnDefinitionBlock(columnId)).not.toContain('styles.requestEventsNoWrapCell')
     })
