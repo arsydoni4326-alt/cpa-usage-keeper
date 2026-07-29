@@ -1157,6 +1157,10 @@ describe('UsagePage toolbar styles', () => {
   })
 
   it('preserves the API Key sizing while removing the legacy range select and Custom UI', () => {
+    const apiKeySelectStart = usagePageSource.indexOf('<Select\n                        value={selectedApiKeyId}')
+    const apiKeySelectBlock = usagePageSource.slice(apiKeySelectStart, usagePageSource.indexOf('/>', apiKeySelectStart))
+
+    expect(apiKeySelectBlock).toContain('fullWidth={false}')
     expect(usagePageStyles).toMatch(/\.toolbarActionsRight\s*\{[\s\S]*?align-items:\s*center;/)
     expect(usagePageStyles).toMatch(/\.usageFilterBar\s*\{[\s\S]*?align-items:\s*center;/)
     expect(usagePageStyles).toMatch(/\.usageFilterBar\s*\{[\s\S]*?flex:\s*1 1 auto;/)
