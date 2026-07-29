@@ -104,6 +104,7 @@ const resolveScoreExplanation = (
 ): string => {
   if (metric !== 'overall' || board?.metric !== 'overall' || board.score_explanation?.version !== 2) return '';
   const texts = board.score_explanation.texts;
+  if (!texts) return '';
   const candidates = [
     texts[language as keyof typeof texts],
     texts.en,

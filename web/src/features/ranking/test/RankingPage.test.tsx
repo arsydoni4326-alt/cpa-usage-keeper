@@ -181,6 +181,11 @@ describe('RankingPage', () => {
     expect(container.querySelector('[data-ranking-score-explanation]')).toBeNull();
 
     await renderPage({
+      leaderboard: { ...leaderboard, score_explanation: { version: 2, texts: null } },
+    });
+    expect(container.querySelector('[data-ranking-score-explanation]')).toBeNull();
+
+    await renderPage({
       leaderboard: { ...leaderboard, score_explanation: { version: 1, texts: { en: 'Legacy score' } } },
     });
     expect(container.querySelector('[data-ranking-score-explanation]')).toBeNull();

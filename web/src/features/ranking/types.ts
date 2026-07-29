@@ -45,7 +45,7 @@ export interface RankingLeaderboardEntry {
 
 export interface RankingScoreExplanation {
   version: number;
-  texts: Partial<Record<'en' | 'zh' | 'zh-TW', string>>;
+  texts?: Partial<Record<'en' | 'zh' | 'zh-TW', string>> | null;
 }
 
 export interface RankingLeaderboardResponse {
