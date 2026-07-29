@@ -1930,7 +1930,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                         onChange={setSelectedApiKeyId}
                         className={styles.apiKeySelectControl}
                         ariaLabel={t('usage_stats.api_key_filter')}
-                        fullWidth
+                        fullWidth={false}
                         dropdownMinWidth={180}
                       />
                     </label>
