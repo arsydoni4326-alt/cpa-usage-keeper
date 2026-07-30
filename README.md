@@ -83,7 +83,7 @@ CPA Usage Keeper is a standalone persistence and analytics dashboard for [CLIPro
 
 - Thanks to [CLIProxyAPI (CPA)](https://github.com/router-for-me/CLIProxyAPI) for providing the upstream CPA foundation and data source this project builds on.
 - Thanks to [@YouShouldBetOnMe](https://github.com/YouShouldBetOnMe) for supporting CPA Usage Keeper.
-- Thanks to the CPA discussion group, the [NodeSeek forum](https://www.nodeseek.com/), and the [Linuxdo forum](https://linux.do/) for their discussions and feedback.
+- Thanks to the CPA discussion group for their discussions and feedback.
 
 ## Quick Start
 
