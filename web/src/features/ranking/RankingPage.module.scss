@@ -961,6 +961,11 @@
 @include mobile {
   @include ranking-header-stacked;
 
+  .participantColumn,
+  .participantCell {
+    min-width: 0;
+  }
+
   .profileModal :global(.modal-body) {
     max-height: min(60dvh, calc(100dvh - 180px));
     overflow: auto;
