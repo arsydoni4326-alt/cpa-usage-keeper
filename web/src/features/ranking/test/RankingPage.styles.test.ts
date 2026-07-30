@@ -205,6 +205,16 @@ describe('Ranking table context styles', () => {
     expect(mobile).toMatch(/\.profileActionName\s*\{[\s\S]*?display:\s*none;/);
   });
 
+  it('lets the sticky participant column follow the display name width on mobile', () => {
+    const mobileStart = styles.indexOf('@include mobile');
+    const mobileEnd = styles.indexOf('@media (prefers-reduced-motion', mobileStart);
+    const mobile = styles.slice(mobileStart, mobileEnd);
+
+    expect(mobile).toMatch(
+      /\.participantColumn,\s*\.participantCell\s*\{[\s\S]*?min-width:\s*0;/,
+    );
+  });
+
   it('gives loading, empty, and error content a tall centered viewport', () => {
     const state = rule('.loadingState');
     expect(rule('.page')).toContain('flex: 1 0 auto;');
