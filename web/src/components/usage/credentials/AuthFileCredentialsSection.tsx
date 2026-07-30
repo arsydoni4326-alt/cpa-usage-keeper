@@ -125,7 +125,12 @@ export function AuthFileCredentialsSection({ rows, total, page, totalPages, page
     hideOnMouseLeave: hideFilenameTooltipOnMouseLeave,
     showOnFocus: showFilenameTooltipOnFocus,
     hideOnBlur: hideFilenameTooltipOnBlur,
+    dismiss: dismissFilenameTooltip,
   } = usePortalTooltip()
+  const filenameTooltipRowsVersion = rows
+    .map((row) => `${row.identity.id || row.identity.identity}\u0000${row.identity.file_name?.trim() ?? ''}`)
+    .sort()
+    .join('\u0001')
   const expiryTooltipHoverTargetRef = useRef<CredentialExpiryTooltipTarget | null>(null)
   const expiryTooltipFocusTargetRef = useRef<CredentialExpiryTooltipTarget | null>(null)
   const showHealthMode = displayMode === 'health'
@@ -173,6 +178,11 @@ export function AuthFileCredentialsSection({ rows, total, page, totalPages, page
     }
     positionExpiryTooltip(expiryTooltipHoverTargetRef.current ?? expiryTooltipFocusTargetRef.current)
   }, [positionExpiryTooltip])
+
+  useEffect(() => {
+    // 当前页文件映射变化时清理旧事件快照；统计刷新但映射不变时保留正在查看的 tooltip。
+    dismissFilenameTooltip()
+  }, [dismissFilenameTooltip, filenameTooltipRowsVersion])
 
   useEffect(() => {
     window.addEventListener('resize', syncExpiryTooltip)

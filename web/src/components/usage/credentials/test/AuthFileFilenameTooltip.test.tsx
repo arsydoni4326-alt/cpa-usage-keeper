@@ -109,4 +109,36 @@ describe('AuthFileCredentialsSection filename tooltip', () => {
     await act(async () => root.unmount())
     container.remove()
   })
+
+  it('clears stale tooltip content only when the current filename mapping changes', async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const renderRows = async (rows: AuthFileCredentialRow[]) => {
+      await act(async () => root.render(<AuthFileCredentialsSection {...sectionProps} rows={rows} total={rows.length} />))
+    }
+
+    await renderRows([row(longFileName)])
+    let name = container.querySelector('[data-auth-file-name-tooltip-target]') as HTMLSpanElement
+    await act(async () => name.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })))
+    expect(document.body.querySelector('[role="tooltip"]')?.textContent).toBe(longFileName)
+
+    await renderRows([{ ...row(longFileName), totalRequests: 1 }])
+    expect(document.body.querySelector('[role="tooltip"]')?.textContent).toBe(longFileName)
+
+    const renamedFile = 'renamed-claude-account.json'
+    await renderRows([row(renamedFile)])
+    expect(document.body.querySelector('[role="tooltip"]')).toBeNull()
+
+    name = container.querySelector('[data-auth-file-name-tooltip-target]') as HTMLSpanElement
+    await act(async () => name.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })))
+    expect(document.body.querySelector('[role="tooltip"]')?.textContent).toBe(renamedFile)
+
+    await renderRows([])
+    expect(document.body.querySelector('[role="tooltip"]')).toBeNull()
+
+    await act(async () => root.unmount())
+    container.remove()
+  })
 })

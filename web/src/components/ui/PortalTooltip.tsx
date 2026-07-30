@@ -85,6 +85,12 @@ export function usePortalTooltip() {
     syncTooltip()
   }, [syncTooltip])
 
+  const dismiss = useCallback(() => {
+    hoverTargetRef.current = null
+    focusTargetRef.current = null
+    setTooltip(null)
+  }, [])
+
   useEffect(() => {
     const repositionTooltip = () => {
       if (hoverTargetRef.current || focusTargetRef.current) {
@@ -105,6 +111,7 @@ export function usePortalTooltip() {
     hideOnMouseLeave,
     showOnFocus,
     hideOnBlur,
+    dismiss,
   }
 }
 
