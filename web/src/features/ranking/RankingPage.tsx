@@ -594,6 +594,7 @@ function LeaderboardCard({
   const podium = rows.slice(0, 3);
   const tableRows = rows;
   const scoreExplanation = resolveScoreExplanation(board, metric, language);
+  const hasRankingProfile = status?.status === 'active' || status?.status === 'paused';
   return (
     <article className={`card ${styles.leaderboardCard}`.trim()} aria-busy={loading}>
       <header className={styles.leaderboardHeader}>
@@ -644,12 +645,13 @@ function LeaderboardCard({
           data-ranking-profile-action-shell
         >
           <MainActionButton
-            shellClassName={`${styles.profileActionShell} ${status?.status === 'active' || status?.status === 'paused' ? styles.profileActionShellActive : ''}`.trim()}
+            shellClassName={`${styles.profileActionShell} ${hasRankingProfile ? styles.profileActionShellActive : ''}`.trim()}
             onClick={onOpenProfile}
             disabled={statusLoading && !status}
+            aria-label={hasRankingProfile ? t('ranking.profile_action') : undefined}
             data-ranking-profile-action
           >
-            {status?.status === 'active' || status?.status === 'paused' ? (
+            {hasRankingProfile ? (
               <>
                 <RankingAvatar avatarID={status.avatar_id ?? 1} name={status.display_name ?? ''} className={styles.profileActionAvatar} decorative />
                 <span className={styles.profileActionName} data-ranking-profile-name>{status.display_name || t('ranking.profile_action')}</span>
