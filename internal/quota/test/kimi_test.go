@@ -104,6 +104,32 @@ func TestKimiProviderNormalizesNestedFiveHourAndWeeklyUsage(t *testing.T) {
 	}
 }
 
+func TestKimiProviderDerivesMissingUsedFromLimitAndRemaining(t *testing.T) {
+	// Kimi 可能省略 used；字段仍在原始 JSON 时应由 limit 与 remaining 推导已用额度。
+	body := json.RawMessage(`{"limits":[{"window":{"duration":300,"timeUnit":"TIME_UNIT_MINUTE"},"detail":{"limit":"100","remaining":"85","resetTime":"2026-07-24T12:59:25.127311Z"}}]}`)
+	caller := &recordingManagementCaller{responses: []*apicall.Response{{
+		StatusCode: 200,
+		BodyText:   string(body),
+		Body:       body,
+	}}}
+	provider := quota.NewKimiProvider(caller, quota.DefaultProviderConfigs().Kimi)
+
+	output, err := provider.Check(context.Background(), quota.ProviderInput{Identity: entities.UsageIdentity{Identity: "kimi-auth"}})
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	rows := quota.NormalizeQuotaRows(output)
+	if len(rows) != 1 {
+		t.Fatalf("expected one five-hour quota row, got %#v", rows)
+	}
+
+	fiveHour := rows[0]
+	assertFloatField(t, fiveHour.Used, 15, "five-hour derived used")
+	assertFloatField(t, fiveHour.Limit, 100, "five-hour limit")
+	assertFloatField(t, fiveHour.Remaining, 85, "five-hour remaining")
+	assertApproxFloatField(t, fiveHour.UsedPercent, 15, "five-hour usedPercent")
+}
+
 func assertApproxFloatField(t *testing.T, value *float64, expected float64, label string) {
 	t.Helper()
 	if value == nil || math.Abs(*value-expected) > 1e-9 {
