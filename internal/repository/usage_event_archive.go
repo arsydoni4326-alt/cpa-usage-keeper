@@ -12,7 +12,8 @@ import (
 	"gorm.io/gorm"
 )
 
-const usageEventArchiveBatchSize = 5000
+// 每个候选 ID 在单条 IN 查询中占一个绑定变量，复用 repository 的 SQLite 保守变量预算。
+const usageEventArchiveBatchSize = sqliteVariableLimit
 
 // ArchiveExpiredUsageEvents 分批把超过 hot 保留线且已完成派生聚合的事件原子移动到冷表。
 func ArchiveExpiredUsageEvents(ctx context.Context, db *gorm.DB, now time.Time) (dto.UsageEventArchiveResult, error) {
