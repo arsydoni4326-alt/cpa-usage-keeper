@@ -595,6 +595,11 @@ function LeaderboardCard({
   const tableRows = rows;
   const scoreExplanation = resolveScoreExplanation(board, metric, language);
   const hasRankingProfile = status?.status === 'active' || status?.status === 'paused';
+  const profileActionAriaLabel = hasRankingProfile && status.display_name
+    ? `${status.display_name} · ${t('ranking.profile_action')}`
+    : hasRankingProfile
+      ? t('ranking.profile_action')
+      : undefined;
   return (
     <article className={`card ${styles.leaderboardCard}`.trim()} aria-busy={loading}>
       <header className={styles.leaderboardHeader}>
@@ -648,7 +653,7 @@ function LeaderboardCard({
             shellClassName={`${styles.profileActionShell} ${hasRankingProfile ? styles.profileActionShellActive : ''}`.trim()}
             onClick={onOpenProfile}
             disabled={statusLoading && !status}
-            aria-label={hasRankingProfile ? t('ranking.profile_action') : undefined}
+            aria-label={profileActionAriaLabel}
             data-ranking-profile-action
           >
             {hasRankingProfile ? (

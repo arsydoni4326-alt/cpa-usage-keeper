@@ -232,7 +232,7 @@ describe('RankingPage', () => {
     await renderPage({ status: { status: 'active', display_name: 'Owner', avatar_id: 7 } });
 
     const profileAction = container.querySelector<HTMLButtonElement>('[data-ranking-profile-action]');
-    expect(profileAction?.getAttribute('aria-label')).toBe('ranking.profile_action');
+    expect(profileAction?.getAttribute('aria-label')).toBe('Owner · ranking.profile_action');
     expect(profileAction?.querySelector('[data-ranking-profile-name]')?.textContent).toBe('Owner');
   });
 
