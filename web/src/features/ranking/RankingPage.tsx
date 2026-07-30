@@ -7,7 +7,7 @@ import { MainActionButton } from '@/components/ui/MainActionButton';
 import { Modal } from '@/components/ui/Modal';
 import { RankingApiError } from './api';
 import { RankingAvatar } from './components/RankingAvatar';
-import { RankingToolbar } from './components/RankingToolbar';
+import { RankingMetricSelect, RankingToolbar } from './components/RankingToolbar';
 import { formatLeaderboardValue, formatOverallMetricValue } from './format';
 import { normalizeRankingDisplayName, RANKING_DISPLAY_NAME_MAX_LENGTH, type RankingProfileError } from './profile';
 import type {
@@ -18,6 +18,7 @@ import type {
   RankingMetric,
   RankingPeriod,
   RankingProfileRequest,
+  RankingScope,
   RankingStatusResponse,
 } from './types';
 import styles from './RankingPage.module.scss';
@@ -46,6 +47,7 @@ const PROFILE_ACTION_SUCCESS_KEYS: Record<ProfileAction, string> = {
 };
 
 export interface RankingPageProps {
+  scope: RankingScope;
   period: RankingPeriod;
   metric: RankingMetric;
   status: RankingStatusResponse | null;
@@ -320,6 +322,7 @@ export function RankingPage(props: RankingPageProps) {
         onOpenProfile={openProfileModal}
         onPeriodChange={props.onPeriodChange}
         onMetricChange={props.onMetricChange}
+        scope={props.scope}
         t={t}
         language={i18n.language}
       />
@@ -548,6 +551,7 @@ function ProfileIdentity({ status }: { status: RankingStatusResponse }) {
 }
 
 interface LeaderboardCardProps {
+  scope: RankingScope;
   period: RankingPeriod;
   metric: RankingMetric;
   metadata: RankingMetadataResponse | null;
@@ -569,6 +573,7 @@ interface LeaderboardCardProps {
 }
 
 function LeaderboardCard({
+  scope,
   period,
   metric,
   metadata,
@@ -605,30 +610,45 @@ function LeaderboardCard({
       <header className={styles.leaderboardHeader}>
         <div className={styles.leaderboardTitle} data-ranking-header-title>
           <div className="keeper-card-title-track">
-            <h2 className="keeper-card-title">{t(`ranking.metric_${metric}`)}</h2>
+            <div
+              className={`${styles.metricTitleHeading} keeper-card-title`}
+              role="heading"
+              aria-level={2}
+              data-ranking-metric-title
+            >
+              <RankingMetricSelect metric={metric} onMetricChange={onMetricChange} />
+            </div>
             {scoreExplanation ? (
-              <button
-                type="button"
-                className={`${styles.profilePrivacyHint} ${styles.scoreExplanationHint} ${scoreExplanationOpen ? styles.profilePrivacyHintOpen : ''}`.trim()}
-                aria-label={t('ranking.score_explanation_label')}
-                aria-describedby={scoreExplanationID}
-                aria-controls={scoreExplanationID}
-                aria-expanded={scoreExplanationOpen}
-                onClick={() => setScoreExplanationOpen((open) => !open)}
-                onBlur={() => setScoreExplanationOpen(false)}
-                data-ranking-score-explanation
-              >
-                ?
-                <span
-                  id={scoreExplanationID}
-                  className={styles.profilePrivacyTooltip}
-                  role="tooltip"
-                  data-ranking-score-explanation-tooltip
+              <span className={styles.scoreExplanationSlot} data-ranking-score-explanation-slot>
+                <button
+                  type="button"
+                  className={`${styles.profilePrivacyHint} ${styles.scoreExplanationHint} ${scoreExplanationOpen ? styles.profilePrivacyHintOpen : ''}`.trim()}
+                  aria-label={t('ranking.score_explanation_label')}
+                  aria-describedby={scoreExplanationID}
+                  aria-controls={scoreExplanationID}
+                  aria-expanded={scoreExplanationOpen}
+                  onClick={() => setScoreExplanationOpen((open) => !open)}
+                  onBlur={() => setScoreExplanationOpen(false)}
+                  data-ranking-score-explanation
                 >
-                  {scoreExplanation}
-                </span>
-              </button>
+                  ?
+                  <span
+                    id={scoreExplanationID}
+                    className={styles.profilePrivacyTooltip}
+                    role="tooltip"
+                    data-ranking-score-explanation-tooltip
+                  >
+                    {scoreExplanation}
+                  </span>
+                </button>
+              </span>
             ) : null}
+            <div className={styles.leaderboardHeaderToolbar} data-ranking-header-toolbar>
+              <RankingToolbar
+                period={period}
+                onPeriodChange={onPeriodChange}
+              />
+            </div>
           </div>
           {board && (
             <div className={styles.boardMeta}>
@@ -637,39 +657,33 @@ function LeaderboardCard({
             </div>
           )}
         </div>
-        <div className={styles.leaderboardHeaderToolbar} data-ranking-header-toolbar>
-          <RankingToolbar
-            period={period}
-            metric={metric}
-            onPeriodChange={onPeriodChange}
-            onMetricChange={onMetricChange}
-          />
-        </div>
-        <div
-          className={styles.leaderboardHeaderActions}
-          data-ranking-profile-action-shell
-        >
-          <MainActionButton
-            shellClassName={`${styles.profileActionShell} ${hasRankingProfile ? styles.profileActionShellActive : ''}`.trim()}
-            onClick={onOpenProfile}
-            disabled={statusLoading && !status}
-            aria-label={profileActionAriaLabel}
-            data-ranking-profile-action
+        {scope === 'community' ? (
+          <div
+            className={styles.leaderboardHeaderActions}
+            data-ranking-profile-action-shell
           >
-            {hasRankingProfile ? (
-              <>
-                <RankingAvatar avatarID={status.avatar_id ?? 1} name={status.display_name ?? ''} className={styles.profileActionAvatar} decorative />
-                <span className={styles.profileActionName} data-ranking-profile-name>{status.display_name || t('ranking.profile_action')}</span>
-              </>
-            ) : status?.status === 'joining'
-              ? t('ranking.join_retry')
-              : status?.status === 'deleted'
-                ? t('ranking.status_deleted')
-                : status?.status === 'disabled'
-                  ? t('ranking.join')
-                  : t('ranking.profile_action')}
-          </MainActionButton>
-        </div>
+            <MainActionButton
+              shellClassName={`${styles.profileActionShell} ${hasRankingProfile ? styles.profileActionShellActive : ''}`.trim()}
+              onClick={onOpenProfile}
+              disabled={statusLoading && !status}
+              aria-label={profileActionAriaLabel}
+              data-ranking-profile-action
+            >
+              {hasRankingProfile ? (
+                <>
+                  <RankingAvatar avatarID={status.avatar_id ?? 1} name={status.display_name ?? ''} className={styles.profileActionAvatar} decorative />
+                  <span className={styles.profileActionName} data-ranking-profile-name>{status.display_name || t('ranking.profile_action')}</span>
+                </>
+              ) : status?.status === 'joining'
+                ? t('ranking.join_retry')
+                : status?.status === 'deleted'
+                  ? t('ranking.status_deleted')
+                  : status?.status === 'disabled'
+                    ? t('ranking.join')
+                    : t('ranking.profile_action')}
+            </MainActionButton>
+          </div>
+        ) : null}
       </header>
       {metadataError && board ? (
         <div className={styles.metadataWarning} role="alert" data-ranking-metadata-warning>
@@ -704,7 +718,9 @@ function LeaderboardCard({
                 <thead>
                   <tr>
                     <th className={styles.rankColumn} data-ranking-rank-column>{t('ranking.rank')}</th>
-                    <th className={styles.participantColumn} data-ranking-participant-column>{t('ranking.participant')}</th>
+                    <th className={styles.participantColumn} data-ranking-participant-column>
+                      {t(scope === 'local' ? 'ranking.api_key' : 'ranking.participant')}
+                    </th>
                     {metric === 'overall' ? (
                       <>
                         <th className={styles.numberCell}>{t('ranking.score')}</th>

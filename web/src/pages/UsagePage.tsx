@@ -45,8 +45,11 @@ import type { Theme } from '@/types';
 import { BrandLink } from '@/components/BrandLink';
 import { isCPAMCEmbed } from '@/embed/cpamcEmbed';
 import { RankingPage } from '@/features/ranking/RankingPage';
+import { RankingScopeSwitch } from '@/features/ranking/components/RankingScopeSwitch';
 import { useRankingData } from '@/features/ranking/hooks/useRankingData';
 import { resolveRankingPreviewAPI } from '@/features/ranking/previewMock';
+import { loadRankingScope, persistRankingScope } from '@/features/ranking/scope';
+import type { RankingScope } from '@/features/ranking/types';
 import styles from './UsagePage.module.scss';
 
 const TIME_RANGE_STORAGE_KEY = 'cli-proxy-usage-time-range-v1';
@@ -833,6 +836,11 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     const loadedTab = loadUsageTab();
     return isEmbeddedInCPAMC && loadedTab === 'ranking' ? DEFAULT_USAGE_TAB : loadedTab;
   });
+  const [rankingScope, setRankingScope] = useState<RankingScope>(loadRankingScope);
+  const handleRankingScopeChange = useCallback((scope: RankingScope) => {
+    setRankingScope(scope);
+    persistRankingScope(scope);
+  }, []);
   const [loadedTimeRange] = useState(loadTimeRange);
   const pendingLegacyCustomRangeRef = useRef(loadedTimeRange.pendingLegacyCustomRange);
   const [timeRangeState, setTimeRangeState] = useState<StoredUsageRangeState>(loadedTimeRange.state);
@@ -1001,11 +1009,12 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     showTopNotice('error', t('ranking.refresh_failed'));
   }, [showTopNotice, t]);
   const rankingData = useRankingData({
-    enabled: activeTab === 'ranking' && !isEmbeddedInCPAMC,
+    enabled: activeTab === 'ranking' && !isEmbeddedInCPAMC && rankingScope === 'community',
     onAuthRequired,
     onBackgroundRefreshError: handleRankingBackgroundRefreshError,
     api: RANKING_PREVIEW_API,
   });
+  const displayedRankingLeaderboard = rankingScope === 'community' ? rankingData.leaderboard : null;
   const refreshRanking = rankingData.refreshRanking;
   const credentialsData = useCredentialsTabData({
     enabledAuthFiles: credentialSectionVisibility.showAuthFiles && pageVisible,
@@ -1815,6 +1824,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     : '';
   // 只有需要时间范围的 tab 才渲染 Range 控件，避免 Credentials/Pricing 产生空白占位。
   const showRangeControls = shouldShowRangeControls(activeTab);
+  const showRankingScopeControl = activeTab === 'ranking' && !isEmbeddedInCPAMC;
   const {
     requestsSparkline,
     tokensSparkline,
@@ -1973,7 +1983,8 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
               </div>
 
               <div className={`${styles.toolbarActionsRight} ${!isEmbeddedInCPAMC ? styles.toolbarActionsRightAnimated : ''}`.trim()}>
-                {(!isEmbeddedInCPAMC || showRangeControls) && (
+                <div className={isEmbeddedInCPAMC ? styles.toolbarContextSlotImmediate : styles.toolbarContextSlot}>
+                  {(!isEmbeddedInCPAMC || showRangeControls) && (
                   /* 普通模式保留筛选区节点以执行过渡；CPAMC 继续按需挂载，维持既有布局。 */
                   <div
                     className={`${styles.usageFilterTransition} ${isEmbeddedInCPAMC ? styles.usageFilterTransitionImmediate : ''} ${showRangeControls ? styles.usageFilterTransitionOpen : ''}`.trim()}
@@ -2006,7 +2017,19 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                       </div>
                     </div>
                   </div>
-                )}
+                  )}
+                  {!isEmbeddedInCPAMC && (
+                    <div
+                      className={`${styles.rankingScopeTransition} ${showRankingScopeControl ? styles.rankingScopeTransitionOpen : ''}`.trim()}
+                      aria-hidden={!showRankingScopeControl}
+                      inert={!showRankingScopeControl}
+                    >
+                      <div className={styles.rankingScopeTransitionInner}>
+                        <RankingScopeSwitch value={rankingScope} onChange={handleRankingScopeChange} />
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <div className={styles.usageRefreshSlot}>
                   <div className={styles.usageFilterActions}>
                     <MainActionButton
@@ -2092,11 +2115,12 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
 
             {activeTab === 'ranking' && (
               <RankingPage
+                scope={rankingScope}
                 period={rankingData.period}
                 metric={rankingData.metric}
                 status={rankingData.status}
                 metadata={rankingData.metadata}
-                leaderboard={rankingData.leaderboard}
+                leaderboard={displayedRankingLeaderboard}
                 statusLoading={rankingData.statusLoading}
                 metadataLoading={rankingData.metadataLoading}
                 leaderboardLoading={rankingData.leaderboardLoading}
