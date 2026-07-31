@@ -215,6 +215,39 @@ describe('RankingPage', () => {
     expect(container.querySelector('[data-ranking-score-explanation]')).toBeNull();
   });
 
+  it('keeps the overall help and period controls stable while another period loads', async () => {
+    await renderPage();
+
+    const helpSlot = container.querySelector('[data-ranking-score-explanation-slot]');
+    const periodControl = container.querySelector('[data-ranking-period]');
+    expect(helpSlot).not.toBeNull();
+    expect(periodControl).not.toBeNull();
+
+    await renderPage({
+      period: 'yesterday',
+      leaderboard,
+      leaderboardLoading: true,
+    });
+    expect(container.querySelector('[data-ranking-score-explanation-slot]')).toBe(helpSlot);
+    expect(container.querySelector('[data-ranking-period]')).toBe(periodControl);
+
+    await renderPage({
+      period: 'yesterday',
+      leaderboard: { ...leaderboard, period: 'yesterday', period_key: '2026-07-23' },
+      leaderboardLoading: false,
+    });
+    expect(container.querySelector('[data-ranking-score-explanation-slot]')).toBe(helpSlot);
+    expect(container.querySelector('[data-ranking-period]')).toBe(periodControl);
+
+    await renderPage({
+      period: 'yesterday',
+      metric: 'total_tokens',
+      leaderboard: null,
+      leaderboardLoading: true,
+    });
+    expect(container.querySelector('[data-ranking-score-explanation-slot]')).toBeNull();
+  });
+
   it('changes ranking metrics from the title-shaped select', async () => {
     const onMetricChange = vi.fn();
     await renderPage({ onMetricChange });

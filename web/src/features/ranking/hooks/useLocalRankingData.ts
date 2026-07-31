@@ -53,10 +53,12 @@ export function useLocalRankingData({
     controllerRef.current = controller;
     const generation = ++generationRef.current;
     const key = leaderboardKey(nextPeriod, nextMetric);
+    const cachedBoard = cacheRef.current.get(key) ?? null;
     if (!silent) {
       setLoading(true);
       setError(null);
-      setLeaderboard(cacheRef.current.get(key) ?? null);
+      // 目标缓存缺失时保留上一份响应；页面会按 period/metric 过滤内容，但标题栏无需闪动。
+      setLeaderboard((current) => cachedBoard ?? current);
     }
     try {
       const board = await api.leaderboard(nextPeriod, nextMetric, controller.signal);
@@ -69,9 +71,8 @@ export function useLocalRankingData({
     } catch (loadError) {
       if (!isAbortError(loadError) && generationRef.current === generation) {
         if (loadError instanceof RankingApiError && loadError.status === 401) onAuthRequired?.();
-        const cached = cacheRef.current.get(key) ?? null;
-        if (cached) {
-          setLeaderboard({ ...cached, stale: true });
+        if (cachedBoard) {
+          setLeaderboard({ ...cachedBoard, stale: true });
           setError(null);
           onBackgroundRefreshError?.(loadError);
         } else {

@@ -129,6 +129,8 @@ export function RankingPage(props: RankingPageProps) {
   const currentBoard = props.leaderboard?.period === props.period && props.leaderboard.metric === props.metric
     ? props.leaderboard
     : null;
+  // 榜单内容只接受当前选择；同指标的上一周期响应可暂时维持综合分说明，稳定标题栏布局。
+  const scoreExplanationBoard = props.leaderboard?.metric === props.metric ? props.leaderboard : null;
   const periodMetadata = props.metadata?.periods.find((item) => item.period === props.period);
 
   const handleRequestJoin = () => {
@@ -313,6 +315,7 @@ export function RankingPage(props: RankingPageProps) {
         metadataError={props.metadataError}
         periodOnline={periodMetadata?.online}
         board={currentBoard}
+        scoreExplanationBoard={scoreExplanationBoard}
         loading={props.leaderboardLoading}
         error={props.leaderboardError}
         onRetryMetadata={props.onRetryMetadata}
@@ -559,6 +562,7 @@ interface LeaderboardCardProps {
   metadataError: unknown;
   periodOnline?: boolean;
   board: RankingLeaderboardResponse | null;
+  scoreExplanationBoard: RankingLeaderboardResponse | null;
   loading: boolean;
   error: unknown;
   onRetryMetadata: AsyncAction;
@@ -581,6 +585,7 @@ function LeaderboardCard({
   metadataError,
   periodOnline,
   board,
+  scoreExplanationBoard,
   loading,
   error,
   onRetryMetadata,
@@ -598,7 +603,7 @@ function LeaderboardCard({
   const rows = useMemo(() => board?.entries.slice(0, 100) ?? [], [board]);
   const podium = rows.slice(0, 3);
   const tableRows = rows;
-  const scoreExplanation = resolveScoreExplanation(board, metric, language);
+  const scoreExplanation = resolveScoreExplanation(scoreExplanationBoard, metric, language);
   const hasRankingProfile = status?.status === 'active' || status?.status === 'paused';
   const profileActionAriaLabel = hasRankingProfile && status.display_name
     ? `${status.display_name} · ${t('ranking.profile_action')}`

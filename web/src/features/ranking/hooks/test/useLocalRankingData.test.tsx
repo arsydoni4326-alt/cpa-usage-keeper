@@ -21,6 +21,14 @@ const board = (period: RankingPeriod, metric: RankingMetric, value = 93): Rankin
   entries: [{ rank: 1, participant_id: '1', display_name: 'Primary', avatar_id: 1, value }],
 });
 
+const deferred = <T,>() => {
+  let resolve: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+};
+
 let latest: ReturnType<typeof useLocalRankingData> | null = null;
 
 function Harness({ enabled, period, metric, api }: {
@@ -90,6 +98,25 @@ describe('useLocalRankingData', () => {
     await act(async () => vi.advanceTimersByTimeAsync(LOCAL_RANKING_POLL_INTERVAL_MS));
     expect(calls).toBe(2);
     expect(latest?.leaderboard?.entries[0]?.value).toBe(92);
+  });
+
+  it('retains the previous response while another selection is loading', async () => {
+    const pendingYesterday = deferred<RankingLeaderboardResponse>();
+    const api: LocalRankingDataAPI = {
+      leaderboard: async (period, metric) => (
+        period === 'yesterday' ? pendingYesterday.promise : board(period, metric)
+      ),
+    };
+
+    await renderHook(true, 'today', 'overall', api);
+    await renderHook(true, 'yesterday', 'overall', api);
+
+    expect(latest?.leaderboardLoading).toBe(true);
+    expect(latest?.leaderboard).toMatchObject({ period: 'today', metric: 'overall' });
+
+    await act(async () => pendingYesterday.resolve(board('yesterday', 'overall', 88)));
+    expect(latest?.leaderboardLoading).toBe(false);
+    expect(latest?.leaderboard).toMatchObject({ period: 'yesterday', metric: 'overall' });
   });
 
   it('refreshes only the local leaderboard', async () => {
