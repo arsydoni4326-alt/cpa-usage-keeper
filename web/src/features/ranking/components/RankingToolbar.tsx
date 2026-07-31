@@ -41,6 +41,7 @@ export function RankingToolbar({
     })),
     [t],
   );
+  const currentPeriodLabel = periodOptions.find((option) => option.value === period)?.triggerLabel ?? period;
 
   return (
     <div className={styles.toolbar} data-ranking-toolbar>
@@ -50,7 +51,7 @@ export function RankingToolbar({
           options={periodOptions}
           onChange={(value) => onPeriodChange(value as RankingPeriod)}
           className={styles.periodSelect}
-          ariaLabel={t('ranking.period_label')}
+          ariaLabel={currentPeriodLabel}
           dropdownMinWidth={180}
           fullWidth={false}
         />
@@ -74,6 +75,7 @@ export function RankingMetricSelect({ metric, onMetricChange }: RankingMetricSel
     })),
     [t],
   );
+  const currentMetricLabel = metricOptions.find((option) => option.value === metric)?.triggerLabel ?? metric;
 
   return (
     <Select
@@ -81,7 +83,7 @@ export function RankingMetricSelect({ metric, onMetricChange }: RankingMetricSel
       options={metricOptions}
       onChange={(value) => onMetricChange(value as RankingMetric)}
       className={styles.titleMetricSelect}
-      ariaLabel={t('ranking.metric_label')}
+      ariaLabel={`${t('ranking.metric_label')}: ${currentMetricLabel}`}
       dropdownMinWidth={260}
       fullWidth={false}
       id="ranking-metric-title"

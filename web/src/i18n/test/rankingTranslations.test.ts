@@ -50,6 +50,8 @@ const rankingKeys = [
   'ranking.join_confirm_title',
   'ranking.exit_confirm_title',
   'ranking.empty_title',
+  'ranking.local_empty_title',
+  'ranking.local_empty_description',
   'ranking.refresh_failed',
   'ranking.error_rate_limited_seconds',
   'ranking.error_rate_limited_minutes',

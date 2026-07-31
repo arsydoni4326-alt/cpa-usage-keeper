@@ -165,11 +165,17 @@ describe('RankingPage', () => {
     await renderPage({
       scope: 'local',
       status: { status: 'active', display_name: 'Owner', avatar_id: 7 },
+      leaderboard: {
+        ...leaderboard,
+        entries: leaderboard.entries.map((entry) => ({ ...entry, value: Math.round(entry.value / 100) })),
+      },
     });
 
     expect(container.querySelector('[data-ranking-profile-action-shell]')).toBeNull();
     expect(container.querySelector('[data-ranking-profile-action]')).toBeNull();
     expect(container.querySelector('[data-ranking-participant-column]')?.textContent).toBe('ranking.api_key');
+    expect(container.textContent).toContain('93 PTS');
+    expect(container.textContent).not.toContain('93.25 PTS');
   });
 
   it('shows the center explanation beside only a V2 overall title', async () => {

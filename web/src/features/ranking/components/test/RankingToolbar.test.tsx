@@ -3,7 +3,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RankingToolbar } from '../RankingToolbar';
+import { RankingMetricSelect, RankingToolbar } from '../RankingToolbar';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -48,11 +48,21 @@ describe('RankingToolbar', () => {
     expect(container.querySelector('[data-ranking-metric]')).toBeNull();
     const periodTrigger = container.querySelector<HTMLButtonElement>('[data-ranking-period] button');
     expect(periodTrigger?.textContent).toContain('ranking.period_trigger_today');
+    expect(periodTrigger?.getAttribute('aria-label')).toBe('ranking.period_trigger_today');
     act(() => periodTrigger?.click());
     const listbox = document.querySelector<HTMLElement>('[role="listbox"]');
     const yesterday = Array.from(listbox?.querySelectorAll('button') ?? [])
       .find((button) => button.textContent?.includes('ranking.period_yesterday'));
     act(() => (yesterday as HTMLButtonElement | undefined)?.click());
     expect(onPeriodChange).toHaveBeenCalledWith('yesterday');
+  });
+
+  it('includes the current metric in the collapsed select accessible name', () => {
+    act(() => root.render(
+      <RankingMetricSelect metric="overall" onMetricChange={vi.fn()} />,
+    ));
+
+    const metricTrigger = container.querySelector<HTMLButtonElement>('#ranking-metric-title');
+    expect(metricTrigger?.getAttribute('aria-label')).toBe('ranking.metric_label: ranking.metric_short_overall');
   });
 });

@@ -704,12 +704,15 @@ function LeaderboardCard({
       ) : error && !board ? (
         <ErrorState error={error} onRetry={onRetry} t={t} />
       ) : rows.length === 0 ? (
-        <EmptyState title={t('ranking.empty_title')} description={t('ranking.empty_description')} />
+        <EmptyState
+          title={t(scope === 'local' ? 'ranking.local_empty_title' : 'ranking.empty_title')}
+          description={t(scope === 'local' ? 'ranking.local_empty_description' : 'ranking.empty_description')}
+        />
       ) : (
         <div className={styles.leaderboardResults}>
           <div className={styles.podiumGrid} aria-label={`${t('ranking.rank')} 1–3`} data-ranking-podium>
             {podium.map((entry, index) => (
-              <PodiumCard key={entry.participant_id} entry={entry} position={index + 1} metric={metric} t={t} />
+              <PodiumCard key={entry.participant_id} entry={entry} position={index + 1} metric={metric} scope={scope} t={t} />
             ))}
           </div>
           {tableRows.length > 0 ? (
@@ -743,12 +746,12 @@ function LeaderboardCard({
                       </td>
                       {metric === 'overall' ? (
                         <>
-                          <td className={`${styles.numberCell} ${styles.scoreCell}`.trim()}>{formatLeaderboardValue(metric, entry)}</td>
+                          <td className={`${styles.numberCell} ${styles.scoreCell}`.trim()}>{formatLeaderboardValue(metric, entry, scope)}</td>
                           {OVERALL_METRICS.map((item) => (
                             <td key={item} className={styles.numberCell}>{formatOverallMetricValue(item, entry)}</td>
                           ))}
                         </>
-                      ) : <td className={`${styles.numberCell} ${styles.scoreCell}`.trim()}>{formatLeaderboardValue(metric, entry)}</td>}
+                      ) : <td className={`${styles.numberCell} ${styles.scoreCell}`.trim()}>{formatLeaderboardValue(metric, entry, scope)}</td>}
                     </tr>
                   ))}
                 </tbody>
@@ -761,13 +764,14 @@ function LeaderboardCard({
   );
 }
 
-function PodiumCard({ entry, position, metric, t }: {
+function PodiumCard({ entry, position, metric, scope, t }: {
   entry: RankingLeaderboardEntry;
   position: number;
   metric: RankingMetric;
+  scope: RankingScope;
   t: Translate;
 }) {
-  const value = formatLeaderboardValue(metric, entry);
+  const value = formatLeaderboardValue(metric, entry, scope);
   const valueSizeClass = value.length >= 11
     ? styles.podiumValueCompact
     : value.length >= 8

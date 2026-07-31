@@ -47,7 +47,8 @@ import { isCPAMCEmbed } from '@/embed/cpamcEmbed';
 import { RankingPage } from '@/features/ranking/RankingPage';
 import { RankingScopeSwitch } from '@/features/ranking/components/RankingScopeSwitch';
 import { useRankingData } from '@/features/ranking/hooks/useRankingData';
-import { resolveRankingPreviewAPI } from '@/features/ranking/previewMock';
+import { useLocalRankingData } from '@/features/ranking/hooks/useLocalRankingData';
+import { resolveLocalRankingPreviewAPI, resolveRankingPreviewAPI } from '@/features/ranking/previewMock';
 import { loadRankingScope, persistRankingScope } from '@/features/ranking/scope';
 import type { RankingScope } from '@/features/ranking/types';
 import styles from './UsagePage.module.scss';
@@ -65,6 +66,7 @@ const THEME_OPTIONS: ReadonlyArray<{ value: Theme; labelKey: string }> = [
 ];
 const USAGE_TAB_OPTIONS = ['overview', 'analysis', 'ranking', 'events', 'auth-files', 'ai-provider', 'settings'] as const;
 const RANKING_PREVIEW_API = resolveRankingPreviewAPI(import.meta.env.VITE_RANKING_PREVIEW_MOCK);
+const LOCAL_RANKING_PREVIEW_API = resolveLocalRankingPreviewAPI(import.meta.env.VITE_RANKING_PREVIEW_MOCK);
 type UsageTab = (typeof USAGE_TAB_OPTIONS)[number];
 type Translate = (key: string) => string;
 const USAGE_TAB_LABEL_KEYS: Record<UsageTab, string> = {
@@ -1014,8 +1016,23 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     onBackgroundRefreshError: handleRankingBackgroundRefreshError,
     api: RANKING_PREVIEW_API,
   });
-  const displayedRankingLeaderboard = rankingScope === 'community' ? rankingData.leaderboard : null;
-  const refreshRanking = rankingData.refreshRanking;
+  const localRankingData = useLocalRankingData({
+    enabled: activeTab === 'ranking' && !isEmbeddedInCPAMC && rankingScope === 'local',
+    period: rankingData.period,
+    metric: rankingData.metric,
+    onAuthRequired,
+    onBackgroundRefreshError: handleRankingBackgroundRefreshError,
+    api: LOCAL_RANKING_PREVIEW_API,
+  });
+  const displayedRankingLeaderboard = rankingScope === 'community'
+    ? rankingData.leaderboard
+    : localRankingData.leaderboard;
+  const refreshCommunityRanking = rankingData.refreshRanking;
+  const refreshLocalRanking = localRankingData.refreshLeaderboard;
+  const refreshRanking = useCallback(
+    () => rankingScope === 'community' ? refreshCommunityRanking() : refreshLocalRanking(),
+    [rankingScope, refreshCommunityRanking, refreshLocalRanking],
+  );
   const credentialsData = useCredentialsTabData({
     enabledAuthFiles: credentialSectionVisibility.showAuthFiles && pageVisible,
     enabledAiProviders: credentialSectionVisibility.showAiProvider && pageVisible,
@@ -2115,20 +2132,21 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
 
             {activeTab === 'ranking' && (
               <RankingPage
+                key={rankingScope}
                 scope={rankingScope}
                 period={rankingData.period}
                 metric={rankingData.metric}
-                status={rankingData.status}
-                metadata={rankingData.metadata}
+                status={rankingScope === 'community' ? rankingData.status : null}
+                metadata={rankingScope === 'community' ? rankingData.metadata : null}
                 leaderboard={displayedRankingLeaderboard}
-                statusLoading={rankingData.statusLoading}
-                metadataLoading={rankingData.metadataLoading}
-                leaderboardLoading={rankingData.leaderboardLoading}
-                statusError={rankingData.statusError}
-                metadataError={rankingData.metadataError}
-                leaderboardError={rankingData.leaderboardError}
-                action={rankingData.action}
-                actionError={rankingData.actionError}
+                statusLoading={rankingScope === 'community' && rankingData.statusLoading}
+                metadataLoading={rankingScope === 'community' && rankingData.metadataLoading}
+                leaderboardLoading={rankingScope === 'community' ? rankingData.leaderboardLoading : localRankingData.leaderboardLoading}
+                statusError={rankingScope === 'community' ? rankingData.statusError : null}
+                metadataError={rankingScope === 'community' ? rankingData.metadataError : null}
+                leaderboardError={rankingScope === 'community' ? rankingData.leaderboardError : localRankingData.leaderboardError}
+                action={rankingScope === 'community' ? rankingData.action : null}
+                actionError={rankingScope === 'community' ? rankingData.actionError : null}
                 onClearActionError={rankingData.clearActionError}
                 onJoin={rankingData.join}
                 onSync={rankingData.sync}
@@ -2137,7 +2155,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                 onExit={rankingData.exit}
                 onRetryStatus={rankingData.refreshStatus}
                 onRetryMetadata={rankingData.refreshMetadata}
-                onRetryLeaderboard={rankingData.refreshLeaderboard}
+                onRetryLeaderboard={rankingScope === 'community' ? rankingData.refreshLeaderboard : localRankingData.refreshLeaderboard}
                 onPeriodChange={rankingData.setPeriod}
                 onMetricChange={rankingData.setMetric}
               />

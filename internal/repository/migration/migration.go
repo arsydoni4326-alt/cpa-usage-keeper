@@ -71,6 +71,8 @@ const (
 	migrationUsageLatencyStats = "20260726_usage_latency_stats"
 	// migrationAddUsageEventClientMetadata 保存 CPA 新增的客户端请求元数据，历史行保持 NULL。
 	migrationAddUsageEventClientMetadata = "20260729_add_usage_event_client_metadata"
+	// migrationLocalRankingStats 创建固定四周期的本地排行累计。
+	migrationLocalRankingStats = "20260731_local_ranking_stats"
 )
 
 type schemaMigration struct {
@@ -184,6 +186,7 @@ func orderedMigrations() []databaseMigration {
 		// Latency 回填逐页提交，外层长事务会破坏断点续跑语义。
 		{version: migrationUsageLatencyStats, run: usageLatencyStatsMigration, disableTransaction: true},
 		{version: migrationAddUsageEventClientMetadata, run: addUsageEventClientMetadataMigration},
+		{version: migrationLocalRankingStats, run: localRankingStatsMigration},
 	}
 }
 

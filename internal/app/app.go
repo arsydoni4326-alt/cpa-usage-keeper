@@ -63,6 +63,7 @@ type App struct {
 	// UsageAggregation 是唯一串行调度三类派生聚合事务的后台 runner。
 	UsageAggregation  Runner
 	Ranking           Runner
+	LocalRanking      Runner
 	Maintenance       *StorageCleanupRunner
 	MetadataSync      *MetadataSyncRunner
 	QuotaService      QuotaRunner
@@ -158,6 +159,30 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 		// 缓存初始化失败会让 realtime/最近边界降级到 DB，但不影响核心写入和查询能力。
 		logrus.WithError(err).Error("recent usage event cache initialization failed; falling back to database queries")
 		recentUsageCache = nil
+	}
+	localRankingService, err := ranking.NewLocalRankingService(db, ranking.LocalRankingServiceOptions{})
+	if err != nil {
+		if recentUsageCache != nil {
+			recentUsageCache.Close()
+		}
+		if readDB != db {
+			_ = closeGormDB(readDB)
+		}
+		_ = closeGormDB(db)
+		_ = logCloser.Close()
+		return nil, err
+	}
+	localRankingRunner, err := ranking.NewLocalRankingRunner(localRankingService)
+	if err != nil {
+		if recentUsageCache != nil {
+			recentUsageCache.Close()
+		}
+		if readDB != db {
+			_ = closeGormDB(readDB)
+		}
+		_ = closeGormDB(db)
+		_ = logCloser.Close()
+		return nil, err
 	}
 	pricingSnapshot, err := repository.LoadPricingSnapshot(context.Background(), db)
 	if err != nil {
@@ -298,6 +323,7 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 		RedisProcess:      redisProcessRunner,
 		UsageAggregation:  usageAggregationRunner,
 		Ranking:           rankingRunner,
+		LocalRanking:      localRankingRunner,
 		Maintenance:       NewStorageCleanupRunner(syncService),
 		MetadataSync:      metadataSyncRunner,
 		QuotaService:      quotaService,
@@ -321,6 +347,7 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 				AuthFiles:     authFilesManagementService,
 				RequestLogs:   requestLogService,
 				Ranking:       rankingService,
+				LocalRanking:  localRankingService,
 				Status: api.StatusRouteConfig{
 					CPAPublicURL:               cfg.CPAPublicURL,
 					CPARequestLogAccessEnabled: cfg.CPARequestLogAccessEnabled,
@@ -452,6 +479,14 @@ func (a *App) Run() error {
 		a.startBackgroundTask(func() {
 			if err := a.MetadataSync.Run(ctx); err != nil {
 				logrus.Errorf("metadata sync stopped: %v", err)
+			}
+		})
+	}
+	if a.LocalRanking != nil {
+		a.startBackgroundTask(func() {
+			// Metadata 已先启动；Local runner 再等待首个五分钟周期，让 usage 与 Key 信息完成启动追赶。
+			if err := a.LocalRanking.Run(ctx); err != nil {
+				logrus.Errorf("local ranking aggregation stopped: %v", err)
 			}
 		})
 	}
