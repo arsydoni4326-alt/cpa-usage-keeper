@@ -25,6 +25,8 @@ import (
 
 const appBasePathPlaceholder = "__APP_BASE_PATH__"
 
+var loopbackTrustedProxyCIDRs = []string{"127.0.0.1/32", "::1/128"}
+
 type StatusProvider interface {
 	Status() poller.Status
 }
@@ -68,13 +70,17 @@ func NewRouter(
 	optionalProviders ...OptionalProviders,
 ) *gin.Engine {
 	router := gin.New()
-	_ = router.SetTrustedProxies(nil)
+	trustedProxyCIDRs := append([]string{}, loopbackTrustedProxyCIDRs...)
+	trustedProxyCIDRs = append(trustedProxyCIDRs, authConfig.TrustedProxyCIDRs...)
+	_ = router.SetTrustedProxies(trustedProxyCIDRs)
+	router.RemoteIPHeaders = []string{"X-Forwarded-For"}
 	router.Use(logging.NewGinRecovery())
 
 	appGroup := router.Group(basePath)
 	registerHealthRoutes(appGroup)
 
 	apiV1 := appGroup.Group("/api/v1")
+	apiV1.Use(unauthenticatedLoginRequestLimits(basePath))
 	apiV1.Use(requestIntentMiddleware())
 	if debugAPIRoutesEnabled() {
 		registerPingRoutes(apiV1)

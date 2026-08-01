@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -307,6 +306,7 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 		SessionTTL:           cfg.AuthSessionTTL,
 		BasePath:             cfg.AppBasePath,
 		FrameAncestorOrigins: frameAncestorOrigins(cfg),
+		TrustedProxyCIDRs:    cfg.TrustedProxyCIDRs,
 	}
 	authHandler := api.NewAuthHandler(authConfig, sessionManager)
 
@@ -508,11 +508,7 @@ func (a *App) Run() error {
 		})
 	}
 
-	server := &http.Server{
-		Addr:     a.Config.ListenAddress(),
-		Handler:  a.Router,
-		ErrorLog: logging.NewStandardLogger(logrus.ErrorLevel),
-	}
+	server := NewHTTPServer(*a.Config, a.Router)
 	if a.Config.TLSEnabled {
 		return server.ListenAndServeTLS(a.Config.TLSCertFile, a.Config.TLSKeyFile)
 	}
