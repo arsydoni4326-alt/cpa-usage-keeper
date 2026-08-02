@@ -47,7 +47,7 @@ const baseResponse: ProviderModelGraphResponse = {
 }
 
 describe('buildProviderModelGraph', () => {
-	it('creates provider nodes and shared model nodes with stable order', () => {
+	it('creates provider nodes and one model node per provider-model pair', () => {
 		const graph = buildProviderModelGraph(baseResponse)
 		const providerIds = graph.nodes.filter((n) => n.data.type === 'provider').map((n) => n.id)
 		const modelIds = graph.nodes.filter((n) => n.data.type === 'model').map((n) => n.id)
@@ -57,33 +57,47 @@ describe('buildProviderModelGraph', () => {
 			'provider:14 GPT-Load Grok',
 			'provider:09 ZenMux',
 		])
-		expect(modelIds).toEqual(['model:gpt-5.5', 'model:deepseek-v4-flash', 'model:grok-4.70-1M'])
-	})
-
-	it('merges duplicate provider entries and shared model labels', () => {
-		const graph = buildProviderModelGraph(baseResponse)
-		const modelNode = graph.nodes.find((n) => n.id === 'model:gpt-5.5')
-		expect(modelNode).toBeDefined()
-		expect(modelNode?.data.type).toBe('model')
-		if (modelNode?.data.type !== 'model') return
-		expect(modelNode.data.providerCount).toBe(3)
-		expect(modelNode.data.providers).toEqual([
-			'provider:08 Open Router',
-			'provider:14 GPT-Load Grok',
-			'provider:09 ZenMux',
+		expect(modelIds).toEqual([
+			'model:08 Open Router::gpt-5.5',
+			'model:08 Open Router::deepseek-v4-flash',
+			'model:14 GPT-Load Grok::gpt-5.5',
+			'model:14 GPT-Load Grok::grok-4.70-1M',
+			'model:09 ZenMux::gpt-5.5',
 		])
+		expect(graph.providerCount).toBe(3)
+		expect(graph.edgeCount).toBe(5)
 	})
 
-	it('creates one edge per unique provider-model connection and keeps disabled metadata', () => {
+	it('merges duplicate provider blocks and counts providers sharing a label', () => {
+		const graph = buildProviderModelGraph(baseResponse)
+		const shared = graph.nodes.filter(
+			(n) => n.data.type === 'model' && n.data.label === 'gpt-5.5',
+		)
+		expect(shared).toHaveLength(3)
+		for (const node of shared) {
+			if (node.data.type !== 'model') continue
+			expect(node.data.providerCount).toBe(3)
+		}
+
+		const unique = graph.nodes.find((n) => n.id === 'model:14 GPT-Load Grok::grok-4.70-1M')
+		expect(unique?.data.type).toBe('model')
+		if (unique?.data.type !== 'model') return
+		expect(unique.data.providerCount).toBe(1)
+		expect(unique.data.name).toBe('grok-4.70-1M')
+	})
+
+	it('creates one edge per provider-model pair and keeps disabled metadata', () => {
 		const graph = buildProviderModelGraph(baseResponse)
 		expect(graph.edges).toHaveLength(5)
 		expect(graph.edges[0]).toMatchObject({
-			id: 'provider:08 Open Router__model:gpt-5.5',
+			id: 'edge:provider:08 Open Router__gpt-5.5',
 			source: 'provider:08 Open Router',
-			target: 'model:gpt-5.5',
+			target: 'model:08 Open Router::gpt-5.5',
 		})
 		expect(graph.edges.at(-1)).toMatchObject({
-			id: 'provider:09 ZenMux__model:gpt-5.5',
+			id: 'edge:provider:09 ZenMux__gpt-5.5',
+			source: 'provider:09 ZenMux',
+			target: 'model:09 ZenMux::gpt-5.5',
 		})
 
 		const providerNode = graph.nodes.find((n) => n.id === 'provider:14 GPT-Load Grok')
@@ -93,16 +107,33 @@ describe('buildProviderModelGraph', () => {
 		expect(providerNode.data.modelCount).toBe(2)
 	})
 
-	it('assigns deterministic two-column layout positions', () => {
+	it('assigns deterministic per-provider band layout positions', () => {
 		const graph = buildProviderModelGraph(baseResponse)
 		const openRouter = graph.nodes.find((n) => n.id === 'provider:08 Open Router')
+		const grokProvider = graph.nodes.find((n) => n.id === 'provider:14 GPT-Load Grok')
 		const zenmux = graph.nodes.find((n) => n.id === 'provider:09 ZenMux')
-		const sharedModel = graph.nodes.find((n) => n.id === 'model:gpt-5.5')
-		const grok = graph.nodes.find((n) => n.id === 'model:grok-4.70-1M')
+		const firstModel = graph.nodes.find((n) => n.id === 'model:08 Open Router::gpt-5.5')
+		const secondModel = graph.nodes.find((n) => n.id === 'model:08 Open Router::deepseek-v4-flash')
+		const grokModel = graph.nodes.find((n) => n.id === 'model:14 GPT-Load Grok::gpt-5.5')
 
-		expect(openRouter?.position).toEqual({ x: 0, y: 0 })
-		expect(zenmux?.position).toEqual({ x: 0, y: 192 })
-		expect(sharedModel?.position).toEqual({ x: 420, y: 0 })
-		expect(grok?.position).toEqual({ x: 420, y: 104 })
+		// Band 1 '08 Open Router' (2 models): y=8, height=112, next band at 142.
+		expect(openRouter?.position).toEqual({ x: 0, y: 30 })
+		expect(firstModel?.position).toEqual({ x: 460, y: 8 })
+		expect(secondModel?.position).toEqual({ x: 460, y: 64 })
+		// Band 2 '14 GPT-Load Grok' (2 models): y=142, height=112, next band at 276.
+		expect(grokProvider?.position).toEqual({ x: 0, y: 164 })
+		expect(grokModel?.position).toEqual({ x: 460, y: 142 })
+		// Band 3 '09 ZenMux' (1 model): y=276, height clamped to min 64.
+		expect(zenmux?.position).toEqual({ x: 0, y: 296 })
+		expect(graph.totalHeight).toBe(340)
+	})
+
+	it('returns an empty graph when no providers have models', () => {
+		const graph = buildProviderModelGraph({ providers: [] })
+		expect(graph.nodes).toHaveLength(0)
+		expect(graph.edges).toHaveLength(0)
+		expect(graph.providerCount).toBe(0)
+		expect(graph.edgeCount).toBe(0)
+		expect(graph.totalHeight).toBe(0)
 	})
 })

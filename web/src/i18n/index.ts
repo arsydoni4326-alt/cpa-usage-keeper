@@ -186,8 +186,8 @@ const resources = {
         daily_average_range: 'Range {{days}} days',
         provider_model_graph: {
           title: 'Provider Model Graph',
-          subtitle: 'Map each configured provider to the models it serves. Node labels prefer the alias, falling back to the model name. Shared labels mean multiple providers serve the same model.',
-          summary: '{{providers}} providers · {{models}} models · {{shared}} shared labels',
+          subtitle: 'Map each configured provider to the models it serves. Node labels prefer the alias, falling back to the model name. Hover a model node to see which providers share it.',
+          summary: '{{providers}} providers · {{models}} provider-model links',
           loading: 'Loading provider relationships…',
           error: 'Failed to load provider relationships: {{message}}',
           empty: 'No provider model relationships available yet.',
@@ -915,8 +915,8 @@ const resources = {
         daily_average_range: '范围 {{days}} 天',
         provider_model_graph: {
           title: '提供商模型关系图',
-          subtitle: '展示 CPA 中配置的各提供商与其提供模型的关系。节点标签优先使用别名，无别名时回退为模型名；同一标签被多个提供商共享时会合并为共享模型节点。',
-          summary: '{{providers}} 个提供商 · {{models}} 个模型 · {{shared}} 个共享标签',
+          subtitle: '展示 CPA 中配置的各提供商与其提供模型的关系。节点标签优先使用别名，无别名时回退为模型名；悬浮模型节点可查看共享该模型的提供商。',
+          summary: '{{providers}} 个提供商 · {{models}} 条提供商-模型关系',
           loading: '正在加载提供商关系…',
           error: '加载提供商关系失败：{{message}}',
           empty: '暂无提供商模型关系数据。',
@@ -1644,8 +1644,8 @@ const resources = {
         daily_average_range: '範圍 {{days}} 天',
         provider_model_graph: {
           title: '供應商模型關係圖',
-          subtitle: '呈現 CPA 中設定的各供應商與其提供模型之間的關係。節點標籤優先使用別名，沒有別名時回退為模型名；同一標籤被多個供應商共用時會合併為共用模型節點。',
-          summary: '{{providers}} 個供應商 · {{models}} 個模型 · {{shared}} 個共用標籤',
+          subtitle: '呈現 CPA 中設定的各供應商與其提供模型之間的關係。節點標籤優先使用別名，沒有別名時回退為模型名；懸浮模型節點可查看共用該模型的供應商。',
+          summary: '{{providers}} 個供應商 · {{models}} 條供應商-模型關係',
           loading: '正在載入供應商關係…',
           error: '載入供應商關係失敗：{{message}}',
           empty: '暫無供應商模型關係資料。',
