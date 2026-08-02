@@ -40,8 +40,8 @@ layout of `WORK_DIR`.
 
 | Variable | Default | Description |
 |---|---|---|
-| `AUTH_ENABLED` | `false` | Require login. **When false, anyone with network access is an admin** — use only on trusted networks. |
-| `LOGIN_PASSWORD` | unset | Admin password. Required when `AUTH_ENABLED=true`. Never returned by any endpoint. |
+| `AUTH_ENABLED` | `true` | Require login. When unset, auth defaults to enabled, so `LOGIN_PASSWORD` becomes required (startup fails without it). Setting `AUTH_ENABLED=false` must be explicit — **anyone with network access is then an admin**, use only on trusted networks. |
+| `LOGIN_PASSWORD` | unset | Admin password. Required when `AUTH_ENABLED=true` (including the default). Never returned by any endpoint; public example placeholder values are rejected at startup. |
 | `AUTH_SESSION_TTL` | `168h` (7 days) | Session lifetime. Persistent sessions are stored in SQLite when auth is enabled. |
 
 ## 5. Quota
