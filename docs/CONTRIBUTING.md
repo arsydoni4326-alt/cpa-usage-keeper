@@ -92,8 +92,8 @@ You can run any of them individually while iterating.
 - **Styling:** CSS Modules per component; global layers via SCSS
   (dart-sass). Theming through the `data-theme` attribute — components must
   look right in light, dark, and auto.
-- **i18n:** all user-facing strings go through `src/i18n` (locales `en` and
-  `zh` must both be updated).
+- **i18n:** all user-facing strings go through the i18next-based `src/i18n`
+  (locales `en`, `zh`, and `zh-TW` must all be updated).
 - **Charts:** Chart.js via `src/lib/chartjs.ts` registration only.
 - **Tests** under `src/test` / `src/components/...test...` with the existing
   runner setup.

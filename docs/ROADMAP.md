@@ -78,8 +78,8 @@ of the system that already work.
   - CSV/JSON export for overview, analysis, and identity views (not just raw
     events); scheduled export option to WORK_DIR.
 - **2.5 Additional i18n locales.** ⬜
-  - Community-contributed locales beyond en/zh (plural rules, RTL readiness
-    check in the i18n layer).
+  - Community-contributed locales beyond en/zh/zh-TW (plural rules, RTL
+    readiness check in the i18n layer).
 - **2.6 Accessibility pass.** ⬜
   - Keyboard navigation, focus management in modals, ARIA labels across the
     custom UI kit; automated axe checks in the E2E suite (ties to 0.4).

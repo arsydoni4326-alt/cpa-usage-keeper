@@ -48,7 +48,8 @@ internal/api ────── Gin router, handlers, auth middleware, DTO mappi
         │
         ├── internal/service ───── business services (usage, request logs,
         │                          identities, CPA API keys, auth files,
-        │                          pricing, metadata sync, token processor)
+        │                          pricing, metadata sync, token processor,
+        │                          provider model graph)
         ├── internal/poller ────── ingestion: subscribe/pull sources, inbox
         │                          writer, ingest/process runners, the
         │                          serial usage aggregation runner
@@ -102,7 +103,10 @@ constructor builds components in this strict order (see
     the `poller.NewRedisPoller` facade.
 12. Optional `DatabaseBackupRunner`.
 13. Domain services: Usage, RequestLog, UsageIdentity, CPAAPIKey,
-    AuthFilesManagement, Pricing.
+    AuthFilesManagement, Pricing, ProviderModelGraph (sanitized proxy of the
+    CPA `/v0/management/config` — the DTO in
+    `internal/cpa/dto/providerconfig` decodes only whitelisted fields;
+    `api-key`/`base-url`/`headers` are never parsed).
 14. `SessionManager` (persistent GORM store when auth is enabled, else
     in-memory) → auth handler → `api.NewRouter(webui.Static, ...)`.
 
@@ -166,8 +170,9 @@ Key invariants:
 
 ## 6. HTTP & Auth Architecture
 
-- Gin router (`internal/api/router.go`) with `OptionalProviders` for quota /
-  status so the binary still boots when optional subsystems are off.
+- Gin router (`internal/api/router.go`) with `OptionalProviders` (quota,
+  status, provider-model graph, …) so the binary still boots when optional
+  subsystems are off.
 - Public edge routes (auth status/login/logout, embed transports, healthz)
   register **before** the session middleware; everything else sits behind it.
 - Session transport: HttpOnly cookie, or a per-tab header token as the CPAMC
@@ -189,7 +194,12 @@ Key invariants:
 - Styling: SCSS (dart-sass) global layers + **CSS Modules** per component;
   theming via `data-theme` (light "white" / dark / auto).
 - Charts: **Chart.js 4** via `react-chartjs-2` (`src/lib/chartjs.ts`).
-- i18n: custom hook-based system (`src/i18n`), locales **en + zh**.
+- Graphs: **@xyflow/react** (React Flow) renders the provider ↔ model alias
+  diagram on the Usage overview tab (`ProviderModelGraphPanel`), fed by
+  `GET /api/provider-model-graph`; labels prefer the model alias, Gemini
+  entries merge into a single node, oauth aliases are sorted.
+- i18n: **i18next**-backed system (`src/i18n`), locales **en + zh + zh-TW**
+  (Traditional Chinese) selected via `LanguageSwitcher`.
 - Structure: `assets`, `components/{ui,usage,test}`, `embed` (CPAMC iframe
   mode), `features/ranking`, `hooks`, `i18n`, `lib`, `pages`, `stores`,
   `styles`, `types`, `utils/usage`.

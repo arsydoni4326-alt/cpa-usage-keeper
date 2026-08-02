@@ -42,8 +42,8 @@ exploration, cost analysis, quota monitoring, and community ranking.
 
 | Role | How they authenticate | Capabilities |
 |------|-----------------------|--------------|
-| **Admin** | Password login (`LOGIN_PASSWORD`), required when `AUTH_ENABLED=true` | Full dashboard: all usage data, identities, pricing, quota, settings, auth files, API keys, update checks. |
-| **Anonymous admin** | No login when `AUTH_ENABLED=false` (default) | Same as admin. Intended only for trusted networks. |
+| **Admin** | Password login (`LOGIN_PASSWORD`), required when `AUTH_ENABLED=true` (default) | Full dashboard: all usage data, identities, pricing, quota, settings, auth files, API keys, update checks. |
+| **Anonymous admin** | No login when `AUTH_ENABLED` is explicitly set to `false` | Same as admin. Intended only for trusted networks. |
 | **API-key viewer** | One of the sync'd CPA API Keys (`/api/auth/api-key-login` or a per-tab key session) | Read-only, scoped view: `/api/key-overview` and `/api/key-activity` filtered to *their* key only. Rate-limited per viewer session. |
 
 There is no user management beyond the single admin password and the CPA API
@@ -86,11 +86,16 @@ keys that are synchronized from CPA itself.
 - **UC-11 — Data safety.** As an admin, daily backups and the 90-day →
   archive retention policy happen automatically; I can rely on the cold
   archive for future long-range rebuilds.
+- **UC-12 — Provider topology.** As an admin, I view the provider ↔ model
+  alias relationship as an interactive diagram (Usage overview tab), built
+  from a sanitized snapshot of the CPA management config.
 
 ### API-key viewer
 
-- **UC-12 — View my usage.** As a key holder, I authenticate with my CPA API
+- **UC-13 — View my usage.** As a key holder, I authenticate with my CPA API
   key and see overview + activity statistics scoped strictly to my key.
+
+
 
 ---
 
@@ -154,6 +159,7 @@ the SPA/embedding assets are public; everything else requires a session
 | `GET /api/models/used` | Models observed in usage. |
 | `GET /api/pricing` (+`/rules`, `/sync/preview`, `/batch/:model`) | Price catalog, rule CRUD, sync preview, batch/single-model mutation. |
 | `GET/POST /api/quota/...` | Quota reads, refresh, auto-refresh settings/cache, raw payload inspection, per-provider and global credit resets. |
+| `GET /api/provider-model-graph` | Provider ↔ model alias relationship graph, proxied from the CPA `/v0/management/config` endpoint through a whitelisted-field DTO (secrets never parsed — see §7). |
 | `GET /api/update/check` | GitHub release check (suppressed for dev builds). |
 
 ### 5.3 Viewer routes (API-key session only)
@@ -260,7 +266,11 @@ key's data.
   `TLS_KEY_FILE`) or termination at a reverse proxy; `TLS_SKIP_VERIFY`
   applies to the outbound CPA client only.
 - **Secrets handling.** Management keys and access tokens are redacted in
-  logs and API responses (`internal/helper/redact.go`).
+  logs and API responses (`internal/helper/redact.go`). The
+  provider-model-graph proxy decodes only whitelisted fields from the CPA
+  management config (`internal/cpa/dto/providerconfig`); secret-bearing
+  fields such as `api-key`, `base-url`, or `headers` are never parsed,
+  stored, or forwarded.
 - **Password storage.** `LOGIN_PASSWORD` is provided via environment; it is
   never returned by any endpoint.
 - **Backup safety.** Backups contain the full database and must be stored
