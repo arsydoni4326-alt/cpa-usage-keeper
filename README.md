@@ -116,7 +116,22 @@ internal/quota/          Provider quota refresh and inspection
 internal/ranking/        Community ranking aggregation and sync
 deploy/linux/            systemd service template
 web/                     React + TypeScript frontend
+docs/                    Project documentation (spec, architecture, roadmap, config, contributing)
+session.md               Cross-session working notes
 ```
+
+---
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [docs/SPECIFICATION.md](docs/SPECIFICATION.md) | Functional spec — users & use cases, domain model, full HTTP API reference, and business rules. |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Module layering, startup wiring order, ingestion & aggregation data flow, schema overview, deployment topologies, extensibility points. |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Future work organized into phases, each broken down into concrete steps. |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Complete environment variable & CLI flag reference plus WORK_DIR layout. |
+| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Dev setup, the `make verify` baseline, and backend/frontend conventions. |
+| [session.md](session.md) | Working notes kept across sessions (session durability). |
 
 ## Local Development
 
