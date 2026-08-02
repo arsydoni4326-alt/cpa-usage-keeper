@@ -136,4 +136,26 @@ describe('buildProviderModelGraph', () => {
 		expect(graph.edgeCount).toBe(0)
 		expect(graph.totalHeight).toBe(0)
 	})
+
+	// Regression guard: React Flow's fitView silently collapses to an invisible
+	// viewport when any node position is non-finite. Every node and edge anchor
+	// must be a plain finite number so the canvas always has real geometry.
+	it('guarantees every node position is finite and non-negative', () => {
+		const graph = buildProviderModelGraph(baseResponse)
+		expect(graph.nodes.length).toBeGreaterThan(0)
+		for (const node of graph.nodes) {
+			expect(Number.isFinite(node.position.x), `${node.id} x`).toBe(true)
+			expect(Number.isFinite(node.position.y), `${node.id} y`).toBe(true)
+			expect(node.position.x).toBeGreaterThanOrEqual(0)
+			expect(node.position.y).toBeGreaterThanOrEqual(0)
+		}
+		for (const edge of graph.edges) {
+			expect(typeof edge.source).toBe('string')
+			expect(typeof edge.target).toBe('string')
+			expect(graph.nodes.some((n) => n.id === edge.source)).toBe(true)
+			expect(graph.nodes.some((n) => n.id === edge.target)).toBe(true)
+		}
+		expect(Number.isFinite(graph.totalHeight)).toBe(true)
+		expect(graph.totalHeight).toBeGreaterThan(0)
+	})
 })

@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Background, Controls, MiniMap, Position, ReactFlow } from '@xyflow/react'
+import {
+	Background,
+	Controls,
+	MiniMap,
+	Position,
+	ReactFlow,
+	ReactFlowProvider,
+	useNodesInitialized,
+	useReactFlow,
+} from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
 import { fetchProviderModelGraph } from '@/lib/api'
@@ -133,28 +142,31 @@ export function ProviderModelGraphPanel() {
 	} else {
 		body = (
 			<div className={styles.canvas}>
-				<ReactFlow
-					nodes={styledNodes}
-					edges={graph.edges}
-					fitView
-					minZoom={0.02}
-					maxZoom={1.6}
-					fitViewOptions={{ padding: 0.1, minZoom: 0.05, maxZoom: 0.9 }}
-					nodesDraggable
-					nodesConnectable={false}
-					elementsSelectable
-					defaultEdgeOptions={{ type: 'smoothstep' }}
-				>
-					<Background gap={16} />
-					<Controls />
-					<MiniMap
-						pannable
-						zoomable
-						nodeColor={(node) =>
-							(node as ProviderGraphNode).data.type === 'provider' ? '#60a5fa' : '#cbd5e1'
-						}
-					/>
-				</ReactFlow>
+				<ReactFlowProvider>
+					<ReactFlow
+						nodes={styledNodes}
+						edges={graph.edges}
+						fitView
+						minZoom={0.02}
+						maxZoom={1.6}
+						fitViewOptions={{ padding: 0.1, minZoom: 0.05, maxZoom: 0.9 }}
+						nodesDraggable
+						nodesConnectable={false}
+						elementsSelectable
+						defaultEdgeOptions={{ type: 'smoothstep' }}
+					>
+						<Background gap={16} />
+						<Controls />
+						<MiniMap
+							pannable
+							zoomable
+							nodeColor={(node) =>
+								(node as ProviderGraphNode).data.type === 'provider' ? '#60a5fa' : '#cbd5e1'
+							}
+						/>
+					</ReactFlow>
+					<FitViewWhenReady />
+				</ReactFlowProvider>
 			</div>
 		)
 	}
@@ -178,4 +190,20 @@ export function ProviderModelGraphPanel() {
 			{body}
 		</div>
 	)
+}
+
+// Refits the graph when node dimensions have been measured. React Flow's
+// initial `fitView` can run before node size data is available, especially
+// with dynamic content or hidden parents, so we call fitView again after
+// `useNodesInitialized` fires.
+function FitViewWhenReady() {
+	const initialized = useNodesInitialized()
+	const { fitView } = useReactFlow()
+
+	useEffect(() => {
+		if (!initialized) return
+		fitView({ padding: 0.1, minZoom: 0.05, maxZoom: 0.9 })
+	}, [initialized, fitView])
+
+	return null
 }

@@ -2,7 +2,6 @@
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
-	min-height: 420px;
 }
 
 .header {
@@ -41,7 +40,11 @@
 
 .canvas {
 	position: relative;
-	flex: 1 1 auto;
+	/* Definite height: the surrounding layout chain is all min-height/flex with
+	   no concrete height, which let React Flow's wrapper measure 0×0 and
+	   silently fit the viewport into nothing. A fixed height decouples the
+	   canvas from that chain so fitView always has real pixels to work with. */
+	height: 560px;
 	min-height: 420px;
 	border: 1px solid var(--color-border-default, #d0d7de);
 	border-radius: 8px;
