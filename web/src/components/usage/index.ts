@@ -1,6 +1,7 @@
 export { StatCards } from './StatCards';
 export { DailyAverageCard } from './DailyAverageCard';
 export { OverviewRealtimePanel } from './OverviewRealtimePanel';
+export { ProviderModelGraphPanel } from './ProviderModelGraphPanel';
 export { AnalysisPanel } from './analysis';
 export { ApiKeySettingsCard } from './ApiKeySettingsCard';
 export { SessionSettingsCard } from './SessionSettingsCard';

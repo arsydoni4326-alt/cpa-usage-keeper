@@ -16,6 +16,7 @@ import {
   StatCards,
   RecentActivityPanel,
   OverviewRealtimePanel,
+  ProviderModelGraphPanel,
   AnalysisPanel,
   ApiKeySettingsCard,
   SessionSettingsCard,
@@ -71,7 +72,7 @@ const USAGE_TAB_LABEL_KEYS: Record<UsageTab, string> = {
   events: 'usage_stats.tab_events',
   'auth-files': 'usage_stats.tab_auth_files',
   'ai-provider': 'usage_stats.tab_ai_provider',
-  // settings: 'usage_stats.tab_settings',
+  settings: 'usage_stats.tab_settings',
 };
 const DEFAULT_USAGE_TAB: UsageTab = 'overview';
 const USAGE_TAB_STORAGE_KEY = 'cli-proxy-usage-tab-v1';
@@ -1054,8 +1055,6 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     if (topNotice.kind === 'success') return styles.updateCheckToastSuccess;
     return styles.updateCheckToastInfo;
   })() : '';
-  const cpaManagementURL = useMemo(() => getBackToCPALinkURL(status), [status]);
-
   const loadApiKeyOptions = useCallback(async () => {
     apiKeyOptionsRequestControllerRef.current?.abort();
     const controller = new AbortController();
@@ -2050,6 +2049,8 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                   isMobile={isMobile}
                   timezone={currentRealtime?.timezone ?? usage?.timezone}
                 />
+
+                <ProviderModelGraphPanel />
               </>
             )}
 

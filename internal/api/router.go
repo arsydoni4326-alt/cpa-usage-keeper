@@ -47,13 +47,14 @@ type StatusRouteConfig struct {
 }
 
 type OptionalProviders struct {
-	UsageIdentity service.UsageIdentityProvider
-	Quota         QuotaProvider
-	CPAAPIKeys    service.CPAAPIKeyProvider
-	AuthFiles     service.AuthFilesManagementProvider
-	RequestLogs   service.RequestLogProvider
-	Ranking       rankinghttpapi.Provider
-	Status        StatusRouteConfig
+	UsageIdentity      service.UsageIdentityProvider
+	Quota              QuotaProvider
+	CPAAPIKeys         service.CPAAPIKeyProvider
+	AuthFiles          service.AuthFilesManagementProvider
+	RequestLogs        service.RequestLogProvider
+	Ranking            rankinghttpapi.Provider
+	ProviderModelGraph service.ProviderModelGraphProvider
+	Status             StatusRouteConfig
 }
 
 func NewRouter(
@@ -91,6 +92,7 @@ func NewRouter(
 	var authFilesProvider service.AuthFilesManagementProvider
 	var requestLogProvider service.RequestLogProvider
 	var rankingProvider rankinghttpapi.Provider
+	var providerModelGraphProvider service.ProviderModelGraphProvider
 	var statusConfig StatusRouteConfig
 	if len(optionalProviders) > 0 {
 		usageIdentityProvider = optionalProviders[0].UsageIdentity
@@ -99,6 +101,7 @@ func NewRouter(
 		authFilesProvider = optionalProviders[0].AuthFiles
 		requestLogProvider = optionalProviders[0].RequestLogs
 		rankingProvider = optionalProviders[0].Ranking
+		providerModelGraphProvider = optionalProviders[0].ProviderModelGraph
 		statusConfig = optionalProviders[0].Status
 	}
 	authHandler.setCPAAPIKeyProvider(cpaAPIKeyProvider)
@@ -124,6 +127,7 @@ func NewRouter(
 	registerCPAAPIKeyRoutes(adminProtected, cpaAPIKeyProvider)
 	registerPricingRoutes(adminProtected, pricingProvider)
 	registerQuotaRoutes(adminProtected, quotaProvider)
+	registerProviderModelGraphRoutes(adminProtected, providerModelGraphProvider)
 	if rankingProvider != nil {
 		rankinghttpapi.RegisterRoutes(adminProtected, rankingProvider)
 	}

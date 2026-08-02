@@ -50,3 +50,10 @@ type OpenAICompatibilityResult struct {
 	Body       []byte
 	Payload    []providerconfig.OpenAICompatibilityConfig
 }
+
+// ManagementConfigResult 是 /v0/management/config 返回的 HTTP 包装，payload 只包含 provider 与模型别名关系，不包含 secrets。
+type ManagementConfigResult struct {
+	StatusCode int
+	Body       []byte
+	Payload    providerconfig.ManagementConfig
+}
