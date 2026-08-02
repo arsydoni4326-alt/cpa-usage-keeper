@@ -509,6 +509,18 @@ func (c *Client) fetchProviderKeyConfig(ctx context.Context, path string, payloa
 	return result, nil
 }
 
+// FetchManagementConfig 读取 /v0/management/config，只解析 provider 与模型别名关系，不接触 api-key/base-url 等 secrets。
+func (c *Client) FetchManagementConfig(ctx context.Context) (*response.ManagementConfigResult, error) {
+	result := &response.ManagementConfigResult{}
+	statusCode, body, err := c.doManagementJSONRequest(ctx, cpaManagementConfigEndpoint, &result.Payload, "config")
+	result.StatusCode = statusCode
+	result.Body = body
+	if err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
 func (c *Client) FetchOpenAICompatibility(ctx context.Context) (*response.OpenAICompatibilityResult, error) {
 	result := &response.OpenAICompatibilityResult{}
 	var raw json.RawMessage

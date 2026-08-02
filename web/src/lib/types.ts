@@ -775,3 +775,20 @@ export interface UsageFilterWindow {
   endMs?: number
   windowMinutes?: number
 }
+
+export interface ProviderModelGraphModel {
+  name: string
+  alias?: string
+  label: string
+}
+
+export interface ProviderModelGraphNode {
+  name: string
+  kind: string
+  disabled?: boolean
+  models: ProviderModelGraphModel[]
+}
+
+export interface ProviderModelGraphResponse {
+  providers: ProviderModelGraphNode[]
+}
