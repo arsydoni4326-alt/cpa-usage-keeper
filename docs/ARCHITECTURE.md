@@ -208,7 +208,13 @@ Key invariants:
     `ProviderModelReagraphPanel.tsx`), lazy-loaded via a dynamic `import()`
     so the three.js bundle (~380 kB gzip) only downloads when the user
     selects it; node size encodes degree (provider model count / model
-    sharing count), and edges render curved without arrows.
+    sharing count), and edges render curved without arrows. Its WebGL canvas
+    is theme-adaptive: a `Theme` built via `buildGraphTheme(isDark)` spreads
+    the matching reagraph `lightTheme`/`darkTheme` preset and pins
+    `canvas.background` plus node/edge label, sub-label, and edge/arrow fills
+    to the exact `--bg-primary`/`--text-*`/`--border-color` hexes from
+    `themes.scss`, so the background and all elements track the active
+    light/dark theme instead of staying white.
 
   Both views reuse the same fetched `ProviderModelGraphResponse` and the
   `buildProviderModelGraph` layout/join helper, so the GNN surface stays

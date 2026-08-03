@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { GraphCanvas, type GraphEdge, type GraphNode, type InternalGraphNode } from 'reagraph'
+import {
+	GraphCanvas,
+	darkTheme,
+	lightTheme,
+	type GraphEdge,
+	type GraphNode,
+	type InternalGraphNode,
+	type Theme,
+} from 'reagraph'
 import { fetchProviderModelGNN } from '@/lib/api'
 import type { ProviderModelGraphResponse } from '@/lib/types'
 import {
@@ -32,6 +40,44 @@ function providerNodeSize(modelCount: number): number {
 
 function modelNodeSize(providerCount: number): number {
 	return providerCount > 1 ? Math.min(6 + providerCount * 1.5, 18) : 6
+}
+
+// Reagraph paints an opaque WebGL canvas, so the theme-aware CSS wrapper
+// background never shows through unless we hand GraphCanvas a `Theme` whose
+// `canvas.background` matches the active palette. We start from the light/dark
+// preset (which already swaps label/edge/lasso colors to theme-friendly values)
+// and pin the exact hexes from `styles/themes.scss` so the canvas blends into
+// the surrounding UI in both modes. Keyed on `isDark` so it flips reactively.
+function buildGraphTheme(dark: boolean): Theme {
+	const base = dark ? darkTheme : lightTheme
+	// themes.scss: light --bg-primary #f0eee8 / --text-primary #2d2a26 /
+	//   --text-secondary #6d6760 / --border-color #e3e1db
+	// dark:  --bg-primary #1d1b18 / --text-primary #f6f4f1 /
+	//   --text-secondary #c9c3bb / --border-color #3a3530
+	const canvasBg = dark ? '#1d1b18' : '#f0eee8'
+	const labelColor = dark ? '#f6f4f1' : '#2d2a26'
+	const subLabelColor = dark ? '#c9c3bb' : '#6d6760'
+	const edgeFill = dark ? '#3a3530' : '#d5d2cb'
+	return {
+		...base,
+		canvas: { ...base.canvas, background: canvasBg },
+		node: {
+			...base.node,
+			label: { ...base.node.label, color: labelColor, stroke: canvasBg },
+			subLabel: base.node.subLabel
+				? { ...base.node.subLabel, color: subLabelColor, stroke: canvasBg }
+				: undefined,
+		},
+		edge: {
+			...base.edge,
+			fill: edgeFill,
+			label: { ...base.edge.label, color: labelColor, stroke: canvasBg },
+			subLabel: base.edge.subLabel
+				? { ...base.edge.subLabel, color: subLabelColor, stroke: canvasBg }
+				: undefined,
+		},
+		arrow: { ...base.arrow, fill: edgeFill },
+	}
 }
 
 interface TooltipState {
@@ -131,6 +177,10 @@ export function ProviderModelReagraphCanvas({ graph }: { graph: ProviderModelGra
 		return { nodes: mappedNodes, edges: mappedEdges }
 	}, [graph, isDark, t])
 
+	// Theme-aware canvas: flips with the same `isDark` signal that tints the
+	// node fills above, so the background/labels/edges track the active theme.
+	const graphTheme = useMemo<Theme>(() => buildGraphTheme(isDark), [isDark])
+
 	const handleNodePointerOver = useCallback(
 		(node: InternalGraphNode) => {
 			const n = graph.nodes.find(x => x.id === node.id)
@@ -156,6 +206,7 @@ export function ProviderModelReagraphCanvas({ graph }: { graph: ProviderModelGra
 			<GraphCanvas
 				nodes={nodes}
 				edges={edges}
+				theme={graphTheme}
 				layoutType="forceDirected2d"
 				draggable
 				animated
