@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"cpa-usage-keeper/internal/entities"
@@ -67,13 +68,20 @@ func localLeaderboardEntry(row localRankingPopulationRow, value int64) Leaderboa
 	displayName := helper.CPAAPIKeyDisplayName(entities.CPAAPIKey{
 		ID: row.APIKeyID, APIKey: row.APIKey, DisplayKey: row.DisplayKey, KeyAlias: row.KeyAlias,
 	})
-	avatarID := uint8(1 + ((row.APIKeyID - 1) % MaxAvatarID))
-	if row.APIKeyID <= 0 {
-		avatarID = MinAvatarID
+	avatarID := defaultLocalRankingAvatarID(row.APIKeyID)
+	if row.LocalRankingAvatarID != nil && *row.LocalRankingAvatarID >= MinAvatarID && *row.LocalRankingAvatarID <= MaxAvatarID {
+		avatarID = *row.LocalRankingAvatarID
 	}
 	return LeaderboardEntry{
-		ParticipantID: strconv.FormatInt(row.APIKeyID, 10), DisplayName: displayName, AvatarID: avatarID, Value: value,
+		ParticipantID: strconv.FormatInt(row.APIKeyID, 10), DisplayName: displayName, KeyAlias: strings.TrimSpace(row.KeyAlias), AvatarID: avatarID, Value: value,
 	}
+}
+
+func defaultLocalRankingAvatarID(apiKeyID int64) uint8 {
+	if apiKeyID <= 0 {
+		return MinAvatarID
+	}
+	return uint8(1 + ((apiKeyID - 1) % MaxAvatarID))
 }
 
 func localMetricValue(row localRankingPopulationRow, metric LeaderboardMetric) (int64, int64, int64, bool) {

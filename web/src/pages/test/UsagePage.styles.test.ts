@@ -139,6 +139,18 @@ describe('UsagePage toolbar styles', () => {
     expect(keyOverviewPageSource).toContain('<MainActionButton')
   })
 
+  it('patches the local ranking cache by Key ID after a settings alias save', () => {
+    const start = usagePageSource.indexOf('const handleSaveApiKeyAlias = useCallback')
+    const end = usagePageSource.indexOf('\n  const handleRevokeAuthSession', start)
+    expect(start).toBeGreaterThanOrEqual(0)
+    expect(end).toBeGreaterThan(start)
+
+    const handler = usagePageSource.slice(start, end)
+    expect(handler).toContain('patchLocalRankingProfileCache(updated.id, {')
+    expect(handler).toContain('key_alias: updated.keyAlias')
+    expect(handler).toContain('display_name: updated.label')
+  })
+
   it('removes obsolete Last Updated presentation and API plumbing', () => {
     expect(usagePageSource).not.toContain('lastSyncAt')
     expect(usagePageSource).not.toContain('status?.last_run_at')
