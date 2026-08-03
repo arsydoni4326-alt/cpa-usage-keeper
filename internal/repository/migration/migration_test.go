@@ -77,6 +77,7 @@ func TestOrderedMigrationsPreservesExecutionOrder(t *testing.T) {
 		"20260729_add_usage_event_client_metadata",
 		"20260730_create_usage_event_archive",
 		"20260731_local_ranking_stats",
+		"20260803_add_cpa_api_key_local_ranking_avatar",
 	}
 	assertStringSlicesEqual(t, want, got)
 }

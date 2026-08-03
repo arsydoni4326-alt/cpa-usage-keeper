@@ -75,6 +75,8 @@ const (
 	migrationCreateUsageEventArchive = "20260730_create_usage_event_archive"
 	// migrationLocalRankingStats 创建固定四周期的本地排行累计。
 	migrationLocalRankingStats = "20260731_local_ranking_stats"
+	// migrationAddCPAAPIKeyLocalRankingAvatar 保存可空的本地排行头像覆盖值。
+	migrationAddCPAAPIKeyLocalRankingAvatar = "20260803_add_cpa_api_key_local_ranking_avatar"
 )
 
 type schemaMigration struct {
@@ -190,6 +192,7 @@ func orderedMigrations() []databaseMigration {
 		{version: migrationAddUsageEventClientMetadata, run: addUsageEventClientMetadataMigration},
 		{version: migrationCreateUsageEventArchive, run: createUsageEventArchiveMigration},
 		{version: migrationLocalRankingStats, run: localRankingStatsMigration},
+		{version: migrationAddCPAAPIKeyLocalRankingAvatar, run: addCPAAPIKeyLocalRankingAvatarMigration},
 	}
 }
 
