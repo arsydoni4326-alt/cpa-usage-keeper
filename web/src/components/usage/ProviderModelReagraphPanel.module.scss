@@ -1,0 +1,99 @@
+.panel {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.title {
+	margin: 0;
+	font-size: 16px;
+	font-weight: 600;
+	color: var(--color-text);
+}
+
+.subtitle {
+	margin: 4px 0 0;
+	font-size: 13px;
+	color: var(--color-text-secondary, var(--color-text));
+	opacity: 0.8;
+}
+
+.summary {
+	padding: 4px 12px;
+	border-radius: 999px;
+	background: var(--color-bg-subtle, rgba(0, 0, 0, 0.06));
+	color: var(--color-text-secondary, var(--color-text));
+	font-size: 12px;
+	white-space: nowrap;
+	align-self: center;
+}
+
+.canvas {
+	position: relative;
+	height: 560px;
+	min-height: 420px;
+	border: 1px solid var(--color-border, rgba(0, 0, 0, 0.12));
+	border-radius: 8px;
+	overflow: hidden;
+	background: var(--color-bg-subtle, rgba(0, 0, 0, 0.02));
+}
+
+.state {
+	padding: 24px;
+	text-align: center;
+	color: var(--color-text-secondary, var(--color-text));
+	border: 1px dashed var(--color-border, rgba(0, 0, 0, 0.12));
+	border-radius: 8px;
+	font-size: 13px;
+}
+
+.stateError {
+	color: var(--color-danger, #dc2626);
+	border-color: var(--color-danger, #dc2626);
+}
+
+.tooltip {
+	position: absolute;
+	top: 0;
+	left: 0;
+	transform: translate(0, 0);
+	max-width: 320px;
+	padding: 8px 10px;
+	border: 1px solid var(--color-border, rgba(0, 0, 0, 0.12));
+	border-radius: 6px;
+	background: var(--color-bg-elevated, #fff);
+	color: var(--color-text);
+	font-size: 12px;
+	line-height: 1.4;
+	pointer-events: none;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+	z-index: 10;
+}
+
+.tooltipTitle {
+	font-weight: 600;
+	margin-bottom: 4px;
+}
+
+.tooltipBody {
+	font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+	word-break: break-all;
+	opacity: 0.9;
+}
+
+[data-theme='dark'] {
+	.panel .summary {
+		background: var(--color-bg-subtle, rgba(255, 255, 255, 0.08));
+	}
+	.tooltip {
+		background: var(--color-bg-elevated, #18181b);
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+	}
+}

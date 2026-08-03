@@ -196,17 +196,28 @@ Key invariants:
 - Styling: SCSS (dart-sass) global layers + **CSS Modules** per component;
   theming via `data-theme` (light "white" / dark / auto).
 - Charts: **Chart.js 4** via `react-chartjs-2` (`src/lib/chartjs.ts`).
-- Graphs: **@xyflow/react** (React Flow) renders the provider ↔ model
-  relationship as an interactive **Graph Neural Network (GNN)** diagram on
-  the Usage overview tab (`ProviderModelGNNPanel`), fed by
-  `GET /api/provider-model-gnn`; labels prefer the model alias, Gemini
-  entries merge into a single node, oauth aliases are sorted. Node and edge
-  features support future advanced analytics (embeddings, structural
-  learning, prediction). The panel surfaces GNN state directly — provider
-  nodes are tinted by hue from the `kind_hash` feature, models flagged with
-  `is_shared=1` get a badge, and per-node feature vectors and embeddings
-  appear in tooltips. The summary chip shows provider/model/dim counters
-  sourced from the GNN response meta block.
+- Graphs: the Usage overview tab hosts an interactive **Graph Neural Network
+  (GNN)** diagram of the provider ↔ model relationship
+  (`ProviderModelGNNPanel`), fed by `GET /api/provider-model-gnn`. Two
+  renderers are switchable at runtime from a header toggle:
+  - **Grid (xyflow)** — `@xyflow/react` (React Flow) compact two-column grid
+    layout; labels prefer the model alias, Gemini entries merge into a
+    single node, oauth aliases are sorted.
+  - **Network (Reagraph)** — **reagraph** (WebGL/three.js) force-directed
+    2d layout (`ProviderModelReagraphCanvas` in
+    `ProviderModelReagraphPanel.tsx`), lazy-loaded via a dynamic `import()`
+    so the three.js bundle (~380 kB gzip) only downloads when the user
+    selects it; node size encodes degree (provider model count / model
+    sharing count), and edges render curved without arrows.
+
+  Both views reuse the same fetched `ProviderModelGraphResponse` and the
+  `buildProviderModelGraph` layout/join helper, so the GNN surface stays
+  identical across renderers: providers are tinted by hue from the
+  `kind_hash` feature, models flagged with `is_shared=1` get a badge, and
+  per-node feature vectors and embeddings appear in tooltips. The summary
+  chip shows provider/model/dim counters sourced from the GNN response meta
+  block. Node and edge features support future advanced analytics
+  (embeddings, structural learning, prediction).
 - i18n: **i18next**-backed system (`src/i18n`), locales **en + zh + zh-TW**
   (Traditional Chinese) selected via `LanguageSwitcher`.
 - Structure: `assets`, `components/{ui,usage,test}`, `embed` (CPAMC iframe
