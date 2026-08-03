@@ -86,9 +86,11 @@ keys that are synchronized from CPA itself.
 - **UC-11 — Data safety.** As an admin, daily backups and the 90-day →
   archive retention policy happen automatically; I can rely on the cold
   archive for future long-range rebuilds.
-- **UC-12 — Provider topology.** As an admin, I view the provider ↔ model
-  alias relationship as an interactive diagram (Usage overview tab), built
-  from a sanitized snapshot of the CPA management config.
+- **UC-12 — Provider topology via GNN.** As an admin, I view the provider ↔
+  model relationship as an interactive **Graph Neural Network (GNN)** diagram
+  (Usage overview tab), built from a sanitized snapshot of the CPA management
+  config. This GNN supports rich analytics (learned node/edge features,
+  structural learning, and prediction).
 
 ### API-key viewer
 
@@ -159,7 +161,7 @@ the SPA/embedding assets are public; everything else requires a session
 | `GET /api/models/used` | Models observed in usage. |
 | `GET /api/pricing` (+`/rules`, `/sync/preview`, `/batch/:model`) | Price catalog, rule CRUD, sync preview, batch/single-model mutation. |
 | `GET/POST /api/quota/...` | Quota reads, refresh, auto-refresh settings/cache, raw payload inspection, per-provider and global credit resets. |
-| `GET /api/provider-model-graph` | Provider ↔ model alias relationship graph, proxied from the CPA `/v0/management/config` endpoint through a whitelisted-field DTO (secrets never parsed — see §7). |
+| `GET /api/provider-model-gnn` | Provider ↔ model relationship as a Graph Neural Network (GNN), proxied from the CPA `/v0/management/config` endpoint through a whitelisted-field DTO (secrets never parsed — see §7). The GNN exposes current structure and optional learned node/edge state. |
 | `GET /api/update/check` | GitHub release check (suppressed for dev builds). |
 
 ### 5.3 Viewer routes (API-key session only)
@@ -267,7 +269,7 @@ key's data.
   applies to the outbound CPA client only.
 - **Secrets handling.** Management keys and access tokens are redacted in
   logs and API responses (`internal/helper/redact.go`). The
-  provider-model-graph proxy decodes only whitelisted fields from the CPA
+  provider-model-GNN proxy decodes only whitelisted fields from the CPA
   management config (`internal/cpa/dto/providerconfig`); secret-bearing
   fields such as `api-key`, `base-url`, or `headers` are never parsed,
   stored, or forwarded.

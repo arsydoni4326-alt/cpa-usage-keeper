@@ -192,6 +192,74 @@ func TestGetProviderModelGraphDedupesModelsByLabelWithinNode(t *testing.T) {
 	}
 }
 
+func TestGetProviderModelGraphIncludesGNNEmbeddings(t *testing.T) {
+	provider := NewProviderModelGraphService(&fakeProviderModelGraphClient{result: graphResult(providerconfig.ManagementConfig{
+		OpenAICompatibility: []providerconfig.ConfigOpenAICompatibilityEntry{
+			{Name: "A", Models: []providerconfig.ModelAliasEntry{{Name: "m1"}, {Name: "m2"}}},
+			{Name: "B", Models: []providerconfig.ModelAliasEntry{{Name: "m1"}}},
+		},
+	})})
+
+	res, err := provider.GetProviderModelGraph(context.Background())
+	if err != nil {
+		t.Fatalf("GetProviderModelGraph returned error: %v", err)
+	}
+	if res.Graph.Meta.ProviderCount != 2 || res.Graph.Meta.ModelCount != 2 || res.Graph.Meta.EdgeCount != 3 {
+		t.Fatalf("unexpected GNN meta: %+v", res.Graph.Meta)
+	}
+	if res.Graph.Meta.FeatureDim != 6 || res.Graph.Meta.HiddenDim != 6 {
+		t.Fatalf("unexpected GNN feature dims: %+v", res.Graph.Meta)
+	}
+	if len(res.Graph.Nodes) != 4 {
+		t.Fatalf("expected 4 GNN nodes, got %+v", res.Graph.Nodes)
+	}
+	if len(res.Graph.Edges) != 3 {
+		t.Fatalf("expected 3 GNN edges, got %+v", res.Graph.Edges)
+	}
+	for _, edge := range res.Graph.Edges {
+		if edge.Weight != 1.0/3.0 {
+			t.Fatalf("expected normalized edge weight 1/3, got %+v", edge)
+		}
+		if len(edge.Features.Names) != len(edge.Features.Vector) {
+			t.Fatalf("edge features names/vector length mismatch: %+v", edge.Features)
+		}
+	}
+	for _, node := range res.Graph.Nodes {
+		if len(node.Features.Names) != len(node.Features.Vector) {
+			t.Fatalf("node features names/vector length mismatch: %+v", node.Features)
+		}
+		emb, ok := res.Graph.Embeddings[node.ID]
+		if !ok {
+			t.Fatalf("missing GNN embedding for node %s", node.ID)
+		}
+		if len(emb) != res.Graph.Meta.HiddenDim {
+			t.Fatalf("embedding dim mismatch for node %s: %d", node.ID, len(emb))
+		}
+	}
+	// Shared model m1 should have is_shared=1 and higher sharing degree than m2.
+	var m1, m2 *ProviderModelGNNNode
+	for i, node := range res.Graph.Nodes {
+		switch node.ID {
+		case "model:m1":
+			m1 = &res.Graph.Nodes[i]
+		case "model:m2":
+			m2 = &res.Graph.Nodes[i]
+		}
+	}
+	if m1 == nil || m2 == nil {
+		t.Fatalf("expected model nodes m1 and m2, got %+v", res.Graph.Nodes)
+	}
+	if m1.Features.Vector[1] != 1 { // is_shared
+		t.Fatalf("expected m1 is_shared=1, got %+v", m1.Features)
+	}
+	if m2.Features.Vector[1] != 0 { // is_shared
+		t.Fatalf("expected m2 is_shared=0, got %+v", m2.Features)
+	}
+	if m1.Features.Vector[2] <= m2.Features.Vector[2] { // sharing_degree_norm
+		t.Fatalf("expected m1 sharing degree > m2, got m1=%+v m2=%+v", m1.Features, m2.Features)
+	}
+}
+
 func TestGetProviderModelGraphSerializesOnlySanitizedFields(t *testing.T) {
 	provider := NewProviderModelGraphService(&fakeProviderModelGraphClient{result: graphResult(providerconfig.ManagementConfig{
 		OpenAICompatibility: []providerconfig.ConfigOpenAICompatibilityEntry{
@@ -248,5 +316,45 @@ func TestGetProviderModelGraphSerializesOnlySanitizedFields(t *testing.T) {
 		if strings.Contains(body, secret) {
 			t.Fatalf("response must never contain secret field %q: %s", secret, body)
 		}
+	}
+	// GNN graph payload must accompany the sanitized providers.
+	graph, ok := decoded["graph"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected GNN graph in response, got %s", raw)
+	}
+	nodes, ok := graph["nodes"].([]any)
+	if !ok || len(nodes) == 0 {
+		t.Fatalf("expected GNN nodes array, got %s", raw)
+	}
+	for _, n := range nodes {
+		nodeMap, ok := n.(map[string]any)
+		if !ok {
+			t.Fatalf("expected GNN node object, got %s", raw)
+		}
+		features, ok := nodeMap["features"].(map[string]any)
+		if !ok || len(features["names"].([]any)) == 0 || len(features["vector"].([]any)) == 0 {
+			t.Fatalf("expected GNN node features with names/vector, got %s", raw)
+		}
+	}
+	edges, ok := graph["edges"].([]any)
+	if !ok || len(edges) == 0 {
+		t.Fatalf("expected GNN edges array, got %s", raw)
+	}
+	for _, e := range edges {
+		edgeMap, ok := e.(map[string]any)
+		if !ok {
+			t.Fatalf("expected GNN edge object, got %s", raw)
+		}
+		if edgeMap["weight"].(float64) <= 0 {
+			t.Fatalf("expected positive edge weight, got %s", raw)
+		}
+	}
+	embeddings, ok := graph["embeddings"].(map[string]any)
+	if !ok || len(embeddings) == 0 {
+		t.Fatalf("expected GNN embeddings map, got %s", raw)
+	}
+	meta, ok := graph["meta"].(map[string]any)
+	if !ok || meta["provider_count"].(float64) == 0 || meta["model_count"].(float64) == 0 {
+		t.Fatalf("expected GNN meta counts, got %s", raw)
 	}
 }

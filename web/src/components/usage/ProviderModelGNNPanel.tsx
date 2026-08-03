@@ -12,10 +12,10 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
-import { fetchProviderModelGraph } from '@/lib/api'
+import { fetchProviderModelGNN } from '@/lib/api'
 import type { ProviderModelGraphResponse } from '@/lib/types'
 
-import styles from './ProviderModelGraphPanel.module.scss'
+import styles from './ProviderModelGNNPanel.module.scss'
 import { buildProviderModelGraph, type ProviderGraphNode } from './providerModelGraph'
 
 const PROVIDER_STYLE: React.CSSProperties = {
@@ -65,7 +65,61 @@ const MODEL_DISABLED_STYLE: React.CSSProperties = {
 	opacity: 0.85,
 }
 
-export function ProviderModelGraphPanel() {
+const MODEL_SHARED_BADGE_STYLE: React.CSSProperties = {
+	display: 'inline-block',
+	marginLeft: 6,
+	padding: '0 5px',
+	borderRadius: 999,
+	fontSize: 9,
+	fontWeight: 700,
+	lineHeight: '14px',
+	verticalAlign: 'middle',
+	background: '#ede9fe',
+	color: '#5b21b6',
+	border: '1px solid #c4b5fd',
+}
+
+// providerStyleByKindHash tints provider nodes by the GNN kind_hash feature so
+// each provider kind gets a stable color without a hard-coded palette lookup.
+// We only vary hue while keeping saturation/lightness aligned with the default
+// provider style so disabled styling stays legible.
+function providerStyleByKindHash(kindHash: number | undefined, disabled: boolean): React.CSSProperties {
+	if (disabled) return PROVIDER_DISABLED_STYLE
+	if (typeof kindHash !== 'number' || !Number.isFinite(kindHash)) return PROVIDER_STYLE
+	const hue = Math.round(kindHash * 360) % 360
+	return {
+		...PROVIDER_STYLE,
+		background: `hsl(${hue}, 84%, 92%)`,
+		color: `hsl(${hue}, 60%, 24%)`,
+		border: `1px solid hsl(${hue}, 65%, 55%)`,
+	}
+}
+
+// formatFeatureValue renders a single feature value, collapsing near-integers
+// (0/1 flags) while keeping normalized features readable.
+function formatFeatureValue(value: number): string {
+	if (Number.isInteger(value)) return String(value)
+	if (value === 0 || value === 1) return String(value)
+	return value.toFixed(3)
+}
+
+// describeFeatures renders the GNN feature vector as `name=value` pairs joined
+// by spaces; when only a few names are present the raw ordering is preserved.
+function describeFeatures(features: Record<string, number> | undefined): string | null {
+	if (!features) return null
+	const entries = Object.entries(features)
+	if (entries.length === 0) return null
+	return entries.map(([name, value]) => `${name}=${formatFeatureValue(value)}`).join(' ')
+}
+
+// describeEmbedding renders the node embedding vector with fixed precision,
+// wrapped in brackets so it reads as a tuple in tooltips.
+function describeEmbedding(embedding: number[] | undefined): string | null {
+	if (!embedding || embedding.length === 0) return null
+	return `[${embedding.map((v) => v.toFixed(3)).join(', ')}]`
+}
+
+export function ProviderModelGNNPanel() {
 	const { t } = useTranslation()
 	const [data, setData] = useState<ProviderModelGraphResponse | null>(null)
 	const [loading, setLoading] = useState(true)
@@ -73,7 +127,7 @@ export function ProviderModelGraphPanel() {
 
 	useEffect(() => {
 		const controller = new AbortController()
-		fetchProviderModelGraph(controller.signal)
+		fetchProviderModelGNN(controller.signal)
 			.then(setData)
 			.catch((err: unknown) => {
 				if ((err as Error)?.name === 'AbortError') return
@@ -92,17 +146,28 @@ export function ProviderModelGraphPanel() {
 			const disabled = isProvider
 				? node.data.disabled
 				: (node as ProviderGraphNode & { data: { disabled?: boolean } }).data.disabled ?? false
+			// kindHash only exists on provider data; on model data the Record index
+			// signature types it as unknown, so narrow explicitly before use.
+			const kindHash = typeof node.data.kindHash === 'number' ? node.data.kindHash : undefined
 			const baseStyle = isProvider
-				? disabled
-					? PROVIDER_DISABLED_STYLE
-					: PROVIDER_STYLE
+				? providerStyleByKindHash(kindHash, disabled)
 				: disabled
 					? MODEL_DISABLED_STYLE
 					: MODEL_STYLE
 
-			// Tooltip with full name/alias/provider summary for hover
+			const featureLine = describeFeatures(node.data.features)
+			const embeddingLine = describeEmbedding(node.data.embedding)
+
+			// Tooltip with full name/alias/provider summary plus GNN state.
 			const title = isProvider
-				? `${node.data.label} • ${node.data.kind} • ${node.data.modelCount} model(s)`
+				? (() => {
+						const pieces: string[] = [
+							`${node.data.label} • ${node.data.kind} • ${t('usage_stats.provider_model_graph.tooltip_models', { count: node.data.modelCount })}`,
+						]
+						if (featureLine) pieces.push(`${t('usage_stats.provider_model_graph.tooltip_features')}: ${featureLine}`)
+						if (embeddingLine) pieces.push(`${t('usage_stats.provider_model_graph.tooltip_embedding')}: ${embeddingLine}`)
+						return pieces.filter(Boolean).join('\n')
+					})()
 				: (() => {
 						const d = node.data as {
 							label: string
@@ -115,15 +180,27 @@ export function ProviderModelGraphPanel() {
 						const rawNames = Array.isArray(d.names) ? d.names : []
 						const providerNames = Array.isArray(d.providers) ? d.providers : []
 						const pieces: string[] = [d.label]
-						if (aliasNames.length > 0) pieces.push(`alias: ${aliasNames.join(", ")}`)
+						if (aliasNames.length > 0) pieces.push(`alias: ${aliasNames.join(', ')}`)
 						if (rawNames.some((n) => n !== d.label)) {
-							pieces.push(`raw: ${rawNames.filter((n) => n && n !== d.label).join(", ")}`)
+							pieces.push(`raw: ${rawNames.filter((n) => n && n !== d.label).join(', ')}`)
 						}
 						if (providerNames.length > 0) {
-							pieces.push(`via: ${providerNames.join(", ")}`)
+							pieces.push(`via: ${providerNames.join(', ')}`)
 						}
-						return pieces.filter(Boolean).join("  —  ")
+						if (featureLine) pieces.push(`${t('usage_stats.provider_model_graph.tooltip_features')}: ${featureLine}`)
+						if (embeddingLine) pieces.push(`${t('usage_stats.provider_model_graph.tooltip_embedding')}: ${embeddingLine}`)
+						return pieces.filter(Boolean).join('\n')
 					})()
+
+			const isShared = !isProvider && (node.data as { isShared?: boolean }).isShared === true
+			const label = isShared ? (
+				<span title={title}>
+					{node.data.label}
+					<span style={MODEL_SHARED_BADGE_STYLE}>{t('usage_stats.provider_model_graph.shared_badge')}</span>
+				</span>
+			) : (
+				<span title={title}>{node.data.label}</span>
+			)
 
 			return {
 				...node,
@@ -132,11 +209,11 @@ export function ProviderModelGraphPanel() {
 				style: baseStyle,
 				data: {
 					...node.data,
-					label: <span title={title}>{node.data.label}</span>,
+					label,
 				},
 			} as ProviderGraphNode
 		})
-	}, [graph])
+	}, [graph, t])
 
 	let body
 	if (loading) {
@@ -170,9 +247,14 @@ export function ProviderModelGraphPanel() {
 						<MiniMap
 							pannable
 							zoomable
-							nodeColor={(node) =>
-								(node as ProviderGraphNode).data.type === 'provider' ? '#60a5fa' : '#cbd5e1'
-							}
+							nodeColor={(node) => {
+								const datum = (node as ProviderGraphNode).data
+								if (datum.type !== 'provider') return '#cbd5e1'
+								if (typeof datum.kindHash === 'number' && Number.isFinite(datum.kindHash)) {
+									return `hsl(${Math.round(datum.kindHash * 360) % 360}, 65%, 55%)`
+								}
+								return '#60a5fa'
+							}}
 						/>
 					</ReactFlow>
 					<FitViewWhenReady />
@@ -191,8 +273,9 @@ export function ProviderModelGraphPanel() {
 				{!loading && !error && graph ? (
 					<div className={styles.summary}>
 						{t('usage_stats.provider_model_graph.summary', {
-							providers: graph.providerCount,
-							models: graph.edgeCount,
+							providers: graph.meta?.providerCount ?? graph.providerCount,
+							models: graph.meta?.edgeCount ?? graph.edgeCount,
+							dims: graph.meta?.featureDim ?? 0,
 						})}
 					</div>
 				) : null}

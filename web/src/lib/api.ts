@@ -898,10 +898,10 @@ export async function deletePricing(model: string): Promise<void> {
   }
 }
 
-export async function fetchProviderModelGraph(signal?: AbortSignal): Promise<ProviderModelGraphResponse> {
-  const response = await apiFetch(apiPath('/provider-model-graph'), { signal, cache: 'no-store' })
+export async function fetchProviderModelGNN(signal?: AbortSignal): Promise<ProviderModelGraphResponse> {
+  const response = await apiFetch(apiPath('/provider-model-gnn'), { signal, cache: 'no-store' })
   if (!response.ok) {
-    await parseApiError(response, `Failed to load provider model graph: ${response.status}`)
+    await parseApiError(response, `Failed to load provider model GNN: ${response.status}`)
   }
   return response.json()
 }
