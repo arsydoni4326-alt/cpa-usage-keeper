@@ -16,7 +16,7 @@ import {
   StatCards,
   RecentActivityPanel,
   OverviewRealtimePanel,
-  ProviderModelGraphPanel,
+  ProviderModelGNNPanel,
   AnalysisPanel,
   ApiKeySettingsCard,
   SessionSettingsCard,
@@ -2090,7 +2090,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                   timezone={currentRealtime?.timezone ?? usage?.timezone}
                 />
 
-                <ProviderModelGraphPanel />
+                <ProviderModelGNNPanel />
               </>
             )}
 

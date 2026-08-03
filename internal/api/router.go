@@ -57,7 +57,7 @@ type OptionalProviders struct {
 	Ranking            	rankinghttpapi.Provider
 	LocalRanking  		rankinghttpapi.LocalProvider
 	Status             	StatusRouteConfig
-	ProviderModelGraph 	service.ProviderModelGraphProvider
+	ProviderModelGraph 	service.ProviderModelGNNProvider
 }
 
 func NewRouter(
@@ -99,7 +99,7 @@ func NewRouter(
 	var authFilesProvider service.AuthFilesManagementProvider
 	var requestLogProvider service.RequestLogProvider
 	var rankingProvider rankinghttpapi.Provider
-	var providerModelGraphProvider service.ProviderModelGraphProvider
+	var providerModelGraphProvider service.ProviderModelGNNProvider
 	var localRankingProvider rankinghttpapi.LocalProvider
 	var statusConfig StatusRouteConfig
 	if len(optionalProviders) > 0 {
@@ -136,7 +136,7 @@ func NewRouter(
 	registerCPAAPIKeyRoutes(adminProtected, cpaAPIKeyProvider)
 	registerPricingRoutes(adminProtected, pricingProvider)
 	registerQuotaRoutes(adminProtected, quotaProvider)
-	registerProviderModelGraphRoutes(adminProtected, providerModelGraphProvider)
+	registerProviderModelGNNRoutes(adminProtected, providerModelGraphProvider)
 	if rankingProvider != nil {
 		rankinghttpapi.RegisterRoutes(adminProtected, rankingProvider)
 	}

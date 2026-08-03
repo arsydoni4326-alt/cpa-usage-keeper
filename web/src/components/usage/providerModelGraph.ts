@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react'
 import type { Edge, Node } from '@xyflow/react'
 
-import type { ProviderModelGraphResponse } from '@/lib/types'
+import type {
+	ProviderModelGNNGraph,
+	ProviderModelGraphResponse,
+} from '@/lib/types'
 
 // label is a string when built; the panel may swap it for a styled React node.
 interface GraphModelDatum extends Record<string, unknown> {
@@ -12,6 +15,10 @@ interface GraphModelDatum extends Record<string, unknown> {
 	providers: string[]
 	providerCount: number
 	disabled: boolean
+	// GNN-derived state, joined from response.graph by node id.
+	features?: Record<string, number>
+	embedding?: number[]
+	isShared?: boolean
 }
 
 interface GraphProviderDatum extends Record<string, unknown> {
@@ -21,6 +28,10 @@ interface GraphProviderDatum extends Record<string, unknown> {
 	disabled: boolean
 	modelCount: number
 	models: string[]
+	// GNN-derived state, joined from response.graph by node id.
+	features?: Record<string, number>
+	embedding?: number[]
+	kindHash?: number
 }
 
 export type ProviderGraphModelNode = Node<GraphModelDatum>
@@ -36,6 +47,13 @@ export interface ProviderModelGraphGraph {
 	edgeCount: number
 	totalHeight: number
 	totalWidth: number
+	meta?: {
+		providerCount: number
+		modelCount: number
+		edgeCount: number
+		featureDim: number
+		hiddenDim: number
+	}
 }
 
 // New layout config for balanced/stretched two-column grid
@@ -113,6 +131,21 @@ interface MergedModelDatum {
 	disabled: boolean
 }
 
+// featureVectorToMap pairs a feature vector with the graph-wide feature_names
+// so the UI can render named values (e.g. tooltips) without knowing index
+// ordering up front.
+function featureVectorToMap(
+	names: string[] | undefined,
+	vector: number[] | undefined,
+): Record<string, number> | undefined {
+	if (!names || !vector || names.length === 0 || vector.length === 0) return undefined
+	const out: Record<string, number> = {}
+	for (let i = 0; i < names.length && i < vector.length; i++) {
+		out[names[i]] = vector[i]
+	}
+	return out
+}
+
 export function buildProviderModelGraph(response: ProviderModelGraphResponse): ProviderModelGraphGraph {
 	const providers = collectProviders(response)
 	const modelFieldMap = new Map<string, MergedModelDatum>()
@@ -139,12 +172,22 @@ export function buildProviderModelGraph(response: ProviderModelGraphResponse): P
 		}
 	}
 
+	// Index GNN state by node id so layout nodes can be decorated in one pass.
+	const gnn: ProviderModelGNNGraph | undefined = response.graph
+	const gnnFeatureNames = gnn?.feature_names
+	const gnnNodeById = new Map<string, NonNullable<ProviderModelGNNGraph['nodes']>[number]>()
+	for (const node of gnn?.nodes ?? []) {
+		if (node?.id) gnnNodeById.set(node.id, node)
+	}
+
 	// Place provider nodes in fixed column, evenly spaced by PROVIDER_ROW_H
 	const providerNodes: ProviderGraphNode[] = []
 	let provY = HEADER_HEIGHT
 	for (const provider of providers) {
 		const providerId = `provider:${provider.name}`
 		const modelList = provider.models.map(m => m.alias ?? m.name ?? m.label)
+		const gnnNode = gnnNodeById.get(providerId)
+		const features = featureVectorToMap(gnnFeatureNames, gnnNode?.features?.vector)
 		providerNodes.push({
 			id: providerId,
 			position: { x: PROVIDER_X, y: provY },
@@ -155,6 +198,9 @@ export function buildProviderModelGraph(response: ProviderModelGraphResponse): P
 				disabled: provider.disabled,
 				modelCount: modelList.length,
 				models: modelList,
+				features,
+				embedding: gnn?.embeddings?.[providerId],
+				kindHash: features?.kind_hash,
 			},
 		})
 		provY += PROVIDER_ROW_H + PROVIDER_GAP
@@ -181,6 +227,8 @@ export function buildProviderModelGraph(response: ProviderModelGraphResponse): P
 		const modelY = HEADER_HEIGHT + row * MODEL_ROW_H
 
 		const modelId = `model:${merged.label}`
+		const gnnNode = gnnNodeById.get(modelId)
+		const features = featureVectorToMap(gnnFeatureNames, gnnNode?.features?.vector)
 		modelNodes.push({
 			id: modelId,
 			position: { x: modelX, y: modelY },
@@ -192,6 +240,9 @@ export function buildProviderModelGraph(response: ProviderModelGraphResponse): P
 				providers: Array.from(merged.providers),
 				providerCount: merged.providers.size,
 				disabled: merged.disabled,
+				features,
+				embedding: gnn?.embeddings?.[modelId],
+				isShared: features ? features.is_shared === 1 : undefined,
 			},
 		})
 	}
@@ -227,5 +278,14 @@ export function buildProviderModelGraph(response: ProviderModelGraphResponse): P
 		edgeCount: edges.length,
 		totalHeight,
 		totalWidth,
+		meta: gnn?.meta
+			? {
+					providerCount: gnn.meta.provider_count,
+					modelCount: gnn.meta.model_count,
+					edgeCount: gnn.meta.edge_count,
+					featureDim: gnn.meta.feature_dim,
+					hiddenDim: gnn.meta.hidden_dim,
+				}
+			: undefined,
 	}
 }

@@ -49,7 +49,7 @@ internal/api ────── Gin router, handlers, auth middleware, DTO mappi
         ├── internal/service ───── business services (usage, request logs,
         │                          identities, CPA API keys, auth files,
         │                          pricing, metadata sync, token processor,
-        │                          provider model graph)
+        │                          provider-model Graph Neural Network (GNN))
         ├── internal/poller ────── ingestion: subscribe/pull sources, inbox
         │                          writer, ingest/process runners, the
         │                          serial usage aggregation runner
@@ -103,10 +103,12 @@ constructor builds components in this strict order (see
     the `poller.NewRedisPoller` facade.
 12. Optional `DatabaseBackupRunner`.
 13. Domain services: Usage, RequestLog, UsageIdentity, CPAAPIKey,
-    AuthFilesManagement, Pricing, ProviderModelGraph (sanitized proxy of the
+    AuthFilesManagement, Pricing, ProviderModelGNN (sanitized proxy of the
     CPA `/v0/management/config` — the DTO in
     `internal/cpa/dto/providerconfig` decodes only whitelisted fields;
-    `api-key`/`base-url`/`headers` are never parsed).
+    `api-key`/`base-url`/`headers` are never parsed; internally, this
+    service constructs a Graph Neural Network structure for providers
+    and models with node/edge features).
 14. `SessionManager` (persistent GORM store when auth is enabled, else
     in-memory) → auth handler → `api.NewRouter(webui.Static, ...)`.
 
@@ -171,7 +173,7 @@ Key invariants:
 ## 6. HTTP & Auth Architecture
 
 - Gin router (`internal/api/router.go`) with `OptionalProviders` (quota,
-  status, provider-model graph, …) so the binary still boots when optional
+  status, provider-model GNN, …) so the binary still boots when optional
   subsystems are off.
 - Public edge routes (auth status/login/logout, embed transports, healthz)
   register **before** the session middleware; everything else sits behind it.
@@ -194,10 +196,17 @@ Key invariants:
 - Styling: SCSS (dart-sass) global layers + **CSS Modules** per component;
   theming via `data-theme` (light "white" / dark / auto).
 - Charts: **Chart.js 4** via `react-chartjs-2` (`src/lib/chartjs.ts`).
-- Graphs: **@xyflow/react** (React Flow) renders the provider ↔ model alias
-  diagram on the Usage overview tab (`ProviderModelGraphPanel`), fed by
-  `GET /api/provider-model-graph`; labels prefer the model alias, Gemini
-  entries merge into a single node, oauth aliases are sorted.
+- Graphs: **@xyflow/react** (React Flow) renders the provider ↔ model
+  relationship as an interactive **Graph Neural Network (GNN)** diagram on
+  the Usage overview tab (`ProviderModelGNNPanel`), fed by
+  `GET /api/provider-model-gnn`; labels prefer the model alias, Gemini
+  entries merge into a single node, oauth aliases are sorted. Node and edge
+  features support future advanced analytics (embeddings, structural
+  learning, prediction). The panel surfaces GNN state directly — provider
+  nodes are tinted by hue from the `kind_hash` feature, models flagged with
+  `is_shared=1` get a badge, and per-node feature vectors and embeddings
+  appear in tooltips. The summary chip shows provider/model/dim counters
+  sourced from the GNN response meta block.
 - i18n: **i18next**-backed system (`src/i18n`), locales **en + zh + zh-TW**
   (Traditional Chinese) selected via `LanguageSwitcher`.
 - Structure: `assets`, `components/{ui,usage,test}`, `embed` (CPAMC iframe
