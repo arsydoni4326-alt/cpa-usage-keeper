@@ -100,19 +100,29 @@ export function ProviderModelGraphPanel() {
 					? MODEL_DISABLED_STYLE
 					: MODEL_STYLE
 
-			// Tooltip with full raw name + alias for hover
+			// Tooltip with full name/alias/provider summary for hover
 			const title = isProvider
 				? `${node.data.label} • ${node.data.kind} • ${node.data.modelCount} model(s)`
 				: (() => {
 						const d = node.data as {
 							label: string
-							name: string
-							provider: string
-							providerCount: number
+							names?: string[]
+							aliases?: string[]
+							providers?: string[]
+							providerCount?: number
 						}
-						return d.name && d.name !== d.label
-							? `${d.label}  —  raw: ${d.name}  —  via ${d.provider}${d.providerCount > 1 ? `  (+${d.providerCount - 1} more)` : ''}`
-							: `${d.label}  —  via ${d.provider}`
+						const aliasNames = Array.isArray(d.aliases) ? d.aliases : []
+						const rawNames = Array.isArray(d.names) ? d.names : []
+						const providerNames = Array.isArray(d.providers) ? d.providers : []
+						const pieces: string[] = [d.label]
+						if (aliasNames.length > 0) pieces.push(`alias: ${aliasNames.join(", ")}`)
+						if (rawNames.some((n) => n !== d.label)) {
+							pieces.push(`raw: ${rawNames.filter((n) => n && n !== d.label).join(", ")}`)
+						}
+						if (providerNames.length > 0) {
+							pieces.push(`via: ${providerNames.join(", ")}`)
+						}
+						return pieces.filter(Boolean).join("  —  ")
 					})()
 
 			return {

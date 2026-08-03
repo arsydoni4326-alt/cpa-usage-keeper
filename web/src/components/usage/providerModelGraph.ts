@@ -7,8 +7,9 @@ import type { ProviderModelGraphResponse } from '@/lib/types'
 interface GraphModelDatum extends Record<string, unknown> {
 	type: 'model'
 	label: ReactNode
-	name: string
-	provider: string
+	names: string[]
+	aliases: string[]
+	providers: string[]
 	providerCount: number
 	disabled: boolean
 }
@@ -19,6 +20,7 @@ interface GraphProviderDatum extends Record<string, unknown> {
 	kind: string
 	disabled: boolean
 	modelCount: number
+	models: string[]
 }
 
 export type ProviderGraphModelNode = Node<GraphModelDatum>
@@ -30,28 +32,27 @@ export interface ProviderModelGraphGraph {
 	nodes: ProviderGraphNode[]
 	edges: ProviderGraphEdge[]
 	providerCount: number
+	modelCount: number
 	edgeCount: number
 	totalHeight: number
+	totalWidth: number
 }
 
-// Two-column layout: providers on the left, their models stacked beside each provider.
-// Provider row height is sized by how many models it owns, so rows never overlap and
-// each provider's models sit in its own band. Models shared across providers are
-// rendered once per (provider, model) pair so edges link to a clean horizontal row —
-// keeps the graph readable even with 100+ models.
+// New layout config for balanced/stretched two-column grid
 const PROVIDER_X = 0
-const MODEL_X = 460
-const HEADER_HEIGHT = 8 // top padding
-const PROVIDER_HEADER = 22 // vertical offset of provider node inside its band
-const MODEL_ROW_H = 56
-const PROVIDER_MIN_H = 64
-const PROVIDER_GAP = 22
+const MODEL_X = 400
+const HEADER_HEIGHT = 24
+const PROVIDER_ROW_H = 54
+const PROVIDER_GAP = 24
+const MODEL_ROW_H = 42
+const MAX_MODEL_COLS = 4
+const MODEL_COL_GAP = 380
 
 interface PreparedProvider {
 	name: string
 	kind: string
 	disabled: boolean
-	models: { label: string; name: string }[]
+	models: { label: string; name: string; alias?: string }[]
 }
 
 function collectProviders(response: ProviderModelGraphResponse): PreparedProvider[] {
@@ -63,14 +64,19 @@ function collectProviders(response: ProviderModelGraphResponse): PreparedProvide
 		const name = (raw.name ?? '').trim()
 		if (!name) continue
 
-		const seenModels = new Set<string>()
-		const models: { label: string; name: string }[] = []
+		const seenDoneModels = new Set<string>()
+		const models: { label: string; name: string; alias?: string }[] = []
 		for (const rawModel of raw.models ?? []) {
 			if (!rawModel) continue
-			const label = (rawModel.label || rawModel.alias || rawModel.name || '').trim()
-			if (!label || seenModels.has(label)) continue
-			seenModels.add(label)
-			models.push({ label, name: (rawModel.name ?? '').trim() })
+			// Always prefer .alias as distinctive key, fallback to name, then label
+			const mergeKey = (rawModel.alias || rawModel.name || rawModel.label || '').trim()
+			if (!mergeKey || seenDoneModels.has(mergeKey)) continue
+			seenDoneModels.add(mergeKey)
+			models.push({
+				label: (rawModel.label ?? '').trim(),
+				name: (rawModel.name ?? '').trim(),
+				alias: (rawModel.alias ?? '').trim() || undefined,
+			})
 		}
 		if (models.length === 0) continue
 
@@ -86,82 +92,140 @@ function collectProviders(response: ProviderModelGraphResponse): PreparedProvide
 			seen.set(name, existing)
 			result.push(existing)
 		}
-		const merged = new Set(existing.models.map((m) => m.label))
+		const mergedLabels = new Set(existing.models.map(m => m.alias ?? m.name ?? m.label))
 		for (const model of models) {
-			if (merged.has(model.label)) continue
-			merged.add(model.label)
+			const modelKey = model.alias ?? model.name ?? model.label
+			if (mergedLabels.has(modelKey)) continue
+			mergedLabels.add(modelKey)
 			existing.models.push(model)
 		}
 		if (raw.disabled) existing.disabled = true
 	}
-
 	return result
+}
+
+// The merged model info storage
+interface MergedModelDatum {
+	label: string
+	names: Set<string>
+	aliases: Set<string>
+	providers: Set<string>
+	disabled: boolean
 }
 
 export function buildProviderModelGraph(response: ProviderModelGraphResponse): ProviderModelGraphGraph {
 	const providers = collectProviders(response)
-	const nodes: ProviderGraphNode[] = []
-	const edges: ProviderGraphEdge[] = []
-	// Count providers per model label for the shared-models badge.
-	const providerCountByLabel = new Map<string, number>()
+	const modelFieldMap = new Map<string, MergedModelDatum>()
 
+	// Merge models by alias|name|label so a given label only ever has a single node
 	for (const provider of providers) {
-		for (const model of provider.models) {
-			providerCountByLabel.set(model.label, (providerCountByLabel.get(model.label) ?? 0) + 1)
+		for (const m of provider.models) {
+			const key = m.alias ?? m.name ?? m.label
+			if (!key) continue
+			if (!modelFieldMap.has(key)) {
+				modelFieldMap.set(key, {
+					label: key,
+					names: new Set<string>(),
+					aliases: new Set<string>(),
+					providers: new Set<string>(),
+					disabled: provider.disabled,
+				})
+			}
+			const merged = modelFieldMap.get(key)!
+			if (m.name) merged.names.add(m.name)
+			if (m.alias) merged.aliases.add(m.alias)
+			merged.providers.add(provider.name)
+			if (provider.disabled) merged.disabled = true
 		}
 	}
 
-	let y = HEADER_HEIGHT
+	// Place provider nodes in fixed column, evenly spaced by PROVIDER_ROW_H
+	const providerNodes: ProviderGraphNode[] = []
+	let provY = HEADER_HEIGHT
 	for (const provider of providers) {
 		const providerId = `provider:${provider.name}`
-		const modelCount = provider.models.length
-		const bandHeight = Math.max(PROVIDER_MIN_H, modelCount * MODEL_ROW_H)
-
-		const providerY = y + Math.min(PROVIDER_HEADER, bandHeight / 2 - 12)
-		nodes.push({
+		const modelList = provider.models.map(m => m.alias ?? m.name ?? m.label)
+		providerNodes.push({
 			id: providerId,
-			position: { x: PROVIDER_X, y: providerY },
+			position: { x: PROVIDER_X, y: provY },
 			data: {
 				type: 'provider',
 				label: provider.name,
 				kind: provider.kind,
 				disabled: provider.disabled,
-				modelCount,
+				modelCount: modelList.length,
+				models: modelList,
 			},
 		})
+		provY += PROVIDER_ROW_H + PROVIDER_GAP
+	}
 
-		let modelY = y
-		for (const model of provider.models) {
-			const modelId = `model:${provider.name}::${model.label}`
-			nodes.push({
-				id: modelId,
-				position: { x: MODEL_X, y: modelY },
-				data: {
-					type: 'model',
-					label: model.label,
-					name: model.name,
-					provider: provider.name,
-					providerCount: providerCountByLabel.get(model.label) ?? 1,
-					disabled: provider.disabled,
-				},
-			})
+	// Prepare model nodes in fixed column(s), stacked vertically. Small graphs stay in a
+	// single column next to the providers; only when the model count exceeds
+	// MAX_MODEL_COLS do we split into multiple columns to cap vertical height.
+	const mergedModelList = Array.from(modelFieldMap.values())
+	const modelCount = mergedModelList.length
+
+	// Distribute models across up to MAX_MODEL_COLS columns, column-major (fill down then right).
+	// Only split into multiple columns when the model count exceeds MAX_MODEL_COLS;
+	// smaller graphs stay in a single column next to the providers (x=MODEL_X).
+	const numModelCols = modelCount > MAX_MODEL_COLS ? MAX_MODEL_COLS : 1
+	const rowsPerCol = Math.ceil(modelCount / numModelCols) || 1
+
+	const modelNodes: ProviderGraphNode[] = []
+	for (let i = 0; i < modelCount; i++) {
+		const merged = mergedModelList[i]
+		const col = numModelCols === 1 ? 0 : Math.floor(i / rowsPerCol)
+		const row = numModelCols === 1 ? i : i % rowsPerCol
+		const modelX = MODEL_X + col * MODEL_COL_GAP
+		const modelY = HEADER_HEIGHT + row * MODEL_ROW_H
+
+		const modelId = `model:${merged.label}`
+		modelNodes.push({
+			id: modelId,
+			position: { x: modelX, y: modelY },
+			data: {
+				type: 'model',
+				label: merged.label,
+				names: Array.from(merged.names),
+				aliases: Array.from(merged.aliases),
+				providers: Array.from(merged.providers),
+				providerCount: merged.providers.size,
+				disabled: merged.disabled,
+			},
+		})
+	}
+
+	// Edges: provider-model
+	const edges: ProviderGraphEdge[] = []
+	for (const provider of providers) {
+		const providerId = `provider:${provider.name}`
+		for (const m of provider.models) {
+			const modelKey = m.alias ?? m.name ?? m.label
+			if (!modelKey) continue
+			const modelId = `model:${modelKey}`
 			edges.push({
-				id: `edge:${providerId}__${model.label}`,
+				id: `edge:${providerId}__${modelKey}`,
 				source: providerId,
 				target: modelId,
 				type: 'smoothstep',
 			})
-			modelY += MODEL_ROW_H
 		}
-
-		y += bandHeight + PROVIDER_GAP
 	}
 
+	// Layout summary: cover the furthest node in each axis
+	const providersBottom = HEADER_HEIGHT + providers.length * (PROVIDER_ROW_H + PROVIDER_GAP)
+	const modelsBottom = HEADER_HEIGHT + rowsPerCol * MODEL_ROW_H
+	const totalHeight = Math.max(providersBottom, modelsBottom)
+	const totalWidth = MODEL_X + (numModelCols - 1) * MODEL_COL_GAP + 420
+
 	return {
-		nodes,
+		nodes: [...providerNodes, ...modelNodes],
 		edges,
 		providerCount: providers.length,
+		modelCount: mergedModelList.length,
 		edgeCount: edges.length,
-		totalHeight: Math.max(0, y - PROVIDER_GAP),
+		totalHeight,
+		totalWidth,
 	}
 }
