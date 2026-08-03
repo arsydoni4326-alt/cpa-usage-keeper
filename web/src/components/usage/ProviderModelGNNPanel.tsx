@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
 	Background,
@@ -17,6 +17,13 @@ import type { ProviderModelGraphResponse } from '@/lib/types'
 
 import styles from './ProviderModelGNNPanel.module.scss'
 import { buildProviderModelGraph, type ProviderGraphNode } from './providerModelGraph'
+
+// Lazy-load the Reagraph (WebGL) canvas so the xyflow grid stays the fast default
+// and the heavier three.js bundle only downloads when the user opts in.
+const ProviderModelReagraphCanvas = lazy(async () => {
+	const mod = await import('./ProviderModelReagraphPanel')
+	return { default: mod.ProviderModelReagraphCanvas }
+})
 
 const PROVIDER_STYLE: React.CSSProperties = {
 	background: '#dbeafe',
@@ -124,6 +131,7 @@ export function ProviderModelGNNPanel() {
 	const [data, setData] = useState<ProviderModelGraphResponse | null>(null)
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState<string | null>(null)
+	const [renderer, setRenderer] = useState<'flow' | 'reagraph'>('flow')
 
 	useEffect(() => {
 		const controller = new AbortController()
@@ -226,6 +234,12 @@ export function ProviderModelGNNPanel() {
 		)
 	} else if (!graph || graph.nodes.length === 0) {
 		body = <div className={styles.state}>{t('usage_stats.provider_model_graph.empty')}</div>
+	} else if (renderer === 'reagraph') {
+		body = (
+			<Suspense fallback={<div className={styles.state}>{t('usage_stats.provider_model_graph.loading')}</div>}>
+				<ProviderModelReagraphCanvas graph={graph} />
+			</Suspense>
+		)
 	} else {
 		body = (
 			<div className={styles.canvas}>
@@ -270,15 +284,37 @@ export function ProviderModelGNNPanel() {
 					<h3 className={styles.title}>{t('usage_stats.provider_model_graph.title')}</h3>
 					<p className={styles.subtitle}>{t('usage_stats.provider_model_graph.subtitle')}</p>
 				</div>
-				{!loading && !error && graph ? (
-					<div className={styles.summary}>
-						{t('usage_stats.provider_model_graph.summary', {
-							providers: graph.meta?.providerCount ?? graph.providerCount,
-							models: graph.meta?.edgeCount ?? graph.edgeCount,
-							dims: graph.meta?.featureDim ?? 0,
-						})}
+				<div className={styles.headerRight}>
+					{!loading && !error && graph ? (
+						<div className={styles.summary}>
+							{t('usage_stats.provider_model_graph.summary', {
+								providers: graph.meta?.providerCount ?? graph.providerCount,
+								models: graph.meta?.edgeCount ?? graph.edgeCount,
+								dims: graph.meta?.featureDim ?? 0,
+							})}
+						</div>
+					) : null}
+					<div className={styles.toggle} role="tablist" aria-label={t('usage_stats.provider_model_graph.renderer_label')}>
+						<button
+							type="button"
+							role="tab"
+							aria-selected={renderer === 'flow'}
+							className={`${styles.toggleButton} ${renderer === 'flow' ? styles.toggleButtonActive : ''}`}
+							onClick={() => setRenderer('flow')}
+						>
+							{t('usage_stats.provider_model_graph.renderer_classic')}
+						</button>
+						<button
+							type="button"
+							role="tab"
+							aria-selected={renderer === 'reagraph'}
+							className={`${styles.toggleButton} ${renderer === 'reagraph' ? styles.toggleButtonActive : ''}`}
+							onClick={() => setRenderer('reagraph')}
+						>
+							{t('usage_stats.provider_model_graph.renderer_reagraph')}
+						</button>
 					</div>
-				) : null}
+				</div>
 			</div>
 			{body}
 		</div>

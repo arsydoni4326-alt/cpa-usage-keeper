@@ -25,6 +25,13 @@
 	max-width: 640px;
 }
 
+.headerRight {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 8px;
+}
+
 .summary {
 	display: inline-flex;
 	align-items: center;
@@ -49,6 +56,38 @@
 	border: 1px solid var(--color-border-default, #d0d7de);
 	border-radius: 8px;
 	background: var(--color-bg-subtle, #f6f8fa);
+}
+
+.toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	padding: 2px;
+	border: 1px solid var(--color-border-default, #d0d7de);
+	border-radius: 8px;
+	background: var(--color-bg-subtle, #f6f8fa);
+}
+
+.toggleButton {
+	appearance: none;
+	border: 0;
+	padding: 4px 10px;
+	border-radius: 6px;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--color-text-secondary, #6e7781);
+	background: transparent;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.toggleButton:hover {
+	color: var(--color-text-primary, #1f2328);
+}
+
+.toggleButtonActive {
+	background: var(--color-bg-info-subtle, #ddf4ff);
+	color: var(--color-fg-accent, #0969da);
 }
 
 .state {
@@ -84,6 +123,24 @@
 	.canvas {
 		border-color: #30363d;
 		background: #0d1117;
+	}
+
+	.toggle {
+		border-color: #30363d;
+		background: #0d1117;
+	}
+
+	.toggleButton {
+		color: #7d8590;
+	}
+
+	.toggleButton:hover {
+		color: #e6edf3;
+	}
+
+	.toggleButtonActive {
+		background: rgba(31, 111, 235, 0.15);
+		color: #58a6ff;
 	}
 
 	.stateError {

@@ -2,6 +2,8 @@ export { StatCards } from './StatCards';
 export { DailyAverageCard } from './DailyAverageCard';
 export { OverviewRealtimePanel } from './OverviewRealtimePanel';
 export { ProviderModelGNNPanel } from './ProviderModelGNNPanel';
+// Note: ProviderModelReagraphPanel is intentionally NOT re-exported here — it is
+// lazy-loaded by ProviderModelGNNPanel so the WebGL/three.js code chunks separately.
 export { AnalysisPanel } from './analysis';
 export { ApiKeySettingsCard } from './ApiKeySettingsCard';
 export { SessionSettingsCard } from './SessionSettingsCard';
