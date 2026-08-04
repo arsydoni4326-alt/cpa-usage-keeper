@@ -145,6 +145,48 @@ describe('AuthFileCredentialsSection title', () => {
     expect(html).toContain('usage_stats.total_tokens')
     expect(html).toContain('usage_stats.cache_rate')
   })
+
+  it('renders isolated decorative layers for animated subscription badges', () => {
+    const row = {
+      identity: { id: '1', identity: 'auth-1', is_deleted: false },
+      displayName: 'Codex Pro Account',
+      maskedIdentity: 'auth-1',
+      providerLabel: 'Codex',
+      typeLabel: 'codex',
+      authTypeLabel: 'oauth',
+      planTypeLabel: 'Pro 20x',
+      planTypeTone: 'pro20x',
+      totalRequests: 0,
+      successCount: 0,
+      failureCount: 0,
+      successRate: null,
+      totalTokens: 0,
+      cacheReadRate: null,
+      quota: [],
+      quotaLoading: false,
+      displayQuotas: [],
+    } as AuthFileCredentialRow
+
+    const html = renderToStaticMarkup(createElement(AuthFileCredentialsSection, createAuthFileSectionProps({ rows: [row], total: 1 })))
+
+    expect(html).toContain('credentialPlanBadgeFlow')
+    expect(html).toContain('credentialPlanBadgeCorona')
+    expect(html).toContain('credentialPlanBadgeLabel')
+    expect(html).toMatch(/credentialPlanBadgeFlow[^>]+aria-hidden="true"/)
+    expect(html).toMatch(/credentialPlanBadgeCorona[^>]+aria-hidden="true"/)
+
+    for (const [planTypeLabel, planTypeTone] of [['Free', 'free'], ['Custom', 'neutral']] as const) {
+      const lightweightHtml = renderToStaticMarkup(createElement(AuthFileCredentialsSection, createAuthFileSectionProps({
+        rows: [{ ...row, planTypeLabel, planTypeTone }],
+        total: 1,
+      })))
+
+      expect(lightweightHtml).toContain('credentialPlanBadgeLabel')
+      expect(lightweightHtml).toContain(planTypeLabel)
+      expect(lightweightHtml).not.toContain('credentialPlanBadgeFlow')
+      expect(lightweightHtml).not.toContain('credentialPlanBadgeCorona')
+    }
+  })
 })
 
 describe('AuthFileCredentialsSection quota reset action', () => {
