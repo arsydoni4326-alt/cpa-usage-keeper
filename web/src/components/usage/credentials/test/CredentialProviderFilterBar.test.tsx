@@ -15,21 +15,19 @@ vi.mock('react-i18next', () => ({
 
 // 当前测试组验证新原始 type 复用既有品牌标签与图标。
 describe('CredentialProviderFilterBar', () => {
-  // Interactions 单独存在时也应显示 Gemini 品牌按钮。
-  it('renders Gemini branding for Gemini Interactions provider rows', () => {
-    // html 使用真实组件和仅包含 Interactions 的后端计数。
+  // Gemini CLI 与 Interactions 单独存在时也应聚合显示 Gemini 品牌按钮。
+  it('renders Gemini branding for Gemini CLI and Interactions provider rows', () => {
+    // html 使用真实组件和仅包含两个兼容 type 的后端计数。
     const html = renderToStaticMarkup(
-      // AI Provider scope 应把 Interactions 聚合到 Gemini。
-      <CredentialProviderFilterBar scope="ai-provider" typeCounts={[{ type: 'gemini-interactions', count: 3 }]} value="all" onChange={() => undefined} />,
+      // AI Provider scope 应把 Gemini CLI 与 Interactions 聚合到 Gemini。
+      <CredentialProviderFilterBar scope="ai-provider" typeCounts={[{ type: 'gemini-cli', count: 2 }, { type: 'gemini-interactions', count: 3 }]} value="all" onChange={() => undefined} />,
     )
     // Gemini 品牌标签必须可见。
     expect(html).toContain('usage_stats.credentials_filter_gemini')
-    // Interactions 复用统一的 Gemini 图标。
+    // 两个兼容 type 复用统一的 Gemini 图标。
     expect(html).toContain('data-provider-brand-icon="gemini"')
-    // GeminiCLI 是 Auth Files 标签，不能出现在 AI Provider scope。
-    expect(html).not.toContain('usage_stats.credentials_filter_gemini_cli')
-    // 聚合后的按钮展示 Interactions 三行计数。
-    expect(html).toContain('>3</span>')
+    // 聚合后的按钮展示两个兼容 type 的总计数。
+    expect(html).toContain('>5</span>')
   })
 
   // xAI API Key 需要在 AI Provider scope 显示现有 xAI 品牌。
@@ -61,8 +59,8 @@ describe('CredentialProviderFilterBar', () => {
     expect(html).toContain('data-provider-brand-icon="xai"')
   })
 
-  // Auth Files 新增 CPA 内置的 Kimi 与 Vertex，同时不暴露插件来源按钮。
-  it('renders Kimi and Vertex without iFlow or GeminiCLI filters', () => {
+  // Auth Files 显示 Kimi、Vertex 与 Gemini CLI 兼容品牌，同时不暴露 iFlow 按钮。
+  it('renders Kimi, Vertex, and Gemini CLI branding without iFlow', () => {
     const html = renderToStaticMarkup(
       <CredentialProviderFilterBar
         scope="auth-files"
@@ -79,9 +77,10 @@ describe('CredentialProviderFilterBar', () => {
 
     expect(html).toContain('usage_stats.credentials_filter_kimi')
     expect(html).toContain('usage_stats.credentials_filter_vertex')
+    expect(html).toContain('usage_stats.credentials_filter_gemini')
     expect(html).toContain('data-provider-brand-icon="kimi"')
     expect(html).toContain('data-provider-brand-icon="vertex"')
-    expect(html).not.toContain('usage_stats.credentials_filter_gemini_cli')
+    expect(html).toContain('data-provider-brand-icon="gemini"')
     expect(html).not.toContain('usage_stats.credentials_filter_iflow')
   })
 

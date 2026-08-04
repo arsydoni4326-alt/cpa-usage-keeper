@@ -17,7 +17,7 @@ const lobeProviderIconAssets = [
 ] as const
 
 describe('ProviderBrandIcon', () => {
-  it('normalizes only CPA built-in identity types into the shared brand set', () => {
+  it('normalizes CPA identity types and supported aliases into the shared brand set', () => {
     expect([
       'antigravity',
       'claude',
@@ -37,11 +37,12 @@ describe('ProviderBrandIcon', () => {
       'vertex',
       'xai',
     ])
+    expect(providerBrandIconKey('gemini-cli')).toBe('gemini')
     expect(providerBrandIconKey('gemini-interactions')).toBe('gemini')
   })
 
   it('does not assign logos to plugin-only or unsupported identity types', () => {
-    expect(providerBrandIconKey('gemini-cli')).toBeUndefined()
+    expect(providerBrandIconKey('gemini-cli-code-assist')).toBeUndefined()
     expect(providerBrandIconKey('iflow')).toBeUndefined()
     expect(providerBrandIconKey('future-provider')).toBeUndefined()
     expect(providerBrandIconKey(undefined)).toBeUndefined()

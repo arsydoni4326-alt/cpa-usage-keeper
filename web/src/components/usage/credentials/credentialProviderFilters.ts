@@ -22,6 +22,8 @@ const AUTH_FILE_PROVIDER_FILTERS: KnownCredentialProviderFilter[] = [
   { key: 'antigravity', labelKey: 'usage_stats.credentials_filter_antigravity', types: ['antigravity'] },
   { key: 'claude', labelKey: 'usage_stats.credentials_filter_claude', types: ['claude'] },
   { key: 'codex', labelKey: 'usage_stats.credentials_filter_codex', types: ['codex'] },
+  // Gemini Auth File 兼容 CPA 的原始与 CLI type，并统一复用 Gemini 品牌筛选。
+  { key: 'gemini', labelKey: 'usage_stats.credentials_filter_gemini', types: ['gemini', 'gemini-cli'] },
   { key: 'kimi', labelKey: 'usage_stats.credentials_filter_kimi', types: ['kimi'] },
   { key: 'xai', labelKey: 'usage_stats.credentials_filter_xai', types: ['xai'] },
   { key: 'vertex', labelKey: 'usage_stats.credentials_filter_vertex', types: ['vertex'] },
@@ -30,8 +32,8 @@ const AUTH_FILE_PROVIDER_FILTERS: KnownCredentialProviderFilter[] = [
 const AI_PROVIDER_FILTERS: KnownCredentialProviderFilter[] = [
   { key: 'codex', labelKey: 'usage_stats.credentials_filter_codex', types: ['codex'] },
   { key: 'xai', labelKey: 'usage_stats.credentials_filter_xai', types: ['xai'] },
-  // Gemini 品牌按钮同时查询普通 Gemini 与独立的 Gemini Interactions 原始类型。
-  { key: 'gemini', labelKey: 'usage_stats.credentials_filter_gemini', types: ['gemini', 'gemini-interactions'] },
+  // AI Provider 的 Gemini 品牌同时兼容普通、CLI 与 Interactions 三种原始 type。
+  { key: 'gemini', labelKey: 'usage_stats.credentials_filter_gemini', types: ['gemini', 'gemini-cli', 'gemini-interactions'] },
   { key: 'claude', labelKey: 'usage_stats.credentials_filter_claude', types: ['claude'] },
   { key: 'vertex', labelKey: 'usage_stats.credentials_filter_vertex', types: ['vertex'] },
   { key: 'openai', labelKey: 'usage_stats.credentials_filter_openai', types: ['openai'] },

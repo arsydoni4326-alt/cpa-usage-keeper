@@ -28,12 +28,13 @@ export interface ProviderBrandIconProps {
   className?: string
 }
 
-// 仅映射 CPA 能稳定提供 identity 的内置类型；Interactions 复用 Gemini 品牌。
+// 仅映射 CPA 能稳定提供 identity 的类型；Gemini CLI 兼容行与 Interactions 复用 Gemini 品牌。
 const providerBrandIconKeyByType: Readonly<Record<string, ProviderBrandIconKey>> = {
   antigravity: 'antigravity',
   claude: 'claude',
   codex: 'codex',
   gemini: 'gemini',
+  'gemini-cli': 'gemini',
   'gemini-interactions': 'gemini',
   kimi: 'kimi',
   openai: 'openai',
