@@ -7,6 +7,7 @@ const credentialShellSource = readFileSync(new URL('../CredentialSectionShell.ts
 const credentialHealthSource = readFileSync(new URL('../CredentialHealthPanel.tsx', import.meta.url), 'utf8')
 const aiProviderSectionSource = readFileSync(new URL('../AiProviderCredentialsSection.tsx', import.meta.url), 'utf8')
 const authFileSectionSource = readFileSync(new URL('../AuthFileCredentialsSection.tsx', import.meta.url), 'utf8')
+const providerFilterSource = readFileSync(new URL('../CredentialProviderFilterBar.tsx', import.meta.url), 'utf8')
 
 const cssBlock = (selector: string) => {
   const start = credentialStyles.indexOf(selector)
@@ -42,12 +43,12 @@ describe('Credential section styles', () => {
   })
 
   it('keeps Auth Files and AI Provider row sizing separate', () => {
-    expect(credentialStyles).toMatch(/\.authFileCredentialRow\s*\{[\s\S]*?grid-template-columns:\s*236px minmax\(0, 448px\) minmax\(250px, 1fr\);/)
-    expect(credentialStyles).toMatch(/\.authFileCredentialRow\s*\{[\s\S]*?\.credentialIdentityBlock\s*\{[\s\S]*?max-width:\s*236px;/)
+    expect(credentialStyles).toMatch(/\.authFileCredentialRow\s*\{[\s\S]*?grid-template-columns:\s*\$credential-name-column-width minmax\(0, 448px\) minmax\(250px, 1fr\);/)
+    expect(credentialStyles).toMatch(/\.authFileCredentialRow\s*\{[\s\S]*?\.credentialIdentityBlock\s*\{[\s\S]*?max-width:\s*\$credential-name-column-width;/)
     expect(credentialStyles).toMatch(/\.authFileCredentialRow\s*\{[\s\S]*?@include tablet\s*\{[\s\S]*?grid-template-columns:\s*1fr;/)
     expect(credentialStyles).toMatch(/\.authFileCredentialRow\s*\{[\s\S]*?@include mobile\s*\{[\s\S]*?grid-template-columns:\s*1fr;/)
-    expect(credentialStyles).toMatch(/\.aiProviderCredentialRow\s*\{[\s\S]*?grid-template-columns:\s*236px minmax\(0, 448px\) minmax\(250px, 1fr\);/)
-    expect(credentialStyles).toMatch(/\.aiProviderCredentialRow\s*\{[\s\S]*?\.credentialIdentityBlock\s*\{[\s\S]*?max-width:\s*236px;/)
+    expect(credentialStyles).toMatch(/\.aiProviderCredentialRow\s*\{[\s\S]*?grid-template-columns:\s*\$credential-name-column-width minmax\(0, 448px\) minmax\(250px, 1fr\);/)
+    expect(credentialStyles).toMatch(/\.aiProviderCredentialRow\s*\{[\s\S]*?\.credentialIdentityBlock\s*\{[\s\S]*?max-width:\s*\$credential-name-column-width;/)
     expect(credentialStyles).toMatch(/\.aiProviderCredentialRow\s*\{[\s\S]*?@include tablet\s*\{[\s\S]*?grid-template-columns:\s*1fr;/)
     expect(credentialStyles).toMatch(/\.aiProviderCredentialRow\s*\{[\s\S]*?@include mobile\s*\{[\s\S]*?grid-template-columns:\s*1fr;/)
     expect(credentialShellSource).toContain('rowClassName?: string')
@@ -68,6 +69,35 @@ describe('Credential section styles', () => {
     expect(aiProviderSectionSource).toContain('statsUpdatedAt={row.statsUpdatedText}')
     expect(aiProviderSectionSource).not.toContain('DisplayModeSwitch')
     expect(authFileSectionSource).not.toContain('aiProviderCredentialRow')
+  })
+
+  it('passes explicit shared logo sizes and accessible row labels to every context', () => {
+    const filterIconFrameStyles = cssBlock('.credentialProviderFilterIconFrame')
+    const identityBlockStyles = cssBlock('.credentialIdentityBlock')
+    const identityContentStyles = cssBlock('.credentialIdentityContent')
+
+    expect(credentialStyles).toMatch(/\$credential-provider-icon-size:\s*30px;/)
+    expect(filterIconFrameStyles).toContain('width: $credential-provider-icon-size;')
+    expect(filterIconFrameStyles).toContain('height: $credential-provider-icon-size;')
+    expect(filterIconFrameStyles).toMatch(/> svg\s*\{[\s\S]*?width:\s*100%;[\s\S]*?height:\s*100%;/)
+    expect(providerFilterSource).toMatch(/<ProviderBrandIcon providerType=\{option\.knownKey \?\? option\.key\} size="100%" \/>/)
+    expect(authFileSectionSource).toMatch(/<ProviderBrandIcon providerType=\{row\.identity\.type\} size=\{30\} ariaLabel=\{row\.typeLabel\} \/>/)
+    expect(aiProviderSectionSource).toMatch(/<ProviderBrandIcon providerType=\{row\.identity\.type\} size=\{30\} ariaLabel=\{row\.typeLabel\} \/>/)
+    expect(authFileSectionSource).toMatch(/<ProviderBrandIcon providerType=\{result\.type\} size=\{20\} \/>/)
+    expect(identityBlockStyles).toContain('display: flex;')
+    expect(identityBlockStyles).toContain('align-items: center;')
+    expect(identityBlockStyles).toContain('gap: $credential-provider-icon-gap;')
+    expect(identityContentStyles).toContain('min-height: 40px;')
+    expect(credentialStyles).not.toMatch(/\.credentialProviderFilterIcon\s*\{/)
+    expect(credentialStyles).not.toMatch(/\.credentialNameProviderIcon\s*\{/)
+    expect(credentialStyles).not.toMatch(/\.credentialInspectionProviderIcon\s*\{/)
+    expect(credentialShellSource).toMatch(/credentialIdentityBlock[\s\S]*?\{icon\}[\s\S]*?credentialIdentityContent[\s\S]*?credentialNameRow[\s\S]*?credentialIdentityText/)
+  })
+
+  it('preserves the pre-logo credential name content width', () => {
+    expect(credentialStyles).toMatch(/\$credential-name-content-width:\s*236px;/)
+    expect(credentialStyles).toMatch(/\$credential-provider-icon-gap:\s*14px;/)
+    expect(credentialStyles).toMatch(/\$credential-name-column-width:\s*\$credential-name-content-width \+ \$credential-provider-icon-size \+ \$credential-provider-icon-gap;/)
   })
 
   it('lets Auth Files quota bars wrap before their blocks overlap', () => {
@@ -265,6 +295,7 @@ describe('Credential section styles', () => {
   })
 
   it('keeps credential alias edit buttons in a fixed name-cell action slot', () => {
+    expect(credentialStyles).toMatch(/\.credentialNameMain\s*\{[\s\S]*?display:\s*flex;[\s\S]*?gap:\s*8px;[\s\S]*?width:\s*100%;/)
     expect(credentialStyles).toMatch(/\.credentialDisplayName\s*\{[\s\S]*?width:\s*100%;/)
     expect(credentialStyles).toMatch(/\.credentialAliasEditor\s*\{[\s\S]*?width:\s*100%;/)
     expect(credentialStyles).toMatch(/\.credentialAliasDisplayLayout\s*\{[\s\S]*?display:\s*grid;/)

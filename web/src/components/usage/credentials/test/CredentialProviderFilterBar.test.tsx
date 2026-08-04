@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { CredentialProviderFilterBar, CredentialProviderFilterIcon } from '../CredentialProviderFilterBar'
+import { CredentialProviderFilterBar } from '../CredentialProviderFilterBar'
 
 // i18n mock 直接返回 key，让测试精确观察筛选标签选择。
 vi.mock('react-i18next', () => ({
@@ -24,8 +24,8 @@ describe('CredentialProviderFilterBar', () => {
     )
     // Gemini 品牌标签必须可见。
     expect(html).toContain('usage_stats.credentials_filter_gemini')
-    // Interactions 复用现有 Gemini 图片，不增加新 icon asset。
-    expect(html).toContain('<img')
+    // Interactions 复用统一的 Gemini 图标。
+    expect(html).toContain('data-provider-brand-icon="gemini"')
     // GeminiCLI 是 Auth Files 标签，不能出现在 AI Provider scope。
     expect(html).not.toContain('usage_stats.credentials_filter_gemini_cli')
     // 聚合后的按钮展示 Interactions 三行计数。
@@ -41,8 +41,9 @@ describe('CredentialProviderFilterBar', () => {
     )
     // 复用现有 xAI 翻译 key。
     expect(html).toContain('usage_stats.credentials_filter_xai')
-    // 复用现有 xAI SVG 图片。
-    expect(html).toContain('<img')
+    // 使用统一组件中的 Lobe Icons 单色 xAI 图标。
+    expect(html).toContain('data-provider-brand-icon="xai"')
+    expect(html).toContain('data-provider-brand-icon-tone="monochrome"')
     // 按钮展示两行计数。
     expect(html).toContain('>2</span>')
   })
@@ -56,8 +57,32 @@ describe('CredentialProviderFilterBar', () => {
     )
     // xAI Auth Files 标签继续显示。
     expect(html).toContain('usage_stats.credentials_filter_xai')
-    // xAI Auth Files 继续使用现有图标。
-    expect(html).toContain('<img')
+    // xAI Auth Files 与 AI Provider 复用同一个图标组件。
+    expect(html).toContain('data-provider-brand-icon="xai"')
+  })
+
+  // Auth Files 新增 CPA 内置的 Kimi 与 Vertex，同时不暴露插件来源按钮。
+  it('renders Kimi and Vertex without iFlow or GeminiCLI filters', () => {
+    const html = renderToStaticMarkup(
+      <CredentialProviderFilterBar
+        scope="auth-files"
+        typeCounts={[
+          { type: 'kimi', count: 2 },
+          { type: 'vertex', count: 3 },
+          { type: 'gemini-cli', count: 4 },
+          { type: 'iflow', count: 5 },
+        ]}
+        value="all"
+        onChange={() => undefined}
+      />,
+    )
+
+    expect(html).toContain('usage_stats.credentials_filter_kimi')
+    expect(html).toContain('usage_stats.credentials_filter_vertex')
+    expect(html).toContain('data-provider-brand-icon="kimi"')
+    expect(html).toContain('data-provider-brand-icon="vertex"')
+    expect(html).not.toContain('usage_stats.credentials_filter_gemini_cli')
+    expect(html).not.toContain('usage_stats.credentials_filter_iflow')
   })
 
   // 没有任何正计数时组件继续返回空 markup。
@@ -71,11 +96,4 @@ describe('CredentialProviderFilterBar', () => {
     expect(html).toBe('')
   })
 
-  // 直接 icon helper 也要继续识别 xAI key。
-  it('renders the xAI provider icon as an image', () => {
-    // html 直接渲染 xAI icon helper。
-    const html = renderToStaticMarkup(<CredentialProviderFilterIcon provider="xai" />)
-    // xAI key 必须解析为图片。
-    expect(html).toContain('<img')
-  })
 })

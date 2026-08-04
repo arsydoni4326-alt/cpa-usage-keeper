@@ -83,7 +83,7 @@ describe('AuthFileCredentialsSection title', () => {
 
   it('renders shared metric headers without repeating labels in each row', () => {
     const row = {
-      identity: { id: '1', identity: 'auth-1', is_deleted: false },
+      identity: { id: '1', identity: 'auth-1', type: 'codex', is_deleted: false },
       displayName: 'Very Long Auth File Name For Wrapping',
       maskedIdentity: 'auth-1',
       providerLabel: 'Codex',
@@ -111,6 +111,11 @@ describe('AuthFileCredentialsSection title', () => {
     expect(html).toContain('usage_stats.credentials_column_quota')
     expect(html).toContain('1.23K')
     expect(html).toContain('97.24%')
+    expect(html).toContain('data-provider-brand-icon="codex"')
+    expect(html.indexOf('data-provider-brand-icon="codex"')).toBeLessThan(html.indexOf('Very Long Auth File Name For Wrapping'))
+    expect(html).toContain('role="img"')
+    expect(html).toContain('aria-label="codex"')
+    expect(html).not.toContain('>codex</span>')
   })
 
   it('keeps Auth Files metric cells aligned when values are unavailable', () => {
