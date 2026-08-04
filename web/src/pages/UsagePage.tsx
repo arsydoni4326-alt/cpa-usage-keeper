@@ -51,7 +51,7 @@ import { useRankingData } from '@/features/ranking/hooks/useRankingData';
 import { useLocalRankingData } from '@/features/ranking/hooks/useLocalRankingData';
 import { resolveLocalRankingPreviewAPI, resolveRankingPreviewAPI } from '@/features/ranking/previewMock';
 import { loadRankingScope, persistRankingScope } from '@/features/ranking/scope';
-import type { RankingScope } from '@/features/ranking/types';
+import type { LocalRankingProfileRequest, RankingScope } from '@/features/ranking/types';
 import styles from './UsagePage.module.scss';
 
 const TIME_RANGE_STORAGE_KEY = 'cli-proxy-usage-time-range-v1';
@@ -82,7 +82,7 @@ const USAGE_TAB_LABEL_KEYS: Record<UsageTab, string> = {
 const DEFAULT_USAGE_TAB: UsageTab = 'overview';
 const USAGE_TAB_STORAGE_KEY = 'cli-proxy-usage-tab-v1';
 const REQUEST_EVENTS_PAGE_SIZES = [20, 50, 100, 500, 1000] as const;
-const REQUEST_EVENTS_DEFAULT_PAGE_SIZE = 100;
+const REQUEST_EVENTS_DEFAULT_PAGE_SIZE = 50;
 // v7 是完整列顺序格式；v8 加入客户端请求元数据列，并保留历史自定义顺序。
 const REQUEST_EVENTS_PREFERENCES_VERSION = 8;
 const ALL_REQUEST_EVENTS_FILTER = '__all__';
@@ -1025,6 +1025,8 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     onBackgroundRefreshError: handleRankingBackgroundRefreshError,
     api: LOCAL_RANKING_PREVIEW_API,
   });
+  const updateLocalRankingProfile = localRankingData.updateProfile;
+  const patchLocalRankingProfileCache = localRankingData.patchProfileCache;
   const displayedRankingLeaderboard = rankingScope === 'community'
     ? rankingData.leaderboard
     : localRankingData.leaderboard;
@@ -1034,6 +1036,17 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     () => rankingScope === 'community' ? refreshCommunityRanking() : refreshLocalRanking(),
     [rankingScope, refreshCommunityRanking, refreshLocalRanking],
   );
+  const handleUpdateLocalRankingProfile = useCallback(async (participantID: string, profile: LocalRankingProfileRequest) => {
+    const updated = await updateLocalRankingProfile(participantID, profile);
+    // 排行资料与设置页共用同一 Key 记录，保存后同步刷新已加载的别名投影。
+    setApiKeySettings((current) => current.map((item) => item.id === updated.participant_id
+      ? { ...item, keyAlias: updated.key_alias, label: updated.display_name }
+      : item));
+    setApiKeyOptions((current) => current.map((item) => item.id === updated.participant_id
+      ? { ...item, label: updated.display_name }
+      : item));
+    return updated;
+  }, [updateLocalRankingProfile]);
   const credentialsData = useCredentialsTabData({
     enabledAuthFiles: credentialSectionVisibility.showAuthFiles && pageVisible,
     enabledAiProviders: credentialSectionVisibility.showAiProvider && pageVisible,
@@ -1181,6 +1194,10 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
       const updated = await updateCpaApiKeyAlias(id, keyAlias);
       setApiKeySettings((current) => current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)));
       setApiKeyOptions((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      patchLocalRankingProfileCache(updated.id, {
+        key_alias: updated.keyAlias,
+        display_name: updated.label,
+      });
       showTopNotice('success', t('usage_stats.api_key_settings_alias_save_success'));
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
@@ -1192,7 +1209,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     } finally {
       setApiKeySettingsSavingId(null);
     }
-  }, [onAuthRequired, showTopNotice, t]);
+  }, [onAuthRequired, patchLocalRankingProfileCache, showTopNotice, t]);
 
   const handleRevokeAuthSession = useCallback(async (session: AuthManagedSessionItem) => {
     setAuthSessionRevokingId(session.id);
@@ -2135,6 +2152,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
                 onRetryStatus={rankingData.refreshStatus}
                 onRetryMetadata={rankingData.refreshMetadata}
                 onRetryLeaderboard={rankingScope === 'community' ? rankingData.refreshLeaderboard : localRankingData.refreshLeaderboard}
+                onUpdateLocalProfile={handleUpdateLocalRankingProfile}
                 onPeriodChange={rankingData.setPeriod}
                 onMetricChange={rankingData.setMetric}
               />
