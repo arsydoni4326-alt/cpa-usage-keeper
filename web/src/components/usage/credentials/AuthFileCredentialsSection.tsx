@@ -1547,7 +1547,16 @@ function formatInspectionDate(value: string | undefined): string {
 }
 
 function CredentialPlanBadge({ children, tone = 'neutral' }: { children: string; tone?: PlanTypeTone }) {
-  return <span className={`${styles.credentialPlanBadge} ${styles[`credentialPlanBadge${capitalize(tone)}`]}`.trim()}>{children}</span>
+  const hasPremiumMotion = tone !== 'free' && tone !== 'neutral'
+
+  return (
+    <span className={`${styles.credentialPlanBadge} ${styles[`credentialPlanBadge${capitalize(tone)}`]}`.trim()}>
+      {/* 将 A5 的流动底纹和日冕拆到独立 transform 图层，避免逐帧重绘渐变。 */}
+      {hasPremiumMotion && <span className={styles.credentialPlanBadgeFlow} aria-hidden="true" />}
+      {hasPremiumMotion && <span className={styles.credentialPlanBadgeCorona} aria-hidden="true" />}
+      <span className={styles.credentialPlanBadgeLabel}>{children}</span>
+    </span>
+  )
 }
 
 function QuotaUsageModeSwitch({ label, mode, onChange }: { label: string; mode: QuotaUsageMode; onChange: (mode: QuotaUsageMode) => void }) {
