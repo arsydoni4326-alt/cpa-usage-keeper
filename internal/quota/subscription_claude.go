@@ -16,17 +16,24 @@ func resolveClaudeSubscription(result any) *SubscriptionInfo {
 		return nil
 	}
 
-	// 套餐优先级与上游管理中心保持一致，且只有两个 flag 都明确为 false 时才判定 Free。
+	// 套餐优先级保持 Max → Pro → active Team；Free 还必须不存在其它明确的组织套餐。
 	if profile.Account != nil && profile.Account.HasClaudeMax != nil && *profile.Account.HasClaudeMax {
 		return newClaudeSubscription("max")
 	}
 	if profile.Account != nil && profile.Account.HasClaudePro != nil && *profile.Account.HasClaudePro {
 		return newClaudeSubscription("pro")
 	}
-	if profile.Organization != nil &&
-		strings.EqualFold(strings.TrimSpace(profile.Organization.OrganizationType), "claude_team") &&
-		strings.EqualFold(strings.TrimSpace(profile.Organization.SubscriptionStatus), "active") {
+	organizationType := ""
+	subscriptionStatus := ""
+	if profile.Organization != nil {
+		organizationType = strings.ToLower(strings.TrimSpace(profile.Organization.OrganizationType))
+		subscriptionStatus = strings.ToLower(strings.TrimSpace(profile.Organization.SubscriptionStatus))
+	}
+	if organizationType == "claude_team" && subscriptionStatus == "active" {
 		return newClaudeSubscription("team")
+	}
+	if organizationType != "" && organizationType != "claude_free" {
+		return nil
 	}
 	if profile.Account != nil &&
 		profile.Account.HasClaudeMax != nil && !*profile.Account.HasClaudeMax &&

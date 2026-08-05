@@ -87,6 +87,21 @@ func TestNormalizeClaudeSubscription(t *testing.T) {
 			want: "free",
 		},
 		{
+			name: "explicit free organization remains free",
+			profile: &quota.ClaudeProfileResponse{
+				Account:      &quota.ClaudeProfileAccount{HasClaudeMax: boolPtr(false), HasClaudePro: boolPtr(false)},
+				Organization: &quota.ClaudeProfileOrganization{OrganizationType: "claude_free"},
+			},
+			want: "free",
+		},
+		{
+			name: "enterprise organization is not free",
+			profile: &quota.ClaudeProfileResponse{
+				Account:      &quota.ClaudeProfileAccount{HasClaudeMax: boolPtr(false), HasClaudePro: boolPtr(false)},
+				Organization: &quota.ClaudeProfileOrganization{OrganizationType: "claude_enterprise"},
+			},
+		},
+		{
 			name: "team does not require account flags",
 			profile: &quota.ClaudeProfileResponse{
 				Organization: &quota.ClaudeProfileOrganization{OrganizationType: "claude_team", SubscriptionStatus: "active"},
