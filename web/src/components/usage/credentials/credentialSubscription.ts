@@ -8,6 +8,10 @@ export type SubscriptionBadgeKind =
   | 'codex-pro20x'
   | 'codex-enterprise'
   | 'codex-unknown'
+  | 'claude-free'
+  | 'claude-pro'
+  | 'claude-max'
+  | 'claude-team'
 
 export type SubscriptionBadgeModel = {
   kind: SubscriptionBadgeKind
@@ -24,16 +28,32 @@ const CODEX_PRESENTATIONS = new Map<string, Omit<SubscriptionBadgeModel, 'fallba
   ['enterprise', { kind: 'codex-enterprise', labelKey: 'usage_stats.credentials_subscription_codex_enterprise' }],
 ])
 
+const CLAUDE_PRESENTATIONS = new Map<string, Omit<SubscriptionBadgeModel, 'fallbackLabel'>>([
+  ['free', { kind: 'claude-free', labelKey: 'usage_stats.credentials_subscription_claude_free' }],
+  ['pro', { kind: 'claude-pro', labelKey: 'usage_stats.credentials_subscription_claude_pro' }],
+  ['max', { kind: 'claude-max', labelKey: 'usage_stats.credentials_subscription_claude_max' }],
+  ['team', { kind: 'claude-team', labelKey: 'usage_stats.credentials_subscription_claude_team' }],
+])
+
+const PRESENTATIONS_BY_PROVIDER = new Map([
+  ['codex', CODEX_PRESENTATIONS],
+  ['claude', CLAUDE_PRESENTATIONS],
+])
+
 export function resolveCredentialSubscriptionBadge(subscription?: UsageSubscriptionInfo): SubscriptionBadgeModel | undefined {
   const provider = subscription?.provider.trim().toLowerCase()
   const displayPlan = subscription?.plan.trim()
-  if (!provider || !displayPlan || provider !== 'codex') {
+  if (!provider || !displayPlan) {
     return undefined
   }
 
-  const known = CODEX_PRESENTATIONS.get(displayPlan.toLowerCase())
+  const known = PRESENTATIONS_BY_PROVIDER.get(provider)?.get(displayPlan.toLowerCase())
   if (known) {
     return known
+  }
+
+  if (provider !== 'codex') {
+    return undefined
   }
 
   return {

@@ -49,11 +49,96 @@ func TestNormalizeCodexSubscriptionSupportsPointerResult(t *testing.T) {
 	}
 }
 
+func TestNormalizeClaudeSubscription(t *testing.T) {
+	tests := []struct {
+		name    string
+		profile *quota.ClaudeProfileResponse
+		want    string
+	}{
+		{
+			name: "max wins over every lower tier",
+			profile: &quota.ClaudeProfileResponse{
+				Account:      &quota.ClaudeProfileAccount{HasClaudeMax: boolPtr(true), HasClaudePro: boolPtr(true)},
+				Organization: &quota.ClaudeProfileOrganization{OrganizationType: "claude_team", SubscriptionStatus: "active"},
+			},
+			want: "max",
+		},
+		{
+			name: "pro wins over team",
+			profile: &quota.ClaudeProfileResponse{
+				Account:      &quota.ClaudeProfileAccount{HasClaudeMax: boolPtr(false), HasClaudePro: boolPtr(true)},
+				Organization: &quota.ClaudeProfileOrganization{OrganizationType: "claude_team", SubscriptionStatus: "active"},
+			},
+			want: "pro",
+		},
+		{
+			name: "active team wins over free",
+			profile: &quota.ClaudeProfileResponse{
+				Account:      &quota.ClaudeProfileAccount{HasClaudeMax: boolPtr(false), HasClaudePro: boolPtr(false)},
+				Organization: &quota.ClaudeProfileOrganization{OrganizationType: " CLAUDE_TEAM ", SubscriptionStatus: " ACTIVE "},
+			},
+			want: "team",
+		},
+		{
+			name: "free requires both explicit false values",
+			profile: &quota.ClaudeProfileResponse{
+				Account: &quota.ClaudeProfileAccount{HasClaudeMax: boolPtr(false), HasClaudePro: boolPtr(false)},
+			},
+			want: "free",
+		},
+		{
+			name: "team does not require account flags",
+			profile: &quota.ClaudeProfileResponse{
+				Organization: &quota.ClaudeProfileOrganization{OrganizationType: "claude_team", SubscriptionStatus: "active"},
+			},
+			want: "team",
+		},
+		{
+			name: "one missing flag is not free",
+			profile: &quota.ClaudeProfileResponse{
+				Account: &quota.ClaudeProfileAccount{HasClaudePro: boolPtr(false)},
+			},
+		},
+		{name: "missing profile"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := quota.NormalizeSubscription(quota.ProviderOutput{
+				Provider: " Claude ",
+				Result:   quota.ClaudeResult{Usage: &quota.ClaudeUsagePayload{}, Profile: test.profile},
+			})
+			if test.want == "" {
+				if got != nil {
+					t.Fatalf("NormalizeSubscription() = %#v, want nil", got)
+				}
+				return
+			}
+			if got == nil || got.Provider != "claude" || got.Plan != test.want || got.TierID != "" || got.TierName != "" {
+				t.Fatalf("NormalizeSubscription() = %#v, want provider=claude plan=%s", got, test.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeClaudeSubscriptionSupportsPointerResult(t *testing.T) {
+	got := quota.NormalizeSubscription(quota.ProviderOutput{
+		Provider: "claude",
+		Result: &quota.ClaudeResult{Profile: &quota.ClaudeProfileResponse{
+			Account: &quota.ClaudeProfileAccount{HasClaudeMax: boolPtr(true)},
+		}},
+	})
+	if got == nil || got.Provider != "claude" || got.Plan != "max" {
+		t.Fatalf("NormalizeSubscription() = %#v, want claude max", got)
+	}
+}
+
 func TestNormalizeSubscriptionRejectsMissingOrUnregisteredValues(t *testing.T) {
 	for _, output := range []quota.ProviderOutput{
 		{},
 		{Provider: "codex", Result: quota.CodexResult{}},
 		{Provider: "codex", Result: quota.CodexResult{Usage: &quota.CodexUsagePayload{PlanType: "   "}}},
+		{Provider: "claude", Result: quota.ClaudeResult{}},
 		{Provider: "gemini-cli", Result: quota.GeminiCLIResult{}},
 		{Provider: "xai", Result: quota.XAIResult{}},
 	} {

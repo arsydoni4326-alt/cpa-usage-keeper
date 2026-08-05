@@ -240,8 +240,8 @@ func parseClaudeProfileAccount(object map[string]json.RawMessage) *ClaudeProfile
 		FullName:     stringField(object, "full_name", "fullName"),
 		DisplayName:  stringField(object, "display_name", "displayName"),
 		Email:        stringField(object, "email"),
-		HasClaudeMax: boolField(object, "has_claude_max", "hasClaudeMax"),
-		HasClaudePro: boolField(object, "has_claude_pro", "hasClaudePro"),
+		HasClaudeMax: boolPtrField(object, "has_claude_max", "hasClaudeMax"),
+		HasClaudePro: boolPtrField(object, "has_claude_pro", "hasClaudePro"),
 	}
 }
 
@@ -661,6 +661,9 @@ func boolField(object map[string]json.RawMessage, keys ...string) bool {
 func boolPtrField(object map[string]json.RawMessage, keys ...string) *bool {
 	for _, key := range keys {
 		if raw, ok := object[key]; ok {
+			if rawJSONNull(raw) {
+				continue
+			}
 			var value bool
 			if err := json.Unmarshal(raw, &value); err == nil {
 				return &value

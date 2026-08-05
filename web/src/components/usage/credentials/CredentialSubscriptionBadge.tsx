@@ -15,6 +15,10 @@ const BADGE_PRESENTATIONS: Record<SubscriptionBadgeKind, BadgePresentation> = {
   'codex-pro20x': { className: styles.credentialPlanBadgePro20x, hasPremiumMotion: true },
   'codex-enterprise': { className: styles.credentialPlanBadgeEnterprise, hasPremiumMotion: true },
   'codex-unknown': { className: styles.credentialPlanBadgeNeutral, hasPremiumMotion: false },
+  'claude-free': { className: styles.credentialPlanBadgeFree, hasPremiumMotion: false },
+  'claude-pro': { className: styles.credentialPlanBadgePlus, hasPremiumMotion: true },
+  'claude-max': { className: styles.credentialPlanBadgePro20x, hasPremiumMotion: true },
+  'claude-team': { className: styles.credentialPlanBadgeTeam, hasPremiumMotion: true },
 }
 
 export function CredentialSubscriptionBadge({ model }: { model: SubscriptionBadgeModel }) {

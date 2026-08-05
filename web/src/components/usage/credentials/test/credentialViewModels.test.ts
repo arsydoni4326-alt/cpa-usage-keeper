@@ -87,6 +87,29 @@ describe('credentialViewModels', () => {
     ])
   })
 
+  it('builds Claude subscription badges from refreshed quota responses', () => {
+    const quotas = new Map<string, UsageQuotaCheckResponse>([
+      ['free-auth', quotaResponse('free-auth', [], undefined, { provider: 'claude', plan: 'free' })],
+      ['pro-auth', quotaResponse('pro-auth', [], undefined, { provider: 'claude', plan: 'pro' })],
+      ['max-auth', quotaResponse('max-auth', [], undefined, { provider: 'claude', plan: 'max' })],
+      ['team-auth', quotaResponse('team-auth', [], undefined, { provider: 'claude', plan: 'team' })],
+    ])
+
+    const rows = buildAuthFileCredentialRows([
+      identity({ identity: 'free-auth', provider: 'claude' }),
+      identity({ identity: 'pro-auth', provider: 'claude' }),
+      identity({ identity: 'max-auth', provider: 'claude' }),
+      identity({ identity: 'team-auth', provider: 'claude' }),
+    ], quotas)
+
+    expect(rows.map((row) => row.subscriptionBadge)).toEqual([
+      { kind: 'claude-free', labelKey: 'usage_stats.credentials_subscription_claude_free' },
+      { kind: 'claude-pro', labelKey: 'usage_stats.credentials_subscription_claude_pro' },
+      { kind: 'claude-max', labelKey: 'usage_stats.credentials_subscription_claude_max' },
+      { kind: 'claude-team', labelKey: 'usage_stats.credentials_subscription_claude_team' },
+    ])
+  })
+
   it('prefers refreshed quota subscription over usage identity subscription', () => {
     const quotas = new Map<string, UsageQuotaCheckResponse>([
       ['auth-1', quotaResponse('auth-1', [

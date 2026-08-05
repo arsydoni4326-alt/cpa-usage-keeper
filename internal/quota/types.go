@@ -189,8 +189,8 @@ type ClaudeProfileAccount struct {
 	FullName     string `json:"fullName,omitempty"`
 	DisplayName  string `json:"displayName,omitempty"`
 	Email        string `json:"email,omitempty"`
-	HasClaudeMax bool   `json:"hasClaudeMax,omitempty"`
-	HasClaudePro bool   `json:"hasClaudePro,omitempty"`
+	HasClaudeMax *bool  `json:"hasClaudeMax,omitempty"`
+	HasClaudePro *bool  `json:"hasClaudePro,omitempty"`
 }
 
 type ClaudeProfileOrganization struct {
