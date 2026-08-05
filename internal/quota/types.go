@@ -161,6 +161,11 @@ type GeminiCLICodeAssistPayload struct {
 	PaidTier    *GeminiCliUserTier `json:"paidTier,omitempty"`
 }
 
+type AntigravitySubscriptionPayload struct {
+	CurrentTier *GeminiCliUserTier `json:"currentTier,omitempty"`
+	PaidTier    *GeminiCliUserTier `json:"paidTier,omitempty"`
+}
+
 type ClaudeUsageWindow struct {
 	Utilization float64 `json:"utilization,omitempty"`
 	ResetsAt    string  `json:"resetsAt,omitempty"`
@@ -290,7 +295,8 @@ type XAIBillingPayload struct {
 }
 
 type AntigravityResult struct {
-	Quota *AntigravityQuotaPayload `json:"quota"`
+	Quota        *AntigravityQuotaPayload        `json:"quota"`
+	Subscription *AntigravitySubscriptionPayload `json:"subscription,omitempty"`
 }
 
 type CodexResult struct {

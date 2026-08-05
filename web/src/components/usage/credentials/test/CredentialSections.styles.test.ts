@@ -496,6 +496,7 @@ describe('Credential section styles', () => {
     expect(pro20xRule).toContain('--credential-plan-tone-2: #f6dc37')
     expect(enterpriseRule).toContain('#c4b5fd')
     expect(credentialStyles).not.toContain('.credentialPlanBadgeClaude')
+    expect(credentialStyles).not.toContain('.credentialPlanBadgeAntigravity')
     expect(remainingDaysRule).toContain('radial-gradient')
     expect(priorityRule).toContain('linear-gradient')
   })

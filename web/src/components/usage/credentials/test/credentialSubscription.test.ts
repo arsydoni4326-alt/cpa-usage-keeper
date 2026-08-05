@@ -40,6 +40,33 @@ describe('credentialSubscription', () => {
     expect(resolveCredentialSubscriptionBadge({ provider: 'claude', plan: 'enterprise' })).toBeUndefined()
   })
 
+  it.each([
+    ['free', 'antigravity-free', 'usage_stats.credentials_subscription_antigravity_free'],
+    ['pro', 'antigravity-pro', 'usage_stats.credentials_subscription_antigravity_pro'],
+    ['ultra-lite', 'antigravity-ultra-lite', 'usage_stats.credentials_subscription_antigravity_ultra_lite'],
+    ['ultra', 'antigravity-ultra', 'usage_stats.credentials_subscription_antigravity_ultra'],
+  ] as const)('maps Antigravity %s to its namespaced badge', (plan, kind, labelKey) => {
+    expect(resolveCredentialSubscriptionBadge({ provider: ' Antigravity ', plan: ` ${plan.toUpperCase()} ` })).toEqual({
+      kind,
+      labelKey,
+    })
+  })
+
+  it('uses tier name, then tier id, then Unknown for unknown Antigravity tiers', () => {
+    expect(resolveCredentialSubscriptionBadge({ provider: 'antigravity', plan: 'unknown', tierId: 'future-tier', tierName: ' Future ' })).toEqual({
+      kind: 'antigravity-unknown',
+      fallbackLabel: 'Future',
+    })
+    expect(resolveCredentialSubscriptionBadge({ provider: 'antigravity', plan: 'unknown', tierId: ' future-tier ' })).toEqual({
+      kind: 'antigravity-unknown',
+      fallbackLabel: 'future-tier',
+    })
+    expect(resolveCredentialSubscriptionBadge({ provider: 'antigravity', plan: 'unknown' })).toEqual({
+      kind: 'antigravity-unknown',
+      labelKey: 'usage_stats.credentials_subscription_antigravity_unknown',
+    })
+  })
+
   it.each(['constructor', 'toString', '__proto__'])('treats inherited object key %s as an unknown plan', (plan) => {
     expect(resolveCredentialSubscriptionBadge({ provider: 'codex', plan })).toEqual({
       kind: 'codex-unknown',
@@ -51,7 +78,7 @@ describe('credentialSubscription', () => {
     undefined,
     { provider: '', plan: 'plus' },
     { provider: 'codex', plan: '' },
-    { provider: 'antigravity', plan: 'ultra' },
+    { provider: 'antigravity', plan: 'future' },
   ] as Array<UsageSubscriptionInfo | undefined>)('does not invent badges for missing or unregistered subscriptions', (subscription) => {
     expect(resolveCredentialSubscriptionBadge(subscription)).toBeUndefined()
   })

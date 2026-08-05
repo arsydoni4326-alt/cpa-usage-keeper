@@ -9,8 +9,8 @@ import (
 func TestDefaultProviderConfigsContainsAPICallTemplates(t *testing.T) {
 	configs := quota.DefaultProviderConfigs()
 	templates := configs.APICallTemplates()
-	if len(templates) != 11 {
-		t.Fatalf("expected 11 api-call templates, got %d", len(templates))
+	if len(templates) != 12 {
+		t.Fatalf("expected 12 api-call templates, got %d", len(templates))
 	}
 	if len(configs.Antigravity) != 3 {
 		t.Fatalf("expected 3 antigravity api-call templates, got %d", len(configs.Antigravity))
@@ -21,6 +21,9 @@ func TestDefaultProviderConfigsContainsAPICallTemplates(t *testing.T) {
 	}
 	if configs.Antigravity[1].URL != "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:retrieveUserQuotaSummary" || configs.Antigravity[2].URL != "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary" {
 		t.Fatalf("unexpected antigravity fallback configs: %+v", configs.Antigravity)
+	}
+	if configs.AntigravitySubscription.Method != "POST" || configs.AntigravitySubscription.URL != "https://daily-cloudcode-pa.googleapis.com/v1internal:loadCodeAssist" {
+		t.Fatalf("unexpected antigravity subscription config: %+v", configs.AntigravitySubscription)
 	}
 	if configs.Codex.Method != "GET" || configs.Codex.URL != "https://chatgpt.com/backend-api/wham/usage" {
 		t.Fatalf("unexpected codex config: %+v", configs.Codex)
@@ -49,6 +52,9 @@ func TestDefaultProviderConfigsContainsAPICallTemplates(t *testing.T) {
 
 	if configs.Antigravity[0].Headers["Authorization"] != "Bearer $TOKEN$" || configs.Antigravity[0].Headers["Content-Type"] != "application/json" || configs.Antigravity[0].Headers["User-Agent"] != "antigravity/cli/1.0.13 (aidev_client; os_type=darwin; arch=arm64)" {
 		t.Fatalf("unexpected antigravity headers: %+v", configs.Antigravity[0].Headers)
+	}
+	if configs.AntigravitySubscription.Headers["Authorization"] != "Bearer $TOKEN$" || configs.AntigravitySubscription.Headers["Content-Type"] != "application/json" || configs.AntigravitySubscription.Headers["User-Agent"] != "antigravity/cli/1.0.13 (aidev_client; os_type=darwin; arch=arm64)" {
+		t.Fatalf("unexpected antigravity subscription headers: %+v", configs.AntigravitySubscription.Headers)
 	}
 	if configs.Codex.Headers["Authorization"] != "Bearer $TOKEN$" || configs.Codex.Headers["Content-Type"] != "application/json" || configs.Codex.Headers["User-Agent"] != "codex_cli_rs/0.76.0 (Debian 13.0.0; x86_64) WindowsTerminal" {
 		t.Fatalf("unexpected codex headers: %+v", configs.Codex.Headers)

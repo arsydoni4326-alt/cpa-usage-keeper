@@ -110,6 +110,32 @@ describe('credentialViewModels', () => {
     ])
   })
 
+  it('builds Antigravity subscription badges from refreshed quota responses', () => {
+    const quotas = new Map<string, UsageQuotaCheckResponse>([
+      ['free-auth', quotaResponse('free-auth', [], undefined, { provider: 'antigravity', plan: 'free' })],
+      ['pro-auth', quotaResponse('pro-auth', [], undefined, { provider: 'antigravity', plan: 'pro' })],
+      ['lite-auth', quotaResponse('lite-auth', [], undefined, { provider: 'antigravity', plan: 'ultra-lite' })],
+      ['ultra-auth', quotaResponse('ultra-auth', [], undefined, { provider: 'antigravity', plan: 'ultra' })],
+      ['unknown-auth', quotaResponse('unknown-auth', [], undefined, { provider: 'antigravity', plan: 'unknown', tierId: 'future-tier', tierName: 'Future' })],
+    ])
+
+    const rows = buildAuthFileCredentialRows([
+      identity({ identity: 'free-auth', type: 'antigravity', provider: 'antigravity' }),
+      identity({ identity: 'pro-auth', type: 'antigravity', provider: 'antigravity' }),
+      identity({ identity: 'lite-auth', type: 'antigravity', provider: 'antigravity' }),
+      identity({ identity: 'ultra-auth', type: 'antigravity', provider: 'antigravity' }),
+      identity({ identity: 'unknown-auth', type: 'antigravity', provider: 'antigravity' }),
+    ], quotas)
+
+    expect(rows.map((row) => row.subscriptionBadge)).toEqual([
+      { kind: 'antigravity-free', labelKey: 'usage_stats.credentials_subscription_antigravity_free' },
+      { kind: 'antigravity-pro', labelKey: 'usage_stats.credentials_subscription_antigravity_pro' },
+      { kind: 'antigravity-ultra-lite', labelKey: 'usage_stats.credentials_subscription_antigravity_ultra_lite' },
+      { kind: 'antigravity-ultra', labelKey: 'usage_stats.credentials_subscription_antigravity_ultra' },
+      { kind: 'antigravity-unknown', fallbackLabel: 'Future' },
+    ])
+  })
+
   it('prefers refreshed quota subscription over usage identity subscription', () => {
     const quotas = new Map<string, UsageQuotaCheckResponse>([
       ['auth-1', quotaResponse('auth-1', [
