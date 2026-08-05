@@ -16,19 +16,12 @@ func resolveAntigravitySubscription(result any) *SubscriptionInfo {
 		return nil
 	}
 
-	// paidTier 只有在 ID 明确存在时才覆盖 currentTier，与上游管理中心保持一致。
-	tier := subscription.CurrentTier
-	if subscription.PaidTier != nil && strings.TrimSpace(subscription.PaidTier.ID) != "" {
-		tier = subscription.PaidTier
-	}
+	tier := effectiveAntigravitySubscriptionTier(subscription)
 	if tier == nil {
 		return nil
 	}
 	tierID := strings.TrimSpace(tier.ID)
 	tierName := strings.TrimSpace(tier.Name)
-	if tierID == "" && tierName == "" {
-		return nil
-	}
 
 	plan := "unknown"
 	switch tierID {
@@ -42,4 +35,19 @@ func resolveAntigravitySubscription(result any) *SubscriptionInfo {
 		plan = "ultra"
 	}
 	return &SubscriptionInfo{Provider: "antigravity", Plan: plan, TierID: tierID, TierName: tierName}
+}
+
+func effectiveAntigravitySubscriptionTier(subscription *AntigravitySubscriptionPayload) *GeminiCliUserTier {
+	if subscription == nil {
+		return nil
+	}
+	// paidTier 只有在 ID 明确存在时才覆盖 currentTier，与上游管理中心保持一致。
+	tier := subscription.CurrentTier
+	if subscription.PaidTier != nil && strings.TrimSpace(subscription.PaidTier.ID) != "" {
+		tier = subscription.PaidTier
+	}
+	if tier == nil || (strings.TrimSpace(tier.ID) == "" && strings.TrimSpace(tier.Name) == "") {
+		return nil
+	}
+	return tier
 }

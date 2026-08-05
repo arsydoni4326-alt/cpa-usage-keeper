@@ -8,16 +8,16 @@ import (
 	"cpa-usage-keeper/internal/cpa/dto/apicall"
 )
 
-const antigravitySubscriptionTimeout = 5 * time.Second
+const antigravitySubscriptionTimeout = 10 * time.Second
 
 type antigravityProvider struct {
-	caller             ManagementAPICaller
-	quotaConfigs       []APICallConfig
-	subscriptionConfig APICallConfig
+	caller              ManagementAPICaller
+	quotaConfigs        []APICallConfig
+	subscriptionConfigs []APICallConfig
 }
 
-func NewAntigravityProvider(caller ManagementAPICaller, quotaConfigs []APICallConfig, subscriptionConfig APICallConfig) ProviderHandler {
-	return antigravityProvider{caller: caller, quotaConfigs: quotaConfigs, subscriptionConfig: subscriptionConfig}
+func NewAntigravityProvider(caller ManagementAPICaller, quotaConfigs []APICallConfig, subscriptionConfigs []APICallConfig) ProviderHandler {
+	return antigravityProvider{caller: caller, quotaConfigs: quotaConfigs, subscriptionConfigs: subscriptionConfigs}
 }
 
 func (p antigravityProvider) Check(ctx context.Context, input ProviderInput) (ProviderOutput, error) {
@@ -71,24 +71,30 @@ func (p antigravityProvider) checkQuota(ctx context.Context, input ProviderInput
 }
 
 func (p antigravityProvider) checkSubscription(ctx context.Context, input ProviderInput) *AntigravitySubscriptionPayload {
-	// Subscription 是额度成功后的可选补充，继承父 Context 并限制在 5 秒内。
+	// Subscription 是额度成功后的可选补充；daily 与 prod fallback 共用同一个 10 秒 Context。
 	subscriptionCtx, cancel := context.WithTimeout(ctx, antigravitySubscriptionTimeout)
 	defer cancel()
-	response, err := p.caller.CallManagementAPI(subscriptionCtx, apicall.Request{
-		AuthIndex: input.Identity.Identity,
-		Method:    p.subscriptionConfig.Method,
-		URL:       p.subscriptionConfig.URL,
-		Header:    copyHeaders(p.subscriptionConfig.Headers),
-		Data: map[string]any{
-			"metadata": map[string]string{"ideType": "ANTIGRAVITY"},
-		},
-	})
-	if err != nil {
-		return nil
+	for _, config := range p.subscriptionConfigs {
+		response, err := p.caller.CallManagementAPI(subscriptionCtx, apicall.Request{
+			AuthIndex: input.Identity.Identity,
+			Method:    config.Method,
+			URL:       config.URL,
+			Header:    copyHeaders(config.Headers),
+			Data: map[string]any{
+				"metadata": map[string]string{"ideType": "ANTIGRAVITY"},
+			},
+		})
+		if err != nil {
+			continue
+		}
+		subscription, err := parseAntigravitySubscriptionPayload(response)
+		if err != nil {
+			continue
+		}
+		if effectiveAntigravitySubscriptionTier(subscription) == nil {
+			continue
+		}
+		return subscription
 	}
-	subscription, err := parseAntigravitySubscriptionPayload(response)
-	if err != nil {
-		return nil
-	}
-	return subscription
+	return nil
 }
