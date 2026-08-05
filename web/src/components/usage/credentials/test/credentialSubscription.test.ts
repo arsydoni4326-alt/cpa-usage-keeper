@@ -24,6 +24,22 @@ describe('credentialSubscription', () => {
     })
   })
 
+  it.each([
+    ['free', 'claude-free', 'usage_stats.credentials_subscription_claude_free'],
+    ['pro', 'claude-pro', 'usage_stats.credentials_subscription_claude_pro'],
+    ['max', 'claude-max', 'usage_stats.credentials_subscription_claude_max'],
+    ['team', 'claude-team', 'usage_stats.credentials_subscription_claude_team'],
+  ] as const)('maps Claude %s to its namespaced badge', (plan, kind, labelKey) => {
+    expect(resolveCredentialSubscriptionBadge({ provider: ' Claude ', plan: ` ${plan.toUpperCase()} ` })).toEqual({
+      kind,
+      labelKey,
+    })
+  })
+
+  it('does not guess a badge for unknown Claude plans', () => {
+    expect(resolveCredentialSubscriptionBadge({ provider: 'claude', plan: 'enterprise' })).toBeUndefined()
+  })
+
   it.each(['constructor', 'toString', '__proto__'])('treats inherited object key %s as an unknown plan', (plan) => {
     expect(resolveCredentialSubscriptionBadge({ provider: 'codex', plan })).toEqual({
       kind: 'codex-unknown',
@@ -35,7 +51,6 @@ describe('credentialSubscription', () => {
     undefined,
     { provider: '', plan: 'plus' },
     { provider: 'codex', plan: '' },
-    { provider: 'claude', plan: 'pro' },
     { provider: 'antigravity', plan: 'ultra' },
   ] as Array<UsageSubscriptionInfo | undefined>)('does not invent badges for missing or unregistered subscriptions', (subscription) => {
     expect(resolveCredentialSubscriptionBadge(subscription)).toBeUndefined()
