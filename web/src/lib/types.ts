@@ -327,6 +327,13 @@ export interface UsageCredentialHealth {
   buckets: UsageCredentialHealthBucket[]
 }
 
+export interface UsageSubscriptionInfo {
+  provider: string
+  plan: string
+  tierId?: string
+  tierName?: string
+}
+
 export interface UsageIdentity {
   id: string
   name: string
@@ -343,7 +350,7 @@ export interface UsageIdentity {
   priority?: number
   disabled: boolean
   note?: string
-  plan_type?: string
+  subscription?: UsageSubscriptionInfo
   active_start?: string
   active_until?: string
   total_requests: number
@@ -397,7 +404,6 @@ export interface UsageQuotaRow {
   groupKey?: string
   groupLabel?: string
   groupDescription?: string
-  planType?: string
   used?: number
   limit?: number
   remaining?: number
@@ -415,6 +421,7 @@ export interface UsageQuotaRow {
 export interface UsageQuotaCheckResponse {
   id: string
   quota: UsageQuotaRow[]
+  subscription?: UsageSubscriptionInfo
   rateLimitResetCreditsAvailableCount?: number | null
 }
 
