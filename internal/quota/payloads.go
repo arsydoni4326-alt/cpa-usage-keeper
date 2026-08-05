@@ -62,6 +62,20 @@ func parseAntigravityQuotaPayload(response *apicall.Response) (*AntigravityQuota
 	return payload, nil
 }
 
+func parseAntigravitySubscriptionPayload(response *apicall.Response) (*AntigravitySubscriptionPayload, error) {
+	object, err := parseResponseObject(response)
+	if err != nil {
+		return nil, err
+	}
+	if nested := objectField(object, "body"); nested != nil {
+		object = nested
+	}
+	return &AntigravitySubscriptionPayload{
+		CurrentTier: parseGeminiCliUserTier(objectField(object, "currentTier", "current_tier")),
+		PaidTier:    parseGeminiCliUserTier(objectField(object, "paidTier", "paid_tier")),
+	}, nil
+}
+
 func parseCodexUsagePayload(response *apicall.Response) (*CodexUsagePayload, error) {
 	object, err := parseResponseObject(response)
 	if err != nil {

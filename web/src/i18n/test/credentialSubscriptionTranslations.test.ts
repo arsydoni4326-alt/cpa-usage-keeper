@@ -12,6 +12,11 @@ const SUBSCRIPTION_KEYS = [
   'usage_stats.credentials_subscription_claude_pro',
   'usage_stats.credentials_subscription_claude_max',
   'usage_stats.credentials_subscription_claude_team',
+  'usage_stats.credentials_subscription_antigravity_unknown',
+  'usage_stats.credentials_subscription_antigravity_free',
+  'usage_stats.credentials_subscription_antigravity_pro',
+  'usage_stats.credentials_subscription_antigravity_ultra_lite',
+  'usage_stats.credentials_subscription_antigravity_ultra',
 ] as const
 
 const CLAUDE_LABELS = {
@@ -19,6 +24,14 @@ const CLAUDE_LABELS = {
   'usage_stats.credentials_subscription_claude_pro': 'Pro',
   'usage_stats.credentials_subscription_claude_max': 'Max',
   'usage_stats.credentials_subscription_claude_team': 'Team',
+} as const
+
+const ANTIGRAVITY_LABELS = {
+  'usage_stats.credentials_subscription_antigravity_unknown': 'Unknown',
+  'usage_stats.credentials_subscription_antigravity_free': 'Free',
+  'usage_stats.credentials_subscription_antigravity_pro': 'Pro',
+  'usage_stats.credentials_subscription_antigravity_ultra_lite': 'Ultra Lite',
+  'usage_stats.credentials_subscription_antigravity_ultra': 'Ultra',
 } as const
 
 describe('credential subscription translations', () => {
@@ -35,6 +48,14 @@ describe('credential subscription translations', () => {
   it('keeps official Claude plan names unchanged across languages', () => {
     for (const language of SUPPORTED_LANGUAGES) {
       for (const [key, label] of Object.entries(CLAUDE_LABELS)) {
+        expect(i18n.getResource(language, 'translation', key), `${language}:${key}`).toBe(label)
+      }
+    }
+  })
+
+  it('keeps official Antigravity plan names unchanged across languages', () => {
+    for (const language of SUPPORTED_LANGUAGES) {
+      for (const [key, label] of Object.entries(ANTIGRAVITY_LABELS)) {
         expect(i18n.getResource(language, 'translation', key), `${language}:${key}`).toBe(label)
       }
     }

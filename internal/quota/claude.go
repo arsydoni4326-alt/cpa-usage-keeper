@@ -7,7 +7,7 @@ import (
 	"cpa-usage-keeper/internal/cpa/dto/apicall"
 )
 
-const claudeProfileTimeout = 5 * time.Second
+const claudeProfileTimeout = 10 * time.Second
 
 type claudeProvider struct {
 	caller        ManagementAPICaller
@@ -39,7 +39,7 @@ func (p claudeProvider) Check(ctx context.Context, input ProviderInput) (Provide
 }
 
 func (p claudeProvider) checkProfile(ctx context.Context, input ProviderInput) *ClaudeProfileResponse {
-	// Profile 只是套餐补充信息，继承父 Context 并限制在 5 秒内，任何失败都不影响 Usage 主结果。
+	// Profile 只是套餐补充信息，继承父 Context 并限制在 10 秒内，任何失败都不影响 Usage 主结果。
 	profileCtx, cancel := context.WithTimeout(ctx, claudeProfileTimeout)
 	defer cancel()
 	profileResponse, err := p.caller.CallManagementAPI(profileCtx, apicall.Request{

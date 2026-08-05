@@ -178,7 +178,7 @@ func TestClaudeProviderBoundsOptionalProfileContext(t *testing.T) {
 		maxRemaining  time.Duration
 		minRemaining  time.Duration
 	}{
-		{name: "five second helper timeout", minRemaining: 4 * time.Second, maxRemaining: 6 * time.Second},
+		{name: "ten second helper timeout", minRemaining: 9 * time.Second, maxRemaining: 11 * time.Second},
 		{name: "inherits earlier parent deadline", parentTimeout: 250 * time.Millisecond, maxRemaining: 350 * time.Millisecond},
 	}
 
