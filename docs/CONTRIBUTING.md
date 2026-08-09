@@ -10,7 +10,7 @@ and the conventions that keep the codebase coherent.
 | Tool | Version |
 |---|---|
 | Go | 1.26+ (CGO enabled — SQLite via `mattn/go-sqlite3` needs a C toolchain: `gcc`, or MSYS2 on Windows) |
-| Node.js | 22+ with npm |
+| Node.js | 24+ with npm |
 | CLIProxyAPI | a running instance to point the dev server at (or fixtures for tests) |
 
 ---

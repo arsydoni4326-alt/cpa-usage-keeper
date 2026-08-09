@@ -69,7 +69,9 @@ keys that are synchronized from CPA itself.
   people or projects.
 - **UC-5 — Manage quota.** As an admin, I view and refresh provider quotas
   for each Auth File, configure auto-refresh, inspect raw provider payloads,
-  and reset credit counters after a billing-cycle reset.
+  and reset credit counters after a billing-cycle reset. Known provider
+  subscription plans (Claude Max/Pro/Team/Free, Codex tiers, Antigravity
+  tiers) appear as badges on the credentials.
 - **UC-6 — Manage pricing.** As an admin, I view the model price catalog
   synced from CPA, override rules (multipliers, custom rates), preview the
   effect of a sync, and apply pricing changes at batch or single-model level.
@@ -146,7 +148,7 @@ the SPA/embedding assets are public; everything else requires a session
 
 | Method & path | Description |
 |---|---|
-| `GET /api/usage/events` | Paginated request-level usage events with query filters. |
+| `GET /api/usage/events` | Paginated request-level usage events with query filters. Default page size is 50; custom date ranges are capped at 90 days. |
 | `GET /api/usage/events/filter-options` | Dimension values available for filtering. |
 | `GET /api/usage/events/export` | Export filtered events. |
 | `POST /api/usage/events/request-log-download-token` + token-gated download | Short-lived tokens guarding request-log downloads (only when `CPA_REQUEST_LOG_ACCESS_ENABLED`). |
@@ -155,12 +157,12 @@ the SPA/embedding assets are public; everything else requires a session
 | `GET /api/usage/activity` | Time-series activity rollups. |
 | `GET /api/usage/analysis` | Analysis: trends, cost composition, heatmaps. |
 | `GET /api/usage/analysis/latency` | Latency diagnostics. |
-| `GET /api/usage/identities`, `GET /api/usage/identities/page` | Usage grouped by identity. |
+| `GET /api/usage/identities`, `GET /api/usage/identities/page` | Usage grouped by identity. Codex auth-file identities may carry a `subscription` (`{provider, plan}`) derived from their stored plan metadata. |
 | `GET /api/api-keys`, `/settings`, `/options`; alias `PUT` | Mirrored CPA API keys, their settings and alias updates. |
 | `GET/... /api/auth-files` | Auth Files inventory, details, and management. |
 | `GET /api/models/used` | Models observed in usage. |
 | `GET /api/pricing` (+`/rules`, `/sync/preview`, `/batch/:model`) | Price catalog, rule CRUD, sync preview, batch/single-model mutation. |
-| `GET/POST /api/quota/...` | Quota reads, refresh, auto-refresh settings/cache, raw payload inspection, per-provider and global credit resets. |
+| `GET/POST /api/quota/...` | Quota reads, refresh, auto-refresh settings/cache, raw payload inspection, per-provider and global credit resets. Quota responses may include a response-level `subscription` object (`{provider, plan, tierId?, tierName?}`) when the provider exposes subscription metadata (see §6.5). |
 | `GET /api/provider-model-gnn` | Provider ↔ model relationship as a Graph Neural Network (GNN), proxied from the CPA `/v0/management/config` endpoint through a whitelisted-field DTO (secrets never parsed — see §7). The GNN exposes current structure and optional learned node/edge state. |
 | `GET /api/update/check` | GitHub release check (suppressed for dev builds). |
 
@@ -234,6 +236,26 @@ key's data.
   payload inspection, and credit resets (per provider or global).
 - Concurrency: `QUOTA_REFRESH_WORKER_LIMIT` (default 10, hard cap 100);
   header-based providers use a snapshot/cache worker.
+- **Provider subscription contract.** Providers that expose subscription
+  metadata (claude, codex, antigravity) return a response-level
+  `subscription` (`{provider, plan, tierId?, tierName?}`) alongside the
+  quota rows; the classification runs offline over the already-fetched
+  provider payloads (no extra upstream requests). Canonical plan values:
+  - *claude*: `max` → `pro` → `team` (`claude_team` org with active
+    subscription) → `free` (only when both `hasClaudeMax` and `hasClaudePro`
+    are explicitly false); unrecognized non-free org types yield no
+    subscription instead of being misclassified as Free.
+  - *codex*: `free`, `plus`, `team`, `pro-5x`, `pro-20x`, `enterprise`;
+    upstream aliases are canonicalized (`pro`→`pro-20x`,
+    `prolite`/`pro-lite`/`pro_lite`→`pro-5x`) and unknown plans pass through
+    as their display value.
+  - *antigravity*: `free`, `pro`, `ultra-lite`, `ultra`, or `unknown`,
+    mapped from tier IDs (`free-tier`, `g1-pro-tier`, `g1-ultra-lite-tier`,
+    `g1-ultra-tier`); `paidTier` overrides `currentTier` only when it has a
+    non-empty ID, and the tier ID/name are echoed as `tierId`/`tierName`.
+  Codex auth-file identities additionally surface their stored plan as
+  `subscription` on the identities endpoints. Quota rows no longer carry a
+  per-row `planType` field — subscription info lives at the response level.
 
 ### 6.6 Ranking (opt-in)
 

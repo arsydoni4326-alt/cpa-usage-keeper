@@ -56,7 +56,9 @@ internal/api ────── Gin router, handlers, auth middleware, DTO mappi
         ├── internal/repository ── GORM data access (+ activitystore,
         │                          latencystore, overviewstore, migration),
         │                          writer/reader pool wiring (dbresolver)
-        ├── internal/quota ─────── provider quota clients & refresh engine
+        ├── internal/quota ─────── provider quota clients, refresh engine &
+        │                          offline subscription resolvers (claude /
+        │                          codex / antigravity plan classification)
         ├── internal/ranking ───── opt-in community ranking client/service
         ├── internal/pricing ───── price catalog, resolver, snapshot
         ├── internal/cpa ───────── CPA management API client (HTTP + Redis queue client)
@@ -224,6 +226,14 @@ Key invariants:
   chip shows provider/model/dim counters sourced from the GNN response meta
   block. Node and edge features support future advanced analytics
   (embeddings, structural learning, prediction).
+- Credentials surface **provider subscription badges**: `QuotaRow` has no
+  per-row `planType` (removed upstream); instead the quota check response
+  carries a top-level `subscription` (`UsageSubscriptionInfo`), which
+  `credentialSubscription.ts` maps to a display plan rendered by
+  `CredentialSubscriptionBadge` on auth-file credential cards. Codex
+  auth-file identities may also carry `subscription` on identity responses.
+- The request-events custom date range is capped at **90 days**
+  (`utils/usage/customRange.ts`), and the events default page size is 50.
 - i18n: **i18next**-backed system (`src/i18n`), locales **en + zh + zh-TW**
   (Traditional Chinese) selected via `LanguageSwitcher`.
 - Structure: `assets`, `components/{ui,usage,test}`, `embed` (CPAMC iframe
