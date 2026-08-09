@@ -14,7 +14,8 @@ Legend: ⬜ not started · 🟡 in progress · ✅ done
 **Goal:** make the project easy to understand, contribute to, and verify —
 the foundation every later phase builds on.
 
-- **0.1 Project documentation set.** ⬜ (this change)
+- **0.1 Project documentation set.** ✅ (docs set live since 2026-08-02; kept
+  in sync per the policy in [CONTRIBUTING.md](CONTRIBUTING.md))
   - SPECIFICATION, ARCHITECTURE, ROADMAP, CONFIGURATION, CONTRIBUTING docs
     under `docs/`, linked from README; `session.md` at the root for session
     durability.
@@ -83,6 +84,15 @@ of the system that already work.
 - **2.6 Accessibility pass.** ⬜
   - Keyboard navigation, focus management in modals, ARIA labels across the
     custom UI kit; automated axe checks in the E2E suite (ties to 0.4).
+- **2.7 Subscription-aware analytics.** ⬜
+  - Filter and group events, identity, and quota views by provider
+    subscription plan — the response-level `subscription` contract from
+    upstream PR #404 is the backend hook; plan-distribution panels on the
+    quota/identity pages.
+- **2.8 Subscription change history.** ⬜
+  - Persist a timeline of detected plan changes per auth file (Codex
+    `pro-5x`→`pro-20x`, Claude `free`→`pro`, …) and surface it in the
+    credential detail view.
 
 ---
 
@@ -127,6 +137,9 @@ of the system that already work.
 - **4.4 Quota provider expansion.** ⬜
   - New providers as they appear in the CPA ecosystem; checklist-driven
     provider template (client, normalizer, registry, tests, docs).
+  - Extend the subscription contract (upstream PR #404) to the remaining
+    providers (gemini_cli, kimi, xai) as their APIs expose plan metadata —
+    offline resolver, canonical plan table, and badge template per provider.
 - **4.5 Multi-instance awareness.** ⬜
   - Optional federation: several Keeper instances report rollups to a parent
     dashboard (builds on the ranking client plumbing).
@@ -143,6 +156,12 @@ Runs alongside every phase; items are pulled as needed rather than ordered.
 - Dependency upgrades (Go, Gin, GORM, React, Vite, Chart.js) and security
   patch cadence.
 - `make verify` kept green on all supported platforms; CI matrix hygiene.
+- i18n key-parity lint in CI: en/zh/zh-TW locale keys must stay in lockstep
+  (follow-up to upstream #413).
+- Badge/style regression tests including WebKit rendering (follow-up to
+  upstream #414).
+- Make the 90-day request-events custom-range cap configurable (follow-up to
+  upstream #412).
 - README and `docs/*` kept in sync with every feature change (policy in
   [CONTRIBUTING.md](CONTRIBUTING.md)).
 - Community support: issue triage, reproduction fixtures, release notes.
