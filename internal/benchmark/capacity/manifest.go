@@ -34,15 +34,16 @@ type Target struct {
 }
 
 type DatasetSpec struct {
-	ID            string      `json:"id"`
-	HotEvents     int64       `json:"hot_events"`
-	ArchiveEvents int64       `json:"archive_events"`
-	FailureRate   float64     `json:"failure_rate"`
-	Seed          uint64      `json:"seed"`
-	HotDays       int         `json:"hot_days"`
-	ArchiveDays   int         `json:"archive_days"`
-	BenchmarkNow  string      `json:"benchmark_now"`
-	Cardinality   Cardinality `json:"cardinality"`
+	ID                string      `json:"id"`
+	HotEvents         int64       `json:"hot_events"`
+	Recent30DayEvents int64       `json:"recent_30_day_events"`
+	ArchiveEvents     int64       `json:"archive_events"`
+	FailureRate       float64     `json:"failure_rate"`
+	Seed              uint64      `json:"seed"`
+	HotDays           int         `json:"hot_days"`
+	ArchiveDays       int         `json:"archive_days"`
+	BenchmarkNow      string      `json:"benchmark_now"`
+	Cardinality       Cardinality `json:"cardinality"`
 }
 
 type Cardinality struct {
@@ -64,18 +65,21 @@ type Resource struct {
 }
 
 type Search struct {
-	RatesPerSecond             []int   `json:"rates_per_second"`
-	ProbeSeconds               int     `json:"probe_seconds"`
-	BoundarySeconds            int     `json:"boundary_seconds"`
-	BoundaryRepetitions        int     `json:"boundary_repetitions"`
-	SkipBoundary               bool    `json:"skip_boundary,omitempty"`
-	SoakSeconds                int     `json:"soak_seconds"`
-	MaxRunSeconds              int     `json:"max_run_seconds"`
-	DashboardCoreP95MS         int     `json:"dashboard_core_p95_ms"`
-	DashboardOverallP99MS      int     `json:"dashboard_overall_p99_ms"`
-	DashboardRequestsPerSecond int     `json:"dashboard_requests_per_second"`
-	SearchDashboardCapacity    bool    `json:"search_dashboard_capacity,omitempty"`
-	RecommendedCapacityRate    float64 `json:"recommended_capacity_ratio"`
+	RatesPerSecond                 []int   `json:"rates_per_second"`
+	InitialRatePerSecond           int     `json:"initial_rate_per_second"`
+	ProbeSeconds                   int     `json:"probe_seconds"`
+	BoundarySeconds                int     `json:"boundary_seconds"`
+	BoundaryRepetitions            int     `json:"boundary_repetitions"`
+	SkipBoundary                   bool    `json:"skip_boundary,omitempty"`
+	SoakSeconds                    int     `json:"soak_seconds"`
+	MaxPassDrainSeconds            int     `json:"max_pass_drain_seconds"`
+	MaxRunSeconds                  int     `json:"max_run_seconds"`
+	DashboardCoreP95MS             int     `json:"dashboard_core_p95_ms"`
+	DashboardCoreP99MS             int     `json:"dashboard_core_p99_ms"`
+	DashboardRequestsPerSecond     int     `json:"dashboard_requests_per_second"`
+	AnalysisLatencyIntervalSeconds int     `json:"analysis_latency_interval_seconds"`
+	SearchDashboardCapacity        bool    `json:"search_dashboard_capacity,omitempty"`
+	RecommendedCapacityRate        float64 `json:"recommended_capacity_ratio"`
 }
 
 type Plan struct {
@@ -85,14 +89,15 @@ type Plan struct {
 }
 
 type Cell struct {
-	ID             string      `json:"id"`
-	Kind           string      `json:"kind"`
-	DatasetID      string      `json:"dataset_id"`
-	HotEvents      int64       `json:"hot_events"`
-	ArchiveEvents  int64       `json:"archive_events"`
-	Cardinality    Cardinality `json:"cardinality"`
-	Resource       Resource    `json:"resource"`
-	RatesPerSecond []int       `json:"rates_per_second"`
+	ID                string      `json:"id"`
+	Kind              string      `json:"kind"`
+	DatasetID         string      `json:"dataset_id"`
+	HotEvents         int64       `json:"hot_events"`
+	Recent30DayEvents int64       `json:"recent_30_day_events"`
+	ArchiveEvents     int64       `json:"archive_events"`
+	Cardinality       Cardinality `json:"cardinality"`
+	Resource          Resource    `json:"resource"`
+	RatesPerSecond    []int       `json:"rates_per_second"`
 }
 
 func LoadManifest(path string) (Manifest, error) {
@@ -121,14 +126,17 @@ func (m Manifest) Validate() error {
 	if !validPublicID(m.Dataset.ID) {
 		return fmt.Errorf("invalid dataset ID %q", m.Dataset.ID)
 	}
-	if m.Dataset.HotEvents <= 0 || m.Dataset.ArchiveEvents < 0 || m.Dataset.HotDays <= 0 || m.Dataset.ArchiveDays < 0 {
+	if m.Dataset.HotEvents <= 0 || m.Dataset.Recent30DayEvents <= 0 || m.Dataset.Recent30DayEvents > m.Dataset.HotEvents || m.Dataset.ArchiveEvents < 0 || m.Dataset.HotDays <= 0 || m.Dataset.ArchiveDays < 0 {
 		return fmt.Errorf("dataset counts and day windows must be positive")
+	}
+	if (m.Dataset.HotDays <= 30 && m.Dataset.Recent30DayEvents != m.Dataset.HotEvents) || (m.Dataset.HotDays > 30 && m.Dataset.Recent30DayEvents >= m.Dataset.HotEvents) {
+		return fmt.Errorf("dataset recent 30-day count is inconsistent with the hot window")
 	}
 	if m.Dataset.FailureRate < 0 || m.Dataset.FailureRate > 1 {
 		return fmt.Errorf("failure rate must be between zero and one")
 	}
-	if _, err := time.Parse(time.RFC3339, m.Dataset.BenchmarkNow); err != nil {
-		return fmt.Errorf("dataset benchmark_now must be RFC3339: %w", err)
+	if _, err := ResolveDatasetBenchmarkNow(m.Dataset.BenchmarkNow, time.Now()); err != nil {
+		return err
 	}
 	if err := validateCardinality(m.Dataset.ID, m.Dataset.Cardinality); err != nil {
 		return err
@@ -158,7 +166,7 @@ func (m Manifest) Validate() error {
 		}
 		seenResources[resource.ID] = true
 	}
-	if len(m.Search.RatesPerSecond) == 0 || m.Search.ProbeSeconds <= 0 || m.Search.BoundarySeconds <= 0 || m.Search.BoundaryRepetitions <= 0 || m.Search.SoakSeconds <= 0 || m.Search.MaxRunSeconds <= 0 || m.Search.DashboardRequestsPerSecond <= 0 {
+	if len(m.Search.RatesPerSecond) == 0 || m.Search.InitialRatePerSecond <= 0 || m.Search.ProbeSeconds <= 0 || m.Search.BoundarySeconds <= 0 || m.Search.BoundaryRepetitions <= 0 || m.Search.SoakSeconds <= 0 || m.Search.MaxPassDrainSeconds <= 0 || m.Search.MaxPassDrainSeconds > 30 || m.Search.MaxRunSeconds <= 0 || m.Search.DashboardRequestsPerSecond <= 0 || m.Search.AnalysisLatencyIntervalSeconds <= 0 {
 		return fmt.Errorf("capacity search durations and rates must be positive")
 	}
 	for index, rate := range m.Search.RatesPerSecond {
@@ -166,13 +174,32 @@ func (m Manifest) Validate() error {
 			return fmt.Errorf("capacity search rates must be positive and increasing")
 		}
 	}
-	if m.Search.DashboardCoreP95MS < 0 || m.Search.DashboardOverallP99MS <= 0 {
+	initialIndex := sort.SearchInts(m.Search.RatesPerSecond, m.Search.InitialRatePerSecond)
+	if initialIndex >= len(m.Search.RatesPerSecond) || m.Search.RatesPerSecond[initialIndex] != m.Search.InitialRatePerSecond {
+		return fmt.Errorf("initial capacity rate %d is not configured", m.Search.InitialRatePerSecond)
+	}
+	if m.Search.DashboardCoreP95MS < 0 || m.Search.DashboardCoreP99MS <= 0 {
 		return fmt.Errorf("dashboard latency thresholds are invalid")
 	}
 	if m.Search.RecommendedCapacityRate <= 0 || m.Search.RecommendedCapacityRate > 1 {
 		return fmt.Errorf("recommended capacity ratio must be in (0,1]")
 	}
 	return nil
+}
+
+func ResolveDatasetBenchmarkNow(value string, generationTime time.Time) (time.Time, error) {
+	value = strings.TrimSpace(value)
+	if value == "generation-time" {
+		if generationTime.IsZero() {
+			return time.Time{}, fmt.Errorf("dataset generation time is required")
+		}
+		return generationTime, nil
+	}
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("dataset benchmark_now must be RFC3339 or generation-time: %w", err)
+	}
+	return parsed, nil
 }
 
 func LoadPlan(path string) (Plan, string, error) {
@@ -191,7 +218,7 @@ func LoadPlan(path string) (Plan, string, error) {
 	}
 	seen := map[string]bool{}
 	for _, cell := range plan.Cells {
-		if strings.TrimSpace(cell.ID) == "" || !validPublicID(cell.DatasetID) || seen[cell.ID] {
+		if !validPublicID(cell.ID) || !validPublicID(cell.DatasetID) || seen[cell.ID] {
 			return Plan{}, "", fmt.Errorf("benchmark plan contains invalid or duplicate cell %q", cell.ID)
 		}
 		seen[cell.ID] = true
@@ -227,14 +254,15 @@ func ExpandPlan(manifest Manifest) (Plan, error) {
 	plan := Plan{Version: manifest.Version, ManifestSHA256: manifest.SourceSHA256}
 	for _, resource := range manifest.Resources {
 		plan.Cells = append(plan.Cells, Cell{
-			ID:             fmt.Sprintf("capacity-%s-%s", manifest.Dataset.ID, resource.ID),
-			Kind:           "capacity",
-			DatasetID:      manifest.Dataset.ID,
-			HotEvents:      manifest.Dataset.HotEvents,
-			ArchiveEvents:  manifest.Dataset.ArchiveEvents,
-			Cardinality:    manifest.Dataset.Cardinality,
-			Resource:       resource,
-			RatesPerSecond: append([]int(nil), manifest.Search.RatesPerSecond...),
+			ID:                fmt.Sprintf("capacity-%s-%s", manifest.Dataset.ID, resource.ID),
+			Kind:              "capacity",
+			DatasetID:         manifest.Dataset.ID,
+			HotEvents:         manifest.Dataset.HotEvents,
+			Recent30DayEvents: manifest.Dataset.Recent30DayEvents,
+			ArchiveEvents:     manifest.Dataset.ArchiveEvents,
+			Cardinality:       manifest.Dataset.Cardinality,
+			Resource:          resource,
+			RatesPerSecond:    append([]int(nil), manifest.Search.RatesPerSecond...),
 		})
 	}
 	return plan, nil

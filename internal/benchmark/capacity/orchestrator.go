@@ -20,47 +20,52 @@ import (
 )
 
 type RunOptions struct {
-	ManifestPath   string
-	PlanPath       string
-	Root           string
-	RunID          string
-	KeeperBinary   string
-	RedisBinary    string
-	RedisPort      int
-	AppPort        int
-	CellIDs        []string
-	Resume         bool
-	MaxDuration    time.Duration
-	FixedRate      int
-	FixedDuration  time.Duration
-	FixedPass      string
-	SearchDuration time.Duration
+	ManifestPath          string
+	PlanPath              string
+	Root                  string
+	RunID                 string
+	KeeperBinary          string
+	RedisBinary           string
+	RedisPort             int
+	AppPort               int
+	CellIDs               []string
+	Resume                bool
+	MaxDuration           time.Duration
+	FixedRate             int
+	FixedDuration         time.Duration
+	FixedPass             string
+	SearchDuration        time.Duration
+	DatasetValidationPath string
 }
 
 type RunMetadata struct {
-	Version               string    `json:"version"`
-	RunID                 string    `json:"run_id"`
-	State                 string    `json:"state"`
-	StartedAt             time.Time `json:"started_at"`
-	UpdatedAt             time.Time `json:"updated_at"`
-	FinishedAt            time.Time `json:"finished_at,omitempty"`
-	OS                    string    `json:"os"`
-	Arch                  string    `json:"arch"`
-	ManifestSHA256        string    `json:"manifest_sha256"`
-	PlanSHA256            string    `json:"plan_sha256"`
-	KeeperBinarySHA256    string    `json:"keeper_binary_sha256"`
-	BenchctlBinarySHA256  string    `json:"benchctl_binary_sha256"`
-	RedisPort             int       `json:"redis_port"`
-	AppPort               int       `json:"app_port"`
-	SelectedCells         []string  `json:"selected_cells"`
-	CompletedCells        int       `json:"completed_cells"`
-	FailedCells           int       `json:"failed_cells"`
-	SkippedCells          int       `json:"skipped_cells"`
-	FixedRate             int       `json:"fixed_rate,omitempty"`
-	FixedDurationSeconds  int       `json:"fixed_duration_seconds,omitempty"`
-	FixedPass             string    `json:"fixed_pass,omitempty"`
-	SearchDurationSeconds int       `json:"search_duration_seconds,omitempty"`
-	Error                 string    `json:"error,omitempty"`
+	Version                  string    `json:"version"`
+	RunID                    string    `json:"run_id"`
+	State                    string    `json:"state"`
+	StartedAt                time.Time `json:"started_at"`
+	UpdatedAt                time.Time `json:"updated_at"`
+	FinishedAt               time.Time `json:"finished_at,omitempty"`
+	OS                       string    `json:"os"`
+	Arch                     string    `json:"arch"`
+	ManifestSHA256           string    `json:"manifest_sha256"`
+	PlanSHA256               string    `json:"plan_sha256"`
+	KeeperBinarySHA256       string    `json:"keeper_binary_sha256"`
+	BenchctlBinarySHA256     string    `json:"benchctl_binary_sha256"`
+	RedisPort                int       `json:"redis_port"`
+	RedisCPUs                string    `json:"redis_cpus"`
+	AppPort                  int       `json:"app_port"`
+	SelectedCells            []string  `json:"selected_cells"`
+	CompletedCells           int       `json:"completed_cells"`
+	FailedCells              int       `json:"failed_cells"`
+	SkippedCells             int       `json:"skipped_cells"`
+	FixedRate                int       `json:"fixed_rate,omitempty"`
+	FixedDurationSeconds     int       `json:"fixed_duration_seconds,omitempty"`
+	FixedPass                string    `json:"fixed_pass,omitempty"`
+	SearchDurationSeconds    int       `json:"search_duration_seconds,omitempty"`
+	DatasetValidationSHA256  string    `json:"dataset_validation_sha256"`
+	DatasetQueryAnchor       time.Time `json:"dataset_query_anchor"`
+	DatasetRecent30DayEvents int64     `json:"dataset_recent_30_day_events"`
+	Error                    string    `json:"error,omitempty"`
 }
 
 type AttemptResource struct {
@@ -95,53 +100,78 @@ type ProbeAttempt struct {
 }
 
 type CapacityResult struct {
-	HardEventsPerSecond        int `json:"hard_events_per_second"`
-	InteractiveEventsPerSecond int `json:"interactive_events_per_second"`
-	RecommendedEventsPerSecond int `json:"recommended_events_per_second"`
+	HardEventsPerSecond                     int `json:"hard_events_per_second"`
+	LowestHardFailureEventsPerSecond        int `json:"lowest_hard_failure_events_per_second,omitempty"`
+	InteractiveEventsPerSecond              int `json:"interactive_events_per_second"`
+	LowestInteractiveFailureEventsPerSecond int `json:"lowest_interactive_failure_events_per_second,omitempty"`
+	RecommendedEventsPerSecond              int `json:"recommended_events_per_second"`
 }
 
 type CellResult struct {
-	Version              string         `json:"version"`
-	RunID                string         `json:"run_id"`
-	Cell                 Cell           `json:"cell"`
-	Status               string         `json:"status"`
-	StartedAt            time.Time      `json:"started_at"`
-	FinishedAt           time.Time      `json:"finished_at"`
-	StartupSeconds       float64        `json:"startup_seconds"`
-	WarmupSeconds        float64        `json:"warmup_seconds"`
-	DatasetFingerprint   string         `json:"dataset_fingerprint"`
-	ManifestSHA256       string         `json:"manifest_sha256"`
-	KeeperBinarySHA256   string         `json:"keeper_binary_sha256"`
-	BenchctlBinarySHA256 string         `json:"benchctl_binary_sha256"`
-	UnitName             string         `json:"unit_name"`
-	AllowedCPUs          string         `json:"allowed_cpus"`
-	DriverCPUs           string         `json:"driver_cpus"`
-	SharedDriver         bool           `json:"shared_driver"`
-	EffectiveLimits      CgroupLimits   `json:"effective_limits"`
-	Attempts             []ProbeAttempt `json:"attempts"`
-	Capacity             CapacityResult `json:"capacity"`
-	LastResource         CgroupSample   `json:"last_resource"`
-	PeakResource         CgroupSample   `json:"peak_resource"`
-	FinalUnitState       UnitState      `json:"final_unit_state"`
-	DatabaseBytesBefore  int64          `json:"database_bytes_before"`
-	DatabaseBytesAfter   int64          `json:"database_bytes_after"`
-	WALBytesAfter        int64          `json:"wal_bytes_after"`
-	WorkDatabaseRetained bool           `json:"work_database_retained"`
-	Error                string         `json:"error,omitempty"`
+	Version                  string         `json:"version"`
+	RunID                    string         `json:"run_id"`
+	Cell                     Cell           `json:"cell"`
+	Status                   string         `json:"status"`
+	StartedAt                time.Time      `json:"started_at"`
+	FinishedAt               time.Time      `json:"finished_at"`
+	StartupSeconds           float64        `json:"startup_seconds"`
+	WarmupSeconds            float64        `json:"warmup_seconds"`
+	DatasetFingerprint       string         `json:"dataset_fingerprint"`
+	DatasetValidationSHA256  string         `json:"dataset_validation_sha256"`
+	DatasetQueryAnchor       time.Time      `json:"dataset_query_anchor"`
+	DatasetRecent30DayEvents int64          `json:"dataset_recent_30_day_events"`
+	ManifestSHA256           string         `json:"manifest_sha256"`
+	PlanSHA256               string         `json:"plan_sha256"`
+	KeeperBinarySHA256       string         `json:"keeper_binary_sha256"`
+	BenchctlBinarySHA256     string         `json:"benchctl_binary_sha256"`
+	FixedRate                int            `json:"fixed_rate,omitempty"`
+	FixedDurationSeconds     int            `json:"fixed_duration_seconds,omitempty"`
+	FixedPass                string         `json:"fixed_pass,omitempty"`
+	SearchDurationSeconds    int            `json:"search_duration_seconds,omitempty"`
+	UnitName                 string         `json:"unit_name"`
+	AllowedCPUs              string         `json:"allowed_cpus"`
+	DriverCPUs               string         `json:"driver_cpus"`
+	SharedDriver             bool           `json:"shared_driver"`
+	EffectiveLimits          CgroupLimits   `json:"effective_limits"`
+	Attempts                 []ProbeAttempt `json:"attempts"`
+	Capacity                 CapacityResult `json:"capacity"`
+	LastResource             CgroupSample   `json:"last_resource"`
+	PeakResource             CgroupSample   `json:"peak_resource"`
+	FinalUnitState           UnitState      `json:"final_unit_state"`
+	DatabaseBytesBefore      int64          `json:"database_bytes_before"`
+	DatabaseBytesAfter       int64          `json:"database_bytes_after"`
+	WALBytesAfter            int64          `json:"wal_bytes_after"`
+	WorkDatabaseRetained     bool           `json:"work_database_retained"`
+	Error                    string         `json:"error,omitempty"`
+}
+
+type ExecutionProvenance struct {
+	ManifestSHA256          string
+	PlanSHA256              string
+	KeeperBinarySHA256      string
+	BenchctlBinarySHA256    string
+	DatasetFingerprint      string
+	DatasetValidationSHA256 string
+	FixedRate               int
+	FixedDurationSeconds    int
+	FixedPass               string
+	SearchDurationSeconds   int
 }
 
 type runContext struct {
-	options        RunOptions
-	manifest       Manifest
-	plan           Plan
-	metadata       RunMetadata
-	runDir         string
-	datasetsDir    string
-	binaryDigest   string
-	benchctlDigest string
-	redis          SystemdRuntime
-	redisPass      string
-	onlineCPUs     int
+	options                 RunOptions
+	manifest                Manifest
+	plan                    Plan
+	metadata                RunMetadata
+	runDir                  string
+	datasetsDir             string
+	binaryDigest            string
+	benchctlDigest          string
+	datasetValidation       DatasetResult
+	datasetValidationDigest string
+	redis                   SystemdRuntime
+	redisPass               string
+	onlineCPUs              int
 }
 
 func ExecuteRun(parent context.Context, options RunOptions) (metadata RunMetadata, returnErr error) {
@@ -217,6 +247,10 @@ func ExecuteRun(parent context.Context, options RunOptions) (metadata RunMetadat
 	if err != nil {
 		return metadata, fmt.Errorf("hash benchctl binary: %w", err)
 	}
+	datasetValidation, datasetValidationDigest, err := prepareDatasetValidation(ctx, options, manifest, selected)
+	if err != nil {
+		return metadata, err
+	}
 	runDir := filepath.Join(options.Root, "runs", options.RunID)
 	if err := os.MkdirAll(runDir, 0o755); err != nil {
 		return metadata, fmt.Errorf("create benchmark run directory: %w", err)
@@ -226,7 +260,9 @@ func ExecuteRun(parent context.Context, options RunOptions) (metadata RunMetadat
 		OS: runtime.GOOS, Arch: runtime.GOARCH, ManifestSHA256: manifest.SourceSHA256, PlanSHA256: planDigest,
 		KeeperBinarySHA256: binaryDigest, BenchctlBinarySHA256: benchctlDigest, RedisPort: options.RedisPort, AppPort: options.AppPort,
 		FixedRate: options.FixedRate, FixedDurationSeconds: int(options.FixedDuration.Seconds()), FixedPass: options.FixedPass,
-		SearchDurationSeconds: int(options.SearchDuration.Seconds()),
+		SearchDurationSeconds:   int(options.SearchDuration.Seconds()),
+		DatasetValidationSHA256: datasetValidationDigest, DatasetQueryAnchor: datasetValidation.QueryAnchor,
+		DatasetRecent30DayEvents: datasetValidation.Recent30DayEvents,
 	}
 	for _, cell := range selected {
 		metadata.SelectedCells = append(metadata.SelectedCells, cell.ID)
@@ -250,6 +286,9 @@ func ExecuteRun(parent context.Context, options RunOptions) (metadata RunMetadat
 			return metadata, fmt.Errorf("required benchmark command %s is unavailable: %w", command, err)
 		}
 	}
+	if err := PreflightDatasetDependencies(options.Root, selected); err != nil {
+		return metadata, err
+	}
 	onlineCPUs, err := OnlineCPUCount()
 	if err != nil {
 		return metadata, err
@@ -257,14 +296,18 @@ func ExecuteRun(parent context.Context, options RunOptions) (metadata RunMetadat
 	if onlineCPUs < 4 {
 		return metadata, fmt.Errorf("capacity benchmark requires 4 online CPUs, found %d", onlineCPUs)
 	}
+	redisCPUs := RedisCPUSet(onlineCPUs)
+	metadata.RedisCPUs = redisCPUs
 	context := &runContext{
 		options: options, manifest: manifest, plan: plan, metadata: metadata, runDir: runDir,
 		datasetsDir: filepath.Join(options.Root, "datasets"), binaryDigest: binaryDigest, benchctlDigest: benchctlDigest,
+		datasetValidation: datasetValidation, datasetValidationDigest: datasetValidationDigest,
 		redisPass: "benchmark-only", onlineCPUs: onlineCPUs,
 	}
 	redisUnit := unitName(options.RunID, "redis")
 	context.redis, err = StartRedisUnit(ctx, RedisStartOptions{
 		UnitName: redisUnit, Root: runDir, Port: options.RedisPort, Password: context.redisPass, BinaryPath: options.RedisBinary,
+		AllowedCPUs: redisCPUs,
 	})
 	if err != nil {
 		return metadata, err
@@ -278,6 +321,7 @@ func ExecuteRun(parent context.Context, options RunOptions) (metadata RunMetadat
 	if err := WriteJSONAtomic(metadataPath, metadata); err != nil {
 		return metadata, err
 	}
+	var cellFailures []error
 	for _, cell := range selected {
 		if err := ctx.Err(); err != nil {
 			return metadata, err
@@ -287,6 +331,11 @@ func ExecuteRun(parent context.Context, options RunOptions) (metadata RunMetadat
 			metadata.SkippedCells++
 		} else if cellErr != nil || result.Status != "completed" {
 			metadata.FailedCells++
+			if cellErr != nil {
+				cellFailures = append(cellFailures, fmt.Errorf("cell %s: %w", cell.ID, cellErr))
+			} else {
+				cellFailures = append(cellFailures, fmt.Errorf("cell %s ended with status %s", cell.ID, result.Status))
+			}
 		} else {
 			metadata.CompletedCells++
 		}
@@ -297,6 +346,9 @@ func ExecuteRun(parent context.Context, options RunOptions) (metadata RunMetadat
 		if err := RebuildResultsJSONL(runDir); err != nil {
 			return metadata, err
 		}
+	}
+	if len(cellFailures) > 0 {
+		return metadata, errors.Join(cellFailures...)
 	}
 	metadata.State = "completed"
 	metadata.UpdatedAt = time.Now()
@@ -333,9 +385,12 @@ func (run *runContext) executeCell(ctx context.Context, cell Cell) (result CellR
 	if err := validateCellDataset(cell, dataset, datasetPath); err != nil {
 		return result, false, err
 	}
+	if err := ValidateDatasetAgainstManifest(run.datasetValidation, dataset, run.manifest); err != nil {
+		return result, false, fmt.Errorf("cell %s strict dataset validation: %w", cell.ID, err)
+	}
 	cellDir := filepath.Join(run.runDir, "cells", cell.ID)
 	if run.options.Resume {
-		matched, matchErr := ResumeCellMatches(filepath.Join(cellDir, "result.json"), run.manifest.SourceSHA256, run.binaryDigest, run.benchctlDigest, dataset.SemanticFingerprint)
+		matched, matchErr := ResumeCellMatches(filepath.Join(cellDir, "result.json"), run.executionProvenance(dataset.SemanticFingerprint))
 		if matchErr != nil {
 			return result, false, matchErr
 		}
@@ -353,8 +408,12 @@ func (run *runContext) executeCell(ctx context.Context, cell Cell) (result CellR
 	}
 	result = CellResult{
 		Version: run.manifest.Version, RunID: run.options.RunID, Cell: cell, Status: "preparing", StartedAt: time.Now(),
-		DatasetFingerprint: dataset.SemanticFingerprint, ManifestSHA256: run.manifest.SourceSHA256,
-		KeeperBinarySHA256: run.binaryDigest, BenchctlBinarySHA256: run.benchctlDigest, DatabaseBytesBefore: dataset.DatabaseBytes,
+		DatasetFingerprint: dataset.SemanticFingerprint, DatasetValidationSHA256: run.datasetValidationDigest,
+		DatasetQueryAnchor: run.datasetValidation.QueryAnchor, DatasetRecent30DayEvents: run.datasetValidation.Recent30DayEvents,
+		ManifestSHA256: run.manifest.SourceSHA256, PlanSHA256: run.metadata.PlanSHA256,
+		KeeperBinarySHA256: run.binaryDigest, BenchctlBinarySHA256: run.benchctlDigest,
+		FixedRate: run.options.FixedRate, FixedDurationSeconds: int(run.options.FixedDuration.Seconds()), FixedPass: run.options.FixedPass,
+		SearchDurationSeconds: int(run.options.SearchDuration.Seconds()), DatabaseBytesBefore: dataset.DatabaseBytes,
 	}
 	resultPath := filepath.Join(cellDir, "result.json")
 	defer func() {
@@ -378,7 +437,7 @@ func (run *runContext) executeCell(ctx context.Context, cell Cell) (result CellR
 		if result.Status == "completed" {
 			_ = WriteJSONAtomic(filepath.Join(cellDir, "done.marker"), map[string]string{
 				"manifest_sha256": result.ManifestSHA256, "keeper_binary_sha256": result.KeeperBinarySHA256,
-				"benchctl_binary_sha256": result.BenchctlBinarySHA256, "dataset_fingerprint": result.DatasetFingerprint,
+				"plan_sha256": result.PlanSHA256, "benchctl_binary_sha256": result.BenchctlBinarySHA256, "dataset_fingerprint": result.DatasetFingerprint,
 			})
 		}
 	}()
@@ -423,10 +482,14 @@ func (run *runContext) executeCell(ctx context.Context, cell Cell) (result CellR
 		result.Attempts = append(result.Attempts, attempt)
 		if attempt.Report.Evaluation.HardPass {
 			result.Capacity.HardEventsPerSecond = run.options.FixedRate
+		} else {
+			result.Capacity.LowestHardFailureEventsPerSecond = run.options.FixedRate
 		}
 		if attempt.Report.Evaluation.InteractivePass {
 			result.Capacity.InteractiveEventsPerSecond = run.options.FixedRate
-			result.Capacity.RecommendedEventsPerSecond = run.options.FixedRate
+			result.Capacity.RecommendedEventsPerSecond = RecommendedEventsPerSecond(run.options.FixedRate, run.manifest.Search.RecommendedCapacityRate)
+		} else {
+			result.Capacity.LowestInteractiveFailureEventsPerSecond = run.options.FixedRate
 		}
 		passed, _ := FixedRateSoakPassed(run.options.FixedPass, attempt.Report.Evaluation)
 		if !passed {
@@ -444,7 +507,7 @@ func (run *runContext) executeCell(ctx context.Context, cell Cell) (result CellR
 		result.Status = "completed"
 		return result, false, nil
 	}
-	search, err := NewCapacitySearch(cell.RatesPerSecond)
+	search, err := NewCapacitySearchAt(cell.RatesPerSecond, run.manifest.Search.InitialRatePerSecond)
 	if err != nil {
 		return result, false, err
 	}
@@ -462,22 +525,96 @@ func (run *runContext) executeCell(ctx context.Context, cell Cell) (result CellR
 		searchAttempts[rate] = attempt
 		return attempt
 	}
-	for {
-		rate, ok := search.Next()
-		if !ok {
-			break
-		}
-		attempt := runSearchAttempt(rate)
-		search.Record(rate, attempt.Report.Evaluation.HardPass)
-		if IsCapacityAttemptInfrastructureFailure(attempt) {
-			break
+	runHardSearch := func() {
+		for {
+			rate, ok := search.Next()
+			if !ok {
+				return
+			}
+			attempt := runSearchAttempt(rate)
+			search.Record(rate, attempt.Report.Evaluation.HardPass)
+			if IsCapacityAttemptInfrastructureFailure(attempt) {
+				return
+			}
 		}
 	}
-	hardCandidate := search.HardCapacity()
+	runHardSearch()
+	verifiedHard := search.HardCapacity()
+	lowestHardFailure := search.FailureBoundary()
+	if !run.manifest.Search.SkipBoundary && verifiedHard > 0 {
+		confirmedPasses := map[int]bool{}
+		for verifiedHard > 0 {
+			if !confirmedPasses[verifiedHard] {
+				passed := true
+				for repetition := 1; repetition <= run.manifest.Search.BoundaryRepetitions; repetition++ {
+					attempt := runAttempt("boundary-pass", repetition, verifiedHard, time.Duration(run.manifest.Search.BoundarySeconds)*time.Second)
+					result.Attempts = append(result.Attempts, attempt)
+					if !attempt.Report.Evaluation.HardPass {
+						passed = false
+						lowestHardFailure = lowestPositiveRate(lowestHardFailure, verifiedHard)
+						break
+					}
+				}
+				if !passed {
+					verifiedHard = 0
+					for _, fallback := range SelectBoundaryCandidates(result.Attempts, search.HardCapacity()-1, 3) {
+						fallbackPassed := true
+						for repetition := 1; repetition <= run.manifest.Search.BoundaryRepetitions; repetition++ {
+							attempt := runAttempt("boundary-pass", repetition, fallback, time.Duration(run.manifest.Search.BoundarySeconds)*time.Second)
+							result.Attempts = append(result.Attempts, attempt)
+							if !attempt.Report.Evaluation.HardPass {
+								fallbackPassed = false
+								lowestHardFailure = lowestPositiveRate(lowestHardFailure, fallback)
+								break
+							}
+						}
+						if fallbackPassed {
+							verifiedHard = fallback
+							break
+						}
+					}
+					break
+				}
+				confirmedPasses[verifiedHard] = true
+			}
+
+			upper := search.FailureBoundary()
+			if upper == 0 {
+				break
+			}
+			upperPassed := true
+			var passingAttempt ProbeAttempt
+			for repetition := 1; repetition <= run.manifest.Search.BoundaryRepetitions; repetition++ {
+				attempt := runAttempt("boundary-fail", repetition, upper, time.Duration(run.manifest.Search.BoundarySeconds)*time.Second)
+				result.Attempts = append(result.Attempts, attempt)
+				if !attempt.Report.Evaluation.HardPass {
+					upperPassed = false
+					lowestHardFailure = lowestPositiveRate(lowestHardFailure, upper)
+					break
+				}
+				passingAttempt = attempt
+			}
+			if !upperPassed {
+				break
+			}
+			confirmedPasses[upper] = true
+			searchAttempts[upper] = passingAttempt
+			if err := search.PromoteFailure(upper); err != nil {
+				return result, false, err
+			}
+			lowestHardFailure = 0
+			runHardSearch()
+			verifiedHard = search.HardCapacity()
+			lowestHardFailure = search.FailureBoundary()
+		}
+	}
+
 	interactiveCandidate := 0
-	if run.manifest.Search.SearchDashboardCapacity && hardCandidate > 0 {
-		interactiveRates := ratesAtOrBelow(cell.RatesPerSecond, hardCandidate)
-		interactiveSearch, searchErr := NewCapacitySearch(interactiveRates)
+	lowestInteractiveFailure := 0
+	if run.manifest.Search.SearchDashboardCapacity && verifiedHard > 0 {
+		interactiveRates := ratesAtOrBelow(cell.RatesPerSecond, verifiedHard)
+		interactiveInitialRate := min(run.manifest.Search.InitialRatePerSecond, interactiveRates[len(interactiveRates)-1])
+		interactiveSearch, searchErr := NewCapacitySearchAt(interactiveRates, interactiveInitialRate)
 		if searchErr != nil {
 			return result, false, searchErr
 		}
@@ -493,25 +630,7 @@ func (run *runContext) executeCell(ctx context.Context, cell Cell) (result CellR
 			}
 		}
 		interactiveCandidate = interactiveSearch.HardCapacity()
-	}
-	verifiedHard := hardCandidate
-	if !run.manifest.Search.SkipBoundary {
-		verifiedHard = 0
-		for _, candidate := range SelectBoundaryCandidates(result.Attempts, hardCandidate, 2) {
-			passed := true
-			for repetition := 1; repetition <= run.manifest.Search.BoundaryRepetitions; repetition++ {
-				attempt := runAttempt("boundary", repetition, candidate, time.Duration(run.manifest.Search.BoundarySeconds)*time.Second)
-				result.Attempts = append(result.Attempts, attempt)
-				if !attempt.Report.Evaluation.HardPass {
-					passed = false
-					break
-				}
-			}
-			if passed {
-				verifiedHard = candidate
-				break
-			}
-		}
+		lowestInteractiveFailure = lowestPositiveRate(interactiveSearch.FailureBoundary(), lowestHardFailure)
 	}
 	interactive := min(interactiveCandidate, verifiedHard)
 	if !run.manifest.Search.SearchDashboardCapacity {
@@ -521,11 +640,12 @@ func (run *runContext) executeCell(ctx context.Context, cell Cell) (result CellR
 			}
 		}
 	}
-	recommended := int(math.Floor(float64(interactive) * run.manifest.Search.RecommendedCapacityRate))
-	if interactive > 0 && recommended < 1 {
-		recommended = 1
+	recommended := RecommendedEventsPerSecond(interactive, run.manifest.Search.RecommendedCapacityRate)
+	result.Capacity = CapacityResult{
+		HardEventsPerSecond: verifiedHard, LowestHardFailureEventsPerSecond: NormalizeFailureBoundary(verifiedHard, lowestHardFailure),
+		InteractiveEventsPerSecond: interactive, LowestInteractiveFailureEventsPerSecond: NormalizeFailureBoundary(interactive, lowestInteractiveFailure),
+		RecommendedEventsPerSecond: recommended,
 	}
-	result.Capacity = CapacityResult{HardEventsPerSecond: verifiedHard, InteractiveEventsPerSecond: interactive, RecommendedEventsPerSecond: recommended}
 	for _, attempt := range result.Attempts {
 		if IsCapacityAttemptInfrastructureFailure(attempt) {
 			return result, false, fmt.Errorf("benchmark probe failed during %s at %d events/s: %s", attempt.Phase, attempt.RatePerSecond, attempt.Error)
@@ -539,6 +659,24 @@ func (run *runContext) executeCell(ctx context.Context, cell Cell) (result CellR
 	}
 	result.Status = "completed"
 	return result, false, nil
+}
+
+func RecommendedEventsPerSecond(rate int, ratio float64) int {
+	if rate <= 0 || ratio <= 0 {
+		return 0
+	}
+	recommended := int(math.Floor(float64(rate) * ratio))
+	if recommended < 1 {
+		return 1
+	}
+	return recommended
+}
+
+func NormalizeFailureBoundary(passingRate, failureRate int) int {
+	if failureRate > passingRate {
+		return failureRate
+	}
+	return 0
 }
 
 func FixedRateSoakPassed(mode string, evaluation ProbeEvaluation) (bool, error) {
@@ -582,7 +720,8 @@ func PruneCompletedWorkDatabase(workDir string) error {
 func (run *runContext) runIsolatedProbeAttempt(ctx context.Context, cell Cell, datasetPath, databasePath, envPath, attemptDir, allowedCPUs string, sequence int, phase string, repetition, rate int, duration time.Duration) (attempt ProbeAttempt) {
 	attempt = ProbeAttempt{Phase: phase, Repetition: repetition, RatePerSecond: rate, DurationSeconds: int(duration.Seconds()), StartedAt: time.Now()}
 	thresholds := ProbeThresholds{MinDurableRatio: 0.99, MaxBacklogGrowth: 0,
-		InteractiveP95MS: float64(run.manifest.Search.DashboardCoreP95MS), InteractiveP99MS: float64(run.manifest.Search.DashboardOverallP99MS)}
+		InteractiveP95MS: float64(run.manifest.Search.DashboardCoreP95MS), InteractiveP99MS: float64(run.manifest.Search.DashboardCoreP99MS),
+		MaxDrainSeconds: float64(run.manifest.Search.MaxPassDrainSeconds)}
 	if err := ResetDatasetClone(ctx, datasetPath, databasePath); err != nil {
 		markProbeAttemptError(&attempt, thresholds, err)
 		attempt.FinishedAt = time.Now()
@@ -668,7 +807,8 @@ func (run *runContext) runIsolatedProbeAttempt(ctx context.Context, cell Cell, d
 			RedisAddress: netAddress(run.options.RedisPort), RedisPassword: run.redisPass, RedisChannel: "usage",
 			ApplicationURL: fmt.Sprintf("http://127.0.0.1:%d", run.options.AppPort), DatabasePath: databasePath,
 			RatePerSecond: rate, Duration: duration, DrainTimeout: 30 * time.Second, HTTPRatePerSecond: run.manifest.Search.DashboardRequestsPerSecond,
-			Cardinality: cell.Cardinality, APIKeyProfiles: apiProfiles, Seed: run.manifest.Dataset.Seed,
+			AnalysisLatencyInterval: time.Duration(run.manifest.Search.AnalysisLatencyIntervalSeconds) * time.Second,
+			Cardinality:             cell.Cardinality, APIKeyProfiles: apiProfiles, Seed: run.manifest.Dataset.Seed,
 			Thresholds: thresholds,
 		})
 	}
@@ -733,8 +873,8 @@ func validateCellDataset(cell Cell, dataset DatasetResult, path string) error {
 	if dataset.GeneratorVersion != DatasetGeneratorVersion {
 		return fmt.Errorf("cell %s dataset generator=%q, want %q", cell.ID, dataset.GeneratorVersion, DatasetGeneratorVersion)
 	}
-	if dataset.HotEvents != cell.HotEvents || dataset.ArchiveEvents != cell.ArchiveEvents {
-		return fmt.Errorf("cell %s dataset rows hot=%d archive=%d, want %d/%d", cell.ID, dataset.HotEvents, dataset.ArchiveEvents, cell.HotEvents, cell.ArchiveEvents)
+	if dataset.HotEvents != cell.HotEvents || dataset.Recent30DayEvents != cell.Recent30DayEvents || dataset.ArchiveEvents != cell.ArchiveEvents {
+		return fmt.Errorf("cell %s dataset rows hot=%d recent30=%d archive=%d, want %d/%d/%d", cell.ID, dataset.HotEvents, dataset.Recent30DayEvents, dataset.ArchiveEvents, cell.HotEvents, cell.Recent30DayEvents, cell.ArchiveEvents)
 	}
 	if dataset.Identities != int64(cell.Cardinality.Identities) || dataset.Models != int64(cell.Cardinality.Models) || dataset.APIKeys != int64(cell.Cardinality.APIKeys) {
 		return fmt.Errorf("cell %s dataset cardinality does not match plan", cell.ID)
@@ -761,6 +901,74 @@ func resolveDatasetPath(datasetDir string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("neither app.db nor app.db.zst exists in %s", filepath.Clean(datasetDir))
+}
+
+func PreflightDatasetDependencies(root string, cells []Cell) error {
+	for _, cell := range cells {
+		path, err := resolveDatasetPath(filepath.Join(root, "datasets", cell.DatasetID))
+		if err != nil {
+			return fmt.Errorf("preflight cell %s dataset: %w", cell.ID, err)
+		}
+		if strings.HasSuffix(path, ".zst") {
+			if _, err := exec.LookPath("zstd"); err != nil {
+				return fmt.Errorf("compressed canonical dataset requires zstd: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
+const maxDatasetValidationProofAge = 12 * time.Hour
+
+func prepareDatasetValidation(ctx context.Context, options RunOptions, manifest Manifest, cells []Cell) (DatasetResult, string, error) {
+	if len(cells) == 0 {
+		return DatasetResult{}, "", fmt.Errorf("benchmark run has no selected cells")
+	}
+	for _, cell := range cells {
+		if cell.DatasetID != manifest.Dataset.ID {
+			return DatasetResult{}, "", fmt.Errorf("cell %s dataset %q does not match manifest dataset %q", cell.ID, cell.DatasetID, manifest.Dataset.ID)
+		}
+	}
+	datasetDir := filepath.Join(options.Root, "datasets", manifest.Dataset.ID)
+	metadata, err := LoadDatasetResult(filepath.Join(datasetDir, "dataset.json"))
+	if err != nil {
+		return DatasetResult{}, "", fmt.Errorf("load dataset validation metadata: %w", err)
+	}
+	var validation DatasetResult
+	var digest string
+	if strings.TrimSpace(options.DatasetValidationPath) != "" {
+		validation, err = LoadDatasetResult(options.DatasetValidationPath)
+		if err != nil {
+			return DatasetResult{}, "", fmt.Errorf("load dataset validation proof: %w", err)
+		}
+		digest, err = FileSHA256(options.DatasetValidationPath)
+		if err != nil {
+			return DatasetResult{}, "", fmt.Errorf("hash dataset validation proof: %w", err)
+		}
+	} else {
+		datasetPath, resolveErr := resolveDatasetPath(datasetDir)
+		if resolveErr != nil {
+			return DatasetResult{}, "", resolveErr
+		}
+		validation, err = ValidateDatasetPath(ctx, datasetPath, time.Now())
+		if err != nil {
+			return DatasetResult{}, "", err
+		}
+		data, marshalErr := json.Marshal(validation)
+		if marshalErr != nil {
+			return DatasetResult{}, "", fmt.Errorf("encode dataset validation proof: %w", marshalErr)
+		}
+		hash := sha256.Sum256(data)
+		digest = hex.EncodeToString(hash[:])
+	}
+	if err := ValidateDatasetAgainstManifest(validation, metadata, manifest); err != nil {
+		return DatasetResult{}, "", err
+	}
+	proofAge := time.Since(validation.QueryAnchor)
+	if proofAge < -time.Minute || proofAge > maxDatasetValidationProofAge {
+		return DatasetResult{}, "", fmt.Errorf("dataset validation proof age %s is outside the allowed %s", proofAge.Round(time.Minute), maxDatasetValidationProofAge)
+	}
+	return validation, digest, nil
 }
 
 func selectCells(cells []Cell, ids []string) ([]Cell, error) {
@@ -803,8 +1011,8 @@ func descendingPassingRates(attempts []ProbeAttempt, upper int) []int {
 }
 
 // SelectBoundaryCandidates limits ordinary matrix validation to the highest
-// short-probe capacity and one conservative fallback at roughly half that
-// rate. Final deployment recommendations are still verified by dedicated
+// short-probe capacity, conservative halving points, and the lowest passing
+// rate as a final guard. Final recommendations are still verified by dedicated
 // soaks, so testing every intermediate passing rate only adds runtime.
 func SelectBoundaryCandidates(attempts []ProbeAttempt, upper, maximum int) []int {
 	rates := descendingPassingRates(attempts, upper)
@@ -812,7 +1020,12 @@ func SelectBoundaryCandidates(attempts []ProbeAttempt, upper, maximum int) []int
 		return rates
 	}
 	selected := []int{rates[0]}
-	for len(selected) < maximum {
+	reserveLowest := maximum >= 3
+	intermediateLimit := maximum
+	if reserveLowest {
+		intermediateLimit--
+	}
+	for len(selected) < intermediateLimit {
 		target := selected[len(selected)-1] / 2
 		candidate := 0
 		for _, rate := range rates {
@@ -824,10 +1037,14 @@ func SelectBoundaryCandidates(attempts []ProbeAttempt, upper, maximum int) []int
 		if candidate == 0 {
 			candidate = rates[len(rates)-1]
 		}
-		if slices.Contains(selected, candidate) {
+		if slices.Contains(selected, candidate) || (reserveLowest && candidate == rates[len(rates)-1]) {
 			break
 		}
 		selected = append(selected, candidate)
+	}
+	lowest := rates[len(rates)-1]
+	if reserveLowest && len(selected) < maximum && !slices.Contains(selected, lowest) {
+		selected = append(selected, lowest)
 	}
 	return selected
 }
@@ -862,7 +1079,27 @@ func ratesAtOrBelow(rates []int, upper int) []int {
 	return selected
 }
 
-func ResumeCellMatches(path, manifestDigest, keeperDigest, benchctlDigest, datasetFingerprint string) (bool, error) {
+func lowestPositiveRate(left, right int) int {
+	if left <= 0 {
+		return max(right, 0)
+	}
+	if right <= 0 {
+		return left
+	}
+	return min(left, right)
+}
+
+func (run *runContext) executionProvenance(datasetFingerprint string) ExecutionProvenance {
+	return ExecutionProvenance{
+		ManifestSHA256: run.manifest.SourceSHA256, PlanSHA256: run.metadata.PlanSHA256,
+		KeeperBinarySHA256: run.binaryDigest, BenchctlBinarySHA256: run.benchctlDigest, DatasetFingerprint: datasetFingerprint,
+		DatasetValidationSHA256: run.datasetValidationDigest,
+		FixedRate:               run.options.FixedRate, FixedDurationSeconds: int(run.options.FixedDuration.Seconds()), FixedPass: run.options.FixedPass,
+		SearchDurationSeconds: int(run.options.SearchDuration.Seconds()),
+	}
+}
+
+func ResumeCellMatches(path string, expected ExecutionProvenance) (bool, error) {
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return false, nil
@@ -874,7 +1111,19 @@ func ResumeCellMatches(path, manifestDigest, keeperDigest, benchctlDigest, datas
 	if err := json.Unmarshal(data, &result); err != nil {
 		return false, fmt.Errorf("decode existing cell result: %w", err)
 	}
-	return result.Status == "completed" && result.ManifestSHA256 == manifestDigest && result.KeeperBinarySHA256 == keeperDigest && result.BenchctlBinarySHA256 == benchctlDigest && result.DatasetFingerprint == datasetFingerprint, nil
+	terminal := result.Status == "completed"
+	if !terminal && result.FixedRate > 0 && len(result.Attempts) > 0 {
+		lastAttempt := result.Attempts[len(result.Attempts)-1]
+		expectedFailure := fmt.Sprintf("%s soak failed at %d events/s:", result.FixedPass, result.FixedRate)
+		terminal = lastAttempt.RatePerSecond == result.FixedRate && strings.HasPrefix(result.Error, expectedFailure)
+	}
+	return terminal &&
+		result.ManifestSHA256 == expected.ManifestSHA256 && result.PlanSHA256 == expected.PlanSHA256 &&
+		result.KeeperBinarySHA256 == expected.KeeperBinarySHA256 && result.BenchctlBinarySHA256 == expected.BenchctlBinarySHA256 &&
+		result.DatasetFingerprint == expected.DatasetFingerprint && result.DatasetValidationSHA256 == expected.DatasetValidationSHA256 &&
+		result.FixedRate == expected.FixedRate &&
+		result.FixedDurationSeconds == expected.FixedDurationSeconds && result.FixedPass == expected.FixedPass &&
+		result.SearchDurationSeconds == expected.SearchDurationSeconds, nil
 }
 
 func nextAttemptDirectory(cellDir string) (string, error) {
@@ -929,6 +1178,13 @@ func cpuSet(start, end int) string {
 		return strconv.Itoa(start)
 	}
 	return fmt.Sprintf("%d-%d", start, end-1)
+}
+
+func RedisCPUSet(onlineCPUs int) string {
+	if onlineCPUs <= 0 {
+		return ""
+	}
+	return cpuSet(onlineCPUs-1, onlineCPUs)
 }
 
 func OnlineCPUCount() (int, error) {

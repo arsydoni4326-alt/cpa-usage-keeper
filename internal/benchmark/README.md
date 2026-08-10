@@ -12,33 +12,36 @@ The capacity suite changes only the CPU available to Keeper: 1C, 2C, and 4C. All
 
 The formal results report:
 
-- the maximum sustained ingestion rate over five minutes;
-- the maximum rate that also keeps the aggregate p99 of six Dashboard endpoints within three seconds after the ingestion hard pass succeeds;
+- the highest verified five-minute ingestion pass and the lowest observed failure above it;
+- the corresponding five-minute Core Dashboard pass/fail interval under the three-second aggregate p99 SLA;
 - CPU utilization and Keeper cgroup peak memory at the capacity point;
+- a separate Analysis Latency diagnostic summary with sample count, errors, status, and latency percentiles;
 - a conservative sustained-rate recommendation set to 70% of Dashboard capacity.
 
-Core p95 is retained as an experience indicator but is not a `capacity-v1` pass gate.
+Core p95 is retained as an experience indicator but is not a `capacity-v1` pass gate. Analysis Latency is a heavier diagnostic query and does not participate in the three-second Core Dashboard gate.
 
 ## Reference Dataset
 
-The reference dataset ID is `reference-2m`.
+The reference dataset ID is `reference-3m`.
 
 | Item | Count |
 | --- | ---: |
-| Total events | 2,035,740 |
-| Events in the latest 30 days | 1,226,326 |
-| Hot events in the latest 90 days | 1,946,550 |
-| Archived events | 89,190 |
-| Identities | 323 |
-| Models | 52 |
-| API keys | 27 |
-| Database size | 1,171,144,704 bytes (about 1.09 GiB) |
+| Total events | 3,205,740 |
+| Events in the 30 days ending at generation | 1,226,326 |
+| Hot events in the latest 90 days | 3,205,740 |
+| Archived events | 0 |
+| Identities | 500 |
+| Models | 50 |
+| API keys | 50 |
+| Database size | 2,044,776,448 bytes (about 1.90 GiB) |
 
-The dataset retains 90 days of active events plus older archived history to represent the storage, query, and aggregation load of a long-running deployment.
+The dataset retains 90 days of active events. The archive table is intentionally empty because the production Dashboard paths covered by this suite do not query cold events.
 
-API keys are deterministically assigned to high-, medium-, and low-usage tiers in a 30%/50%/20% split. Per-key weights are 10:3:1, and `usage_events` are normalized across those weights. All 323 identities, 52 models, and 27 API keys are referenced by events.
+The 50 API keys are deterministically assigned to 15 high-, 25 medium-, and 10 low-usage keys. Per-key weights are 10:3:1, and `usage_events` are normalized across those weights. All 500 identities, 50 models, and 50 API keys are active and referenced by events. Failed events account for 1% of the generated workload.
 
-The canonical database must pass row-count, cardinality, orphan-reference, token-semantics, derived rollup/checkpoint, `PRAGMA quick_check`, and semantic-fingerprint validation. Dataset generation is not CPU- or memory-limited. Each runtime probe creates an independent clone from the canonical database so backlog, WAL, GC, and cache state do not affect the next point.
+The canonical database must pass row-count, cardinality, orphan-reference, token-semantics, derived rollup/checkpoint, `PRAGMA quick_check`, dimension-distribution, and semantic-fingerprint validation. Its metadata also binds the configured failure rate and traffic tiers, so a canonical generated for a different workload cannot be relabeled by a changed manifest. Generation uses the actual generation time as the dataset anchor. A formal run rejects a dataset whose newest event is more than seven days old and records the effective 30-day query count in `dataset-validation.json`.
+
+Dataset generation is not CPU- or memory-limited. Each runtime probe creates an independent clone from the canonical database so backlog, WAL, GC, and cache state do not affect the next point. The clone is synced and evicted from the controller's page cache before Keeper starts, causing SQLite pages faulted during the probe to be charged to the Keeper cgroup.
 
 ## Directory Layout
 
@@ -64,12 +67,14 @@ The runtime directory is selected with `BENCHMARK_ROOT`:
 ├── benchmark.lock
 ├── bin/
 ├── config/
-├── datasets/reference-2m/
+├── datasets/reference-3m/
 │   ├── app.db                  # or app.db.zst
 │   └── dataset.json
 └── runs/
     ├── <controller-id>/
+    │   ├── controller-inputs.sha256
     │   ├── controller.tsv
+    │   ├── dataset-validation.json
     │   ├── environment.txt
     │   └── summary.md
     └── <controller-id>-<cell-run>/
@@ -85,7 +90,7 @@ The runtime directory is selected with `BENCHMARK_ROOT`:
 
 - Linux amd64 with at least four online logical CPUs;
 - cgroup v2 and systemd transient units;
-- Go, GCC, the SQLite CLI, Redis server, `jq`, and `taskset`;
+- Go, GCC, the SQLite CLI, Redis server, `jq`, and `taskset`; `zstd` is also required when the canonical database is compressed;
 - enough disk space for the canonical database, probe clones, WAL files, logs, and results;
 - permission to use `systemd-run` and read the corresponding cgroup metrics.
 
@@ -99,7 +104,7 @@ PREPARE_DATASET=1 \
 internal/benchmark/scripts/run-capacity.sh
 ```
 
-`PREPARE_DATASET=1` takes effect only when the canonical dataset is missing. After the first generation and validation, omit it to reuse the same dataset:
+`PREPARE_DATASET=1` takes effect only when the canonical dataset is missing. After the first generation and validation, omit it to reuse the same dataset for the formal test campaign:
 
 ```bash
 BENCHMARK_ROOT=/path/to/benchmark-data \
@@ -123,7 +128,11 @@ Optional variables:
 - `REDIS_PORT`, `APP_PORT`: avoid conflicts with other tests on the same machine;
 - `BENCHMARK_MANIFEST`: use another compatible manifest explicitly.
 
-By default, the script builds Keeper and `benchctl` on the target, creates an immutable plan, validates the canonical dataset, performs a 20-second discrete search for each CPU profile, and runs five-minute fixed-rate validation only for the required candidates. Existing results are reused by run ID; the canonical dataset is not regenerated and completed cells are not overwritten.
+By default, the script builds Keeper and `benchctl` on the target, creates an immutable plan, and strictly validates the canonical dataset once. For each CPU profile, discovery starts at 25 events/s and ramps upward; if 25 events/s fails, the same search bisects the configured 20/15/10/5/1 events/s fallback range. It then bisects the resulting pass/fail interval and rechecks both sides of the ingestion boundary for 60 seconds. Only the resulting candidates proceed to five-minute fixed-rate validation. Five-minute ingestion refinement uses 25 events/s steps where possible and the configured manifest rates when an interval falls below that step. If no short Dashboard probe passes, the 1 event/s floor still receives one five-minute validation; after the first five-minute Dashboard pass, the controller bisects upward against the known five-minute failure until it finds the highest configured passing point. Every child run reuses the same validation proof instead of rescanning the full database. A controller ID is resumable only while its controller script, result contract, manifest, plan, binaries, dataset metadata, validation proof, CPU list, ports, search strategy, and durations remain unchanged.
+
+Expected fixed-rate capacity failures remain terminal boundary evidence and are reused by `resume` when their provenance matches; they are not executed again after a controller restart. Missing results, stale validation, panic, runtime/sampler errors, and load-driver failures still stop the controller with a non-zero status. The controller writes a completed summary only after every requested CPU has exactly one formal row.
+
+The controller fixes `TZ=Asia/Shanghai` for generation, validation, Keeper, and result collection. Dataset directories and cell IDs are resolved from the selected manifest and its expanded plan, so compatible custom manifests do not inherit the reference dataset name.
 
 ## Pass Criteria
 
@@ -133,14 +142,17 @@ An ingestion hard pass requires all of the following:
 - the final durable ratio is at least 99%;
 - Redis inbox backlog does not grow;
 - Overview, Activity, and Latency checkpoints and Identity aggregation catch up;
-- no OOM, panic, SQLite busy error, HTTP error, or load-driver publish error occurs.
+- post-load catch-up completes within 15 seconds; the remaining 30-second drain window is retained only for diagnostics;
+- no OOM, panic, or load-driver publish error occurs.
 
-A Dashboard pass first requires the ingestion hard pass, then requires the aggregate p99 across six endpoints to remain within 3000ms. Dashboard replay runs at 1 request/s, warms the endpoints first, then rotates through Realtime Overview, Overview 30d, Activity, Analysis, Request Events, and Analysis Latency 30d.
+A Core Dashboard pass first requires the ingestion hard pass, then requires zero Core HTTP errors and the aggregate p99 across Realtime Overview 60m, Overview 30d, Activity 30d, Analysis 30d, and Request Events 30d to remain within 3000ms. Core Dashboard replay runs at 1 request/s after warmup.
 
-Each formal capacity point runs for 300 seconds. Short probes select candidates only and do not become final capacity results. `offered_events`, `published_events`, and `durable_events` are recorded separately so load-driver shortfalls cannot be reported as Keeper capacity.
+Analysis Latency 30d is warmed once and then requested every 30 seconds during the probe. Its successful sample count, error count, status, and p50/p95/p99/max are reported separately. A diagnostic error does not change ingestion or Core Dashboard capacity; OOM, panic, or another global Keeper failure still invalidates the run.
+
+Each formal capacity point runs at a fixed rate for 300 seconds. Short ramp and boundary probes select candidates only and do not become final capacity results. The controller reports the highest five-minute passing rate together with the lowest observed failing rate, so the measured capacity is an interval rather than an unsupported claim of an exact absolute maximum. A zero failure boundary means no failure was observed within the configured rate matrix. `offered_events`, `published_events`, and `durable_events` are recorded separately so load-driver shortfalls cannot be reported as Keeper capacity.
 
 ## Result Files
 
-Each run produces `run.json`, `results.jsonl`, `summary.json`, `summary.csv`, and `report.md`. The controller also produces `controller.tsv`, `environment.txt`, and a capacity `summary.md`.
+Each run produces `run.json`, `results.jsonl`, `summary.json`, `summary.csv`, and `report.md`. The controller also produces `controller-inputs.sha256`, `dataset-validation.json`, `controller.tsv`, `environment.txt`, and a capacity `summary.md`.
 
 See the current formal measurements in the [Capacity Benchmark Report](REPORT.md).

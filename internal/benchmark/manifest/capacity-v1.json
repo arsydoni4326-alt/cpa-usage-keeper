@@ -5,18 +5,19 @@
     "arch": "amd64"
   },
   "dataset": {
-    "id": "reference-2m",
-    "hot_events": 1946550,
-    "archive_events": 89190,
-    "failure_rate": 0.041818,
+    "id": "reference-3m",
+    "hot_events": 3205740,
+    "recent_30_day_events": 1226326,
+    "archive_events": 0,
+    "failure_rate": 0.01,
     "seed": 20260806,
     "hot_days": 90,
-    "archive_days": 7,
-    "benchmark_now": "2026-08-06T16:00:00+08:00",
+    "archive_days": 0,
+    "benchmark_now": "generation-time",
     "cardinality": {
-      "identities": 323,
-      "models": 52,
-      "api_keys": 27
+      "identities": 500,
+      "models": 50,
+      "api_keys": 50
     }
   },
   "traffic_tiers": [
@@ -30,16 +31,19 @@
     {"id": "4c-unlimited", "cpu": 4, "memory_mib": 0}
   ],
   "search": {
-    "rates_per_second": [25, 50, 75, 100, 150, 200, 225, 250, 275, 300, 400, 500, 600, 650, 675, 750, 900, 1000, 1250, 1500, 1750, 2000, 2500, 3000, 3500, 4000, 5000, 6000, 7500, 10000],
+    "rates_per_second": [1, 5, 10, 15, 20, 25, 50, 75, 100, 150, 200, 225, 250, 275, 300, 400, 500, 600, 650, 675, 750, 900, 1000, 1250, 1500, 1750, 2000, 2500, 3000, 3500, 4000, 5000, 6000, 7500, 10000],
+    "initial_rate_per_second": 25,
     "probe_seconds": 20,
-    "boundary_seconds": 30,
+    "boundary_seconds": 60,
     "boundary_repetitions": 1,
-    "skip_boundary": true,
+    "skip_boundary": false,
     "soak_seconds": 300,
-    "max_run_seconds": 7200,
-    "dashboard_core_p95_ms": 0,
-    "dashboard_overall_p99_ms": 3000,
-    "dashboard_requests_per_second": 1,
+    "max_pass_drain_seconds": 15,
+		"max_run_seconds": 7200,
+		"dashboard_core_p95_ms": 0,
+		"dashboard_core_p99_ms": 3000,
+		"dashboard_requests_per_second": 1,
+		"analysis_latency_interval_seconds": 30,
     "search_dashboard_capacity": true,
     "recommended_capacity_ratio": 0.70
   }

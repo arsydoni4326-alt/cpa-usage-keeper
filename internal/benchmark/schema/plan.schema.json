@@ -13,12 +13,13 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "kind", "dataset_id", "hot_events", "archive_events", "cardinality", "resource", "rates_per_second"],
+        "required": ["id", "kind", "dataset_id", "hot_events", "recent_30_day_events", "archive_events", "cardinality", "resource", "rates_per_second"],
         "properties": {
           "id": {"type": "string", "pattern": "^capacity-[a-z0-9-]+$"},
           "kind": {"const": "capacity"},
           "dataset_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
           "hot_events": {"type": "integer", "minimum": 1},
+          "recent_30_day_events": {"type": "integer", "minimum": 1},
           "archive_events": {"type": "integer", "minimum": 0},
           "cardinality": {"type": "object"},
           "resource": {"type": "object"},

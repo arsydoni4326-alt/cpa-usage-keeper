@@ -4,177 +4,187 @@
 
 # CPA Usage Keeper 容量 Benchmark 报告
 
-测试日期：2026-08-07（Asia/Shanghai）
+测试日期：2026-08-10（Asia/Shanghai）
 
 套件：`capacity-v1`
 
-数据集：`reference-2m`
+数据集：`reference-3m`
 
-## 结论
+平台：Linux amd64
 
-本轮固定复用同一份约 203.6 万 events 的 SQLite 数据库，只限制 Keeper CPU，不限制 Keeper 内存。所有正式容量均来自 ingestion 与 Dashboard 并发运行的五分钟固定速率测试。
+## 结论摘要
 
-| Keeper CPU | 五分钟 ingestion 上限 | 3 秒 Dashboard 上限 | 保守持续流量建议 | ingestion 上限 CPU | Keeper cgroup 峰值内存 | 建议内存 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1C | 150 events/s | 100 events/s | Dashboard 70；ingestion-only 105 events/s | 57.3% | 304.4 MiB | 512 MiB |
-| 2C | 200 events/s | 200 events/s | 140 events/s | 35.9% | 417.0 MiB | 1 GiB |
-| 4C | 650 events/s | 650 events/s | 455 events/s | 29.5% | 1,078.2 MiB | 2 GiB |
+每个正式点均复用同一份已验证 SQLite 数据库，只改变 Keeper 可用 CPU：1C、2C 或 4C。数据库包含最近 90 天的 3,205,740 条活跃 events；本轮数据校验锚点对应的 30 天查询窗口包含 1,201,775 条 events。Keeper 内存不设上限，报告中的 cgroup 峰值包含 Keeper、SQLite 页面以及归入该 cgroup 的数据库缓存。
 
-默认生产建议为 **2C / 1 GiB、持续流量不超过 140 events/s**。它在当前参考数据集上同时达到 200 events/s ingestion 与 Dashboard 上限，页面延迟明显优于 4C 的极限容量点。
+容量门槛只覆盖五个核心 Dashboard 接口，整体 p99 上限为 3 秒。Analysis Latency 30d 属于更重的诊断查询，每 30 秒独立测量一次；其延迟不决定核心 Dashboard 容量，但错误、OOM、panic 与 SQLite 故障仍会明确记录。
 
-高流量部署可选 **4C / 2 GiB、持续流量不超过 455 events/s**。4C/650 的 overall p99 为 1970.0ms，满足 3 秒口径，但 core p95 已达到 1387.6ms，因此应理解为“3 秒内可用”，不是低延迟配置。
+| Keeper CPU | 五分钟通过 / 最低失败 | 70% 持续流量建议 | 通过点核心 Dashboard p99 | 通过点 Analysis Latency p99 | 通过点峰值内存 | 部署建议 |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| 1C | 150 / 200 events/s | 105 events/s | 858.4ms | 5109.1ms | 472.9 MiB | 1C / 768 MiB，持续流量不超过 105 events/s |
+| 2C | 200 / 250 events/s | 140 events/s | 627.1ms | 3075.9ms | 522.2 MiB | 2C / 1 GiB，持续流量不超过 140 events/s |
+| 4C | 500 / 600 events/s | 350 events/s | 1323.0ms | 3044.6ms | 995.7 MiB | 4C / 2 GiB，持续流量不超过 350 events/s |
 
-轻量部署可选 **1C / 512 MiB**。Dashboard 建议约 70 events/s；若不要求同时使用 Dashboard，ingestion-only 可保守使用约 105 events/s。
+本轮最强的已验证档位为 **4C / 2 GiB，持续流量不超过 350 events/s**。实测 500 events/s 在 150,000 条目标 events 中发布并持久化 149,998 条，14.63 秒内完成追平。600 events/s 虽然 179,998 条已发布 events 全部持久化，但完整 30 秒 drain 后仍有 12,266 条聚合 checkpoint lag。
 
-内存建议来自实测峰值加部署余量，不是 hard-cap 验证结果。正式峰值采用 Keeper cgroup v2 的 `memory.peak`，包含 Keeper 进程、SQLite mmap/page cache 以及归属于该 cgroup 的数据库缓存，没有从结果中扣除数据库占用。
+1C 与 2C 的失败边界均来自 durable throughput，而不是 Dashboard。六个正式点的核心 Dashboard p99 全部低于 1.6 秒，包括 ingestion 失败点。因此增加 CPU 能提升容量，但 SQLite ingestion 与派生聚合追平会在分配的 CPU quota 饱和前限制扩展。
+
+这些数值是五分钟持续测量，不是瞬时峰值或绝对精确上限。持续流量建议取最高完整通过点的 70%。
 
 ## 测试机器
 
 | 项目 | 配置 |
 | --- | --- |
 | 操作系统 | Debian GNU/Linux 13 |
-| 平台 | Linux amd64 |
-| 虚拟化 | KVM |
-| CPU | Intel Xeon Gold 6138 |
+| Kernel | 6.12.90+deb13.1-cloud-amd64 |
+| 架构 | Linux amd64 |
+| 虚拟化 | KVM，全虚拟化 |
+| CPU | Intel Xeon Gold 6138 @ 2.00GHz |
+| 拓扑 | 1 socket、4 cores、每 core 1 thread |
 | 在线逻辑 CPU | 4 vCPU |
-| 可用物理内存 | 约 9.5 GiB |
+| 虚拟机可见内存 | 9,948,040 KiB（约 9.49 GiB） |
 | Go | 1.26.2 |
 | GCC | 14.2.0 |
 | SQLite CLI | 3.46.1 |
 | Redis | 8.0.2 |
 
-Keeper 的 1C/2C/4C 分别使用 cgroup `cpu.max=100000/200000/400000 100000`，并绑定 `AllowedCPUs=0/0-1/0-3`。三档均为 `memory.max=max`、`memory.swap.max=0`。合成、clone、负载器和结果汇总不计入 Keeper cgroup。
+Keeper 分别使用等价于 1、2、4 cores 的 cgroup CPU quota，并绑定到 CPU `0`、`0-1`、`0-3`。三档均为 `memory.max=max`、`memory.swap.max=0`。
 
-1C 和 2C 时负载器使用剩余 CPU；4C 时 Keeper 与负载器共享四个 vCPU，原始结果标记 `shared_driver=true`，因此 4C 数字可视为偏保守的整机结果。
+数据准备阶段不限制资源。数据库 clone、Redis 发布器与结果采集位于 Keeper cgroup 外；1C、2C 的负载器使用 Keeper 绑定范围之外的 CPU，4C 与负载器共享全部四个 vCPU，因此4C属于偏保守的整机测量。
 
-## 数据集
+CPU 利用率按 Keeper 分配的 quota 归一化。通过点平均分别为1C的49.3%、2C的35.7%、4C的27.2%，约等于实际使用0.49、0.71、1.09个逻辑核心。
 
-| 项目 | 实测值 |
+## 参考数据集
+
+| 项目 | 验证值 |
 | --- | ---: |
-| 数据集 ID | `reference-2m` |
-| 数据库大小 | 1,171,144,704 bytes（约 1.09 GiB） |
-| 全库 events | 2,035,740 |
-| 最近 30 天 events | 1,226,326 |
-| 最近 90 天 hot events | 1,946,550 |
-| archive events | 89,190 |
-| identities | 323 |
-| models | 52 |
-| API keys | 27 |
+| 数据库大小 | 2,044,776,448 bytes（约 1.90 GiB） |
+| 90 天活跃 events | 3,205,740 |
+| 正式运行 30 天查询窗口 events | 1,201,775 |
+| Archive events | 0 |
+| Failed events | 31,831（0.993%） |
+| Identities | 使用 500 / 总计 500 |
+| Models | 使用 50 / 总计 50 |
+| API keys | 使用 50 / 总计 50 |
+| 孤儿 identity/model/API-key 引用 | 0 / 0 / 0 |
 | `PRAGMA quick_check` | `ok` |
-| semantic fingerprint | `eb9dc034942bd6fd16477e037452cb64324158cdf8b48d2671647e409d4ca8d2` |
+| Semantic fingerprint | `4b2b14e41bf7aaf91455fc1c3d9a2fe95ca45403d5448e2de17f08d969316f0b` |
 
-数据集包含最近 30 天的 1,226,326 条事件、最近 90 天的 1,946,550 条活跃事件，以及 89,190 条归档事件，用于模拟持续运行后的存储、page cache、rollup 和查询负载。
+活跃表覆盖完整 90 天历史。archive 刻意保持为空，因为本套件覆盖的生产 Dashboard 路径不会查询冷数据。所有 identities、models 和 API keys 都被 events 实际引用。
 
-27 个 API keys 按 30%/50%/20% 确定性分入高、中、低用量档，每 Key 权重为 10:3:1，events 根据权重归一化分配。323 identities、52 models 和 27 API keys 均被事件实际引用。数据集同时通过孤儿引用、token 语义、派生 rollup/checkpoint 与 semantic fingerprint 检查。
+| API-key 档位 | API keys | Key 数量占比 | Events | Events 占比 |
+| --- | ---: | ---: | ---: | ---: |
+| 大用量 | 15 | 30% | 2,051,847 | 64.01% |
+| 中用量 | 25 | 50% | 1,018,187 | 31.76% |
+| 小用量 | 10 | 20% | 135,706 | 4.23% |
+
+每 Key 生成权重为 10:3:1。最终流量刻意保持不均衡，用于模拟少量高用量 Key，而不是把 events 集中到单一 Key。
+
+每个测试点开始前，套件都会从 canonical 创建新的字节级 clone，完成落盘并从 controller page cache 中清除。失败点不会把 backlog、WAL 或已预热 SQLite 页面带入下一轮。
 
 ## 测试方法与通过条件
 
-- 每个正式点从同一份 canonical 创建独立工作副本，重启 Keeper，顺序预热六个 Dashboard 接口，再固定运行 300 秒。
-- offered load 通过 Redis `usage` 发布；Dashboard replay 为 1 req/s，在六个真实页面接口之间轮转。
-- ingestion hard pass：至少 99.9% 目标事件成功发布、最终 durable ratio 至少 99%、backlog 不增长、Overview/Activity/Latency checkpoint 和 Identity 聚合追平、无 OOM、panic、SQLite busy、HTTP 或 publish error。
-- Dashboard pass：先满足 hard pass，再要求六接口整体 p99 不超过 3000ms。
-- core p95 作为体验指标保留，但不参与正式通过判定。
-- 容量点均为五分钟实测；20 秒搜索只用于选择候选，不作为最终上限。
-- 相邻边界收敛到 25 events/s，或不超过约 10% 的间隔。
+- 每个正式点都使用独立数据库 clone 启动全新 Keeper，预热全部 Dashboard 路径后，以选定速率持续运行 300 秒。
+- Events 通过 Redis 发布。核心 Dashboard replay 为 1 req/s，轮询 Realtime Overview 60m、Overview 30d、Activity 30d、Analysis 30d 和 Request Events 30d。
+- Analysis Latency 30d 先预热一次，随后每 30 秒请求一次；每个正式点得到9个成功诊断样本。
+- Ingestion hard pass 要求：发布成功率至少99.9%、最终 durable ratio 至少99%、backlog不增长、Overview/Activity/Latency checkpoint与Identity聚合追平、无OOM、panic或发布器错误，并在15秒内完成追平。
+- 核心 Dashboard pass 先要求 ingestion hard pass，再要求核心HTTP错误为0且整体p99不超过3000ms。
+- Analysis Latency 的错误和分位数独立判定；诊断错误不会把 ingestion 或核心 Dashboard 容量重新标记为失败。
+- 短测只用于选择候选。容量结论仅使用下方六个五分钟正式边界点。
+- 持续流量建议取最高完整通过点的70%，向下取整到整数 events/s。
 
-所有结果表格统一按上述 ingestion hard pass 和 Dashboard overall p99 <=3000ms 标准判定。
+## 容量边界
 
-## 全部五分钟正式点
+| CPU | 最高通过 | 最低失败 | 通过点 durable | 通过点追平 | 通过点 CPU | 通过点峰值内存 | 失败证据 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 1C | 150 | 200 | 45,000 / 45,000 | 5.37s | 49.3% | 472.9 MiB | 200 仅落库 53,969 / 60,000 |
+| 2C | 200 | 250 | 60,000 / 60,000 | 3.24s | 35.7% | 522.2 MiB | 250 仅落库 71,597 / 75,000 |
+| 4C | 500 | 600 | 149,998 / 150,000 | 14.63s | 27.2% | 995.7 MiB | 600 在 30.07s 后仍有 12,266 checkpoint lag |
 
-以下 24 个点均独立恢复 canonical、重启 Keeper 并运行 300 秒。`Hard` 表示 ingestion、durable、checkpoint 等完整性；`Dashboard` 表示在 Hard 基础上满足 3 秒 SLA。
+所有正式点均未 OOM。单独增加内存不能解决这些实测边界：1C/2C失败来自durable throughput，4C失败来自派生状态追平。
 
-### 1C / 不限制内存
+## 核心 Dashboard 评估
 
-| Rate | Hard | Dashboard | Durable / Offered | Durable | CPU | Peak memory | Core p95 | Overall p99 | 失败原因 |
-| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 25 | 通过 | 通过 | 7,500 / 7,500 | 100% | 47.4% | 174.0 MiB | 274.8ms | 2,586.7ms | — |
-| 50 | 通过 | 通过 | 15,000 / 15,000 | 100% | 49.4% | 193.1 MiB | 316.3ms | 2,602.0ms | — |
-| 75 | 通过 | 通过 | 22,500 / 22,500 | 100% | 50.0% | 248.0 MiB | 376.3ms | 2,717.1ms | — |
-| 100 | 通过 | 通过 | 30,000 / 30,000 | 100% | 53.0% | 290.7 MiB | 465.7ms | 2,892.5ms | — |
-| 150 | 通过 | 失败 | 45,000 / 45,000 | 100% | 57.3% | 304.4 MiB | 593.0ms | 3,917.1ms | overall p99 >3s |
-| 200 | 失败 | 失败 | 53,972 / 60,000 | 89.95% | 58.2% | 328.7 MiB | 613.6ms | 3,549.3ms | durable、overall p99 |
-| 250 | 失败 | 失败 | 59,894 / 75,000 | 79.86% | 59.8% | 417.2 MiB | 718.1ms | 3,751.1ms | durable、overall p99 |
-| 500 | 失败 | 失败 | 74,441 / 150,000 | 49.63% | 63.1% | 453.0 MiB | 891.0ms | 5,061.7ms | durable、overall p99 |
-| 1,000 | 失败 | 失败 | 117,279 / 300,000 | 39.09% | 79.8% | 756.5 MiB | 2,187.7ms | 6,200.1ms | durable、overall p99 |
-| 3,000 | 失败 | 失败 | 264,819 / 900,000 | 29.42% | 86.2% | 1,705.7 MiB | 4,834.3ms | 8,793.5ms | errors、durable、backlog、checkpoint、Identity、overall p99 |
+| CPU | 通过速率 | 样本数 | 整体 p50 | 整体 p95 | 整体 p99 | 最慢接口 p99 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1C | 150 events/s | 299 | 299.9ms | 639.4ms | 858.4ms | Overview 30d：961.8ms |
+| 2C | 200 events/s | 299 | 297.9ms | 532.1ms | 627.1ms | Analysis 30d：649.7ms |
+| 4C | 500 events/s | 299 | 339.6ms | 938.2ms | 1323.0ms | Overview 30d：1469.6ms |
 
-1C 的 25、50、75、100 events/s 均满足 3 秒口径；100 是最高 Dashboard 通过点。150 虽完整落盘，但 overall p99 已升至 3917.1ms。
+### 各通过边界的接口延迟
 
-### 2C / 不限制内存
-
-| Rate | Hard | Dashboard | Durable / Offered | Durable | CPU | Peak memory | Core p95 | Overall p99 | 失败原因 |
-| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 200 | 通过 | 通过 | 60,000 / 60,000 | 100% | 35.9% | 417.0 MiB | 449.3ms | 2,085.8ms | — |
-| 225 | 失败 | 失败 | 60,741 / 67,500 | 89.99% | 35.6% | 378.2 MiB | 447.8ms | 2,065.0ms | durable |
-| 250 | 失败 | 失败 | 72,522 / 75,000 | 96.70% | 37.9% | 479.1 MiB | 548.3ms | 2,102.9ms | durable |
-| 300 | 失败 | 失败 | 80,969 / 90,000 | 89.97% | 39.2% | 454.2 MiB | 589.2ms | 2,196.9ms | durable |
-
-2C 的边界清晰：200 全部通过，225 已因 durable throughput 失败。失败点没有 OOM，单独增加内存不能改变这条边界。
-
-### 4C / 不限制内存
-
-| Rate | Hard | Dashboard | Durable / Offered | Durable | CPU | Peak memory | Core p95 | Overall p99 | 失败原因 |
-| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 200 | 通过 | 通过 | 60,000 / 60,000 | 100% | 18.9% | 326.4 MiB | 434.6ms | 1,947.4ms | — |
-| 250 | 通过 | 通过 | 74,999 / 75,000 | 99.999% | 20.2% | 383.5 MiB | 498.8ms | 1,947.8ms | — |
-| 275 | 通过 | 通过 | 82,500 / 82,500 | 100% | 20.7% | 435.2 MiB | 556.7ms | 1,973.6ms | — |
-| 300 | 通过 | 通过 | 90,000 / 90,000 | 100% | 21.4% | 499.8 MiB | 588.4ms | 1,953.7ms | — |
-| 400 | 通过 | 通过 | 120,000 / 120,000 | 100% | 24.1% | 654.3 MiB | 744.7ms | 1,945.0ms | — |
-| 500 | 通过 | 通过 | 150,000 / 150,000 | 100% | 25.2% | 661.5 MiB | 978.3ms | 1,974.7ms | — |
-| 600 | 通过 | 通过 | 180,000 / 180,000 | 100% | 28.4% | 985.9 MiB | 1,130.8ms | 1,964.7ms | — |
-| 650 | 通过 | 通过 | 195,000 / 195,000 | 100% | 29.5% | 1,078.2 MiB | 1,387.6ms | 1,970.0ms | — |
-| 675 | 失败 | 失败 | 182,212 / 202,500 | 89.98% | 30.1% | 979.5 MiB | 1,229.5ms | 1,991.5ms | durable |
-| 750 | 失败 | 失败 | 225,000 / 225,000 | 100% | 30.0% | 1,321.2 MiB | 1,527.8ms | 1,987.1ms | checkpoint lag=39,762 |
-
-4C/750 证明只看 `usage_events` 落盘数会高估容量：225,000 条全部 durable，但 rollup checkpoint 仍落后 39,762 条，因此 Hard 必须失败。
-
-## Ingestion 边界
-
-| CPU | 最高通过 | 首个相邻失败 | 通过点 durable | 失败原因 | 通过点 CPU | Keeper cgroup 峰值内存 |
-| --- | ---: | ---: | ---: | --- | ---: | ---: |
-| 1C | 150 | 200 | 45,000 / 45,000 | 200 仅落盘 53,972 / 60,000 | 57.3% | 304.4 MiB |
-| 2C | 200 | 225 | 60,000 / 60,000 | 225 仅落盘 60,741 / 67,500 | 35.9% | 417.0 MiB |
-| 4C | 650 | 675 | 195,000 / 195,000 | 675 仅落盘 182,212 / 202,500 | 29.5% | 1,078.2 MiB |
-
-CPU 利用率按分配给 Keeper 的 CPU 数量归一化，因此 4C/650 的 29.5% 约等于 1.18 个逻辑核心的总 CPU 时间。所有正式点均为 unlimited memory；失败点没有 OOM，主要边界来自 durable/rollup 路径以及高流量下的 Dashboard 延迟。
-
-## Dashboard 评估
-
-| CPU | 评估速率 | Hard | Keeper cgroup 峰值内存 | Core p95 | Overall p99 | 最慢接口 p99 | 结论 |
-| --- | ---: | --- | ---: | ---: | ---: | ---: | --- |
-| 1C | 100 events/s | 通过 | 290.7 MiB | 465.7ms | 2,892.5ms | Analysis Latency 2,946.8ms | 通过；150 的 p99=3,917.1ms |
-| 2C | 200 events/s | 通过 | 417.0 MiB | 449.3ms | 2,085.8ms | Analysis Latency 2,114.9ms | 通过；225 的 ingestion 已失败 |
-| 4C | 650 events/s | 通过 | 1,078.2 MiB | 1,387.6ms | 1,970.0ms | Analysis Latency 2,008.3ms | 3 秒内通过，但不是低延迟点 |
-
-4C/650 的逐接口稳态延迟：
-
-| Endpoint | p50 | p95 | p99 |
+| 接口 | 1C/150 p50 / p95 / p99 | 2C/200 p50 / p95 / p99 | 4C/500 p50 / p95 / p99 |
 | --- | ---: | ---: | ---: |
-| Analysis | 1.6ms | 1.8ms | 1.8ms |
-| Request Events | 147.1ms | 171.5ms | 193.8ms |
-| Activity | 171.0ms | 209.0ms | 245.9ms |
-| Realtime Overview | 589.5ms | 1,447.2ms | 1,729.2ms |
-| Overview 30d | 717.0ms | 1,498.4ms | 1,550.7ms |
-| Analysis Latency 30d | 1,902.8ms | 1,970.0ms | 2,008.3ms |
+| Realtime Overview 60m | 204.5 / 585.3 / 668.9ms | 202.6 / 389.0 / 438.5ms | 422.0 / 895.9 / 1160.1ms |
+| Overview 30d | 353.7 / 710.3 / 961.8ms | 338.0 / 565.5 / 592.8ms | 604.8 / 1165.5 / 1469.6ms |
+| Activity 30d | 262.9 / 523.4 / 582.2ms | 309.0 / 345.4 / 364.7ms | 309.9 / 348.6 / 393.3ms |
+| Analysis 30d | 454.5 / 771.9 / 889.3ms | 497.5 / 623.0 / 649.7ms | 504.7 / 578.0 / 593.3ms |
+| Request Events 30d | 148.2 / 333.2 / 444.5ms | 146.6 / 173.2 / 247.4ms | 152.8 / 182.7 / 190.1ms |
 
-若部署目标是“页面尽量快”而不仅是“3 秒内可用”，应在容量上限之外保留更大流量余量，并持续观察 core p95。
+本轮核心 Dashboard 不是限制门槛。所有通过和失败 ingestion 边界的核心 p99 都明显低于3秒。
 
-## 扩容收益
+## Analysis Latency 诊断
 
-- 1C → 2C：ingestion 上限从 150 提升到 200（+33%），3 秒 Dashboard 上限从 100 提升到 200；峰值内存从 304.4 MiB 增至 417.0 MiB。
-- 2C → 4C：ingestion 与 Dashboard 上限从 200 提升到 650（3.25x）；峰值内存增至约 1.05 GiB。
-- 单独提高可用内存不会自动提高容量：正式点本来就是 unlimited memory，失败原因是 durable throughput、checkpoint lag 或 Dashboard SLA。
-- 当前参考数据集下，2C 是吞吐、延迟和内存之间的默认平衡点；4C 提供更高吞吐，但核心页面 p95 明显上升。
+| CPU / 通过速率 | 成功样本 | 错误 | 状态 | p50 | p95 | p99 | Max |
+| --- | ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| 1C / 150 | 9 | 0 | 通过 | 4453.6ms | 5109.1ms | 5109.1ms | 5109.1ms |
+| 2C / 200 | 9 | 0 | 通过 | 2706.1ms | 3075.9ms | 3075.9ms | 3075.9ms |
+| 4C / 500 | 9 | 0 | 通过 | 2802.1ms | 3044.6ms | 3044.6ms | 3044.6ms |
+
+Analysis Latency 刻意不参与核心 Dashboard 的3秒门槛。该接口会在所选30天范围内合并已保留的Latency sketches与抽样点，因此在当前数据规模下明显重于其它 Dashboard 路径。
+
+每个五分钟点按30秒间隔只能完成9个诊断请求。nearest-rank p95与p99因此等于最大观测值，应作为本轮有界证据理解，而不是统计上精确的生产SLO。
+
+## Identity 基数方向（探索性）
+
+另一次五分钟1C对照使用3,205,740条活跃events、50个models、50个API keys、内存不设上限及1 event/s，并将identities从500降至50。两次运行因时间锚点不同，30天查询窗口的数据量相差约1%。该测试早于当前正式诊断查询频率，因此只作为方向性证据，不构成新的容量边界。
+
+| 指标 | 500 identities | 50 identities | 观测变化 |
+| --- | ---: | ---: | ---: |
+| 核心 Dashboard 整体 p99 | 521.3ms | 277.4ms | -46.8% |
+| Analysis 30d p99 | 557.6ms | 223.0ms | -60.0% |
+| Analysis Latency 30d p99 | 3384.8ms | 3225.9ms | -4.7% |
+| CPU 利用率（按1C归一化） | 64.4% | 56.0% | -8.5个百分点 |
+| 峰值内存 | 310.8 MiB | 251.3 MiB | -59.5 MiB |
+
+较低的identity基数可以明显减少轻量部署的核心Dashboard开销与内存占用。Analysis Latency改善较小，因为其保留统计按API group而非identity分桶。这个方向不改变上方正式容量边界与硬件建议。
+
+## 边界证据
+
+| CPU | 速率 | Hard pass | 核心 Dashboard pass | 诊断状态 | Durable / offered | 追平 | 峰值内存 | 核心 p99 | 原因 |
+| --- | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | --- |
+| 1C | 150 | 是 | 是 | 通过 | 45,000 / 45,000 | 5.37s | 472.9 MiB | 858.4ms | — |
+| 1C | 200 | 否 | 否 | 通过 | 53,969 / 60,000 | 3.37s | 471.9 MiB | 786.7ms | `durable_throughput` |
+| 2C | 200 | 是 | 是 | 通过 | 60,000 / 60,000 | 3.24s | 522.2 MiB | 627.1ms | — |
+| 2C | 250 | 否 | 否 | 通过 | 71,597 / 75,000 | 0.00s | 589.6 MiB | 708.8ms | `durable_throughput` |
+| 4C | 500 | 是 | 是 | 通过 | 149,998 / 150,000 | 14.63s | 995.7 MiB | 1323.0ms | — |
+| 4C | 600 | 否 | 否 | 通过 | 179,998 / 180,000 | 30.07s | 1044.3 MiB | 1415.4ms | `drain_lag`、`checkpoint_lag` |
+
+## 容量规划建议
+
+- **轻量部署：**1C / 768 MiB，持续流量不超过 105 events/s。
+- **中等部署：**2C / 1 GiB，持续流量不超过 140 events/s。
+- **较高吞吐部署：**4C / 2 GiB，持续流量不超过 350 events/s。
+- 内存按实测cgroup峰值加部署余量配置；这些不是有限hard-cap启动测试。
+- 不要把单独增加内存视为吞吐升级；本轮没有容量失败来自OOM。
+- 不要从4C或500 events/s继续线性外推；SQLite写入、Redis到SQLite的持久化、派生状态追平和共享负载器会先限制扩展。
 
 ## 限制
 
-- 每个最终边界只有一次五分钟正式运行，没有多次重复或 24 小时 soak；结果适合容量规划，不等同于长期 SLO 证明。
-- 4C Keeper 与负载器共享宿主 CPU，结果偏保守。
-- 本轮没有施加 256/512/768/1024 MiB hard cap，只能给出 observed peak 和带余量建议，不能声称验证了最低可启动内存。
-- events/s 是在预装约 203.6 万条全库历史上的五分钟持续流量，不能直接乘以 30 天当作长期安全月容量；数据库继续增长后，查询与聚合成本也会变化。
-- 结论只适用于本报告记录的硬件规格、数据集指纹、二进制和测试方法。
+- 每个报告边界点只有一次五分钟正式运行；本轮没有重复全部边界或执行24小时soak。
+- 每个正式点只有9个Analysis Latency成功样本，其高分位数属于观测值。
+- 4C与负载器共享宿主CPU，因此结果偏保守，也更依赖当前主机。
+- 本轮没有施加256/512/768/1024 MiB内存hard cap；内存建议是observed peak加余量，不是已验证最低限制。
+- 生成数据库覆盖90天活跃数据；Dashboard负载查询生产使用的30天和realtime路径，archive/冷表性能不在范围内。
+- 预装历史数据库上的五分钟 sustained events/s 不能直接乘以时间，作为契约型月容量。
+- 早期把Analysis Latency按核心接口频率回放的测试仍保留为压力证据，但不再用于生产容量建议。
+- Identity基数对照属于探索性测试，不修改正式容量边界。
 
 ## 可复现信息
 
-- Keeper binary SHA-256：`4782fc7bfacc1c72667436e4d4471cd26755ed2ae192173beff77bcae4bd27d6`
-- Dataset semantic fingerprint：`eb9dc034942bd6fd16477e037452cb64324158cdf8b48d2671647e409d4ca8d2`
+- Canonical database SHA-256：`55805c8644d2a1dc9a2fc2fffb400e3ba74cbb7b777f1c3098516071add070af`
+- Dataset semantic fingerprint：`4b2b14e41bf7aaf91455fc1c3d9a2fe95ca45403d5448e2de17f08d969316f0b`
+- Dataset validation SHA-256：`d0a90239ef1590b30c36b5be51bb61a25b1fc00eda3f7e5cbd9a870ad3a9b557`
+- Keeper binary SHA-256：`75ae2e29e0a4edd8ec7d29954cc9f037721c8c9173d2ff8e2f337f0ea5a68b0e`
+- `benchctl` binary SHA-256：`9b2b8bb5bfcbd57d78ef4bdf95f714203718a5a84d495428ced3757896d89c6c`
+- Manifest SHA-256：`e6513ff3cb50d352a2b1c325daec2d5cec57ea862af3837cdf75789e0419afa2`
+- Expanded plan SHA-256：`0976acf6a94518f536ac84f1b6d7fb0502a1e2c8344966ec11c8241755117323`

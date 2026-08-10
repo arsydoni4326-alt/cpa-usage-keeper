@@ -108,12 +108,12 @@ func runGenerate(args []string) error {
 	if effectiveNow == "" {
 		effectiveNow = manifest.Dataset.BenchmarkNow
 	}
-	now, err := time.Parse(time.RFC3339, effectiveNow)
+	now, err := capacity.ResolveDatasetBenchmarkNow(effectiveNow, time.Now())
 	if err != nil {
-		return fmt.Errorf("parse benchmark now: %w", err)
+		return err
 	}
 	options := capacity.GenerateOptions{
-		Path: *databasePath, HotEvents: manifest.Dataset.HotEvents,
+		Path: *databasePath, HotEvents: manifest.Dataset.HotEvents, Recent30DayEvents: manifest.Dataset.Recent30DayEvents,
 		ArchiveEvents: manifest.Dataset.ArchiveEvents, HotDays: manifest.Dataset.HotDays,
 		ArchiveDays: manifest.Dataset.ArchiveDays, FailureRate: manifest.Dataset.FailureRate,
 		Seed: manifest.Dataset.Seed, Now: now, Cardinality: manifest.Dataset.Cardinality,
@@ -140,13 +140,27 @@ func runGenerate(args []string) error {
 func runValidate(args []string) error {
 	flags := flag.NewFlagSet("validate", flag.ContinueOnError)
 	databasePath := flags.String("database", "", "SQLite database")
+	manifestPath := flags.String("manifest", "", "suite manifest used to generate the dataset")
+	metadataPath := flags.String("metadata", "", "dataset.json metadata to compare with the database")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if strings.TrimSpace(*databasePath) == "" {
 		return fmt.Errorf("validate requires --database")
 	}
-	db, err := repository.OpenReadDatabase(config.Config{SQLitePath: *databasePath})
+	validationPath := *databasePath
+	if strings.HasSuffix(validationPath, ".zst") {
+		temporaryDir, err := os.MkdirTemp(filepath.Dir(validationPath), ".benchmark-validate-*")
+		if err != nil {
+			return fmt.Errorf("create compressed dataset validation directory: %w", err)
+		}
+		defer os.RemoveAll(temporaryDir)
+		validationPath = filepath.Join(temporaryDir, "app.db")
+		if err := capacity.RestoreDataset(context.Background(), *databasePath, validationPath); err != nil {
+			return err
+		}
+	}
+	db, err := repository.OpenReadDatabase(config.Config{SQLitePath: validationPath})
 	if err != nil {
 		return err
 	}
@@ -155,9 +169,33 @@ func runValidate(args []string) error {
 		return err
 	}
 	defer sqlDB.Close()
-	result, err := capacity.ValidateDataset(db, *databasePath)
+	result, err := capacity.ValidateDataset(db, validationPath)
 	if err != nil {
 		return err
+	}
+	if strings.TrimSpace(*manifestPath) != "" || strings.TrimSpace(*metadataPath) != "" {
+		if strings.TrimSpace(*manifestPath) == "" || strings.TrimSpace(*metadataPath) == "" {
+			return fmt.Errorf("strict validation requires both --manifest and --metadata")
+		}
+		manifest, err := capacity.LoadManifest(*manifestPath)
+		if err != nil {
+			return err
+		}
+		if err := manifest.Validate(); err != nil {
+			return err
+		}
+		metadata, err := capacity.LoadDatasetResult(*metadataPath)
+		if err != nil {
+			return fmt.Errorf("load dataset metadata: %w", err)
+		}
+		if err := capacity.ValidateDatasetAgainstManifest(result, metadata, manifest); err != nil {
+			return err
+		}
+		result.GeneratorVersion = metadata.GeneratorVersion
+		result.Seed = metadata.Seed
+		result.BenchmarkNow = metadata.BenchmarkNow
+		result.FailureRate = metadata.FailureRate
+		result.TrafficTiers = append([]capacity.TrafficTier(nil), metadata.TrafficTiers...)
 	}
 	return writeJSON(os.Stdout, result)
 }
@@ -194,9 +232,10 @@ func runProbe(args []string) error {
 		RedisAddress: *redisAddress, RedisPassword: *redisPassword, RedisChannel: "usage",
 		ApplicationURL: *applicationURL, DatabasePath: *databasePath, RatePerSecond: *rate,
 		Duration: *duration, DrainTimeout: *drainTimeout, HTTPRatePerSecond: *httpRate,
-		Cardinality: manifest.Dataset.Cardinality, APIKeyProfiles: apiProfiles, Seed: manifest.Dataset.Seed,
+		AnalysisLatencyInterval: time.Duration(manifest.Search.AnalysisLatencyIntervalSeconds) * time.Second,
+		Cardinality:             manifest.Dataset.Cardinality, APIKeyProfiles: apiProfiles, Seed: manifest.Dataset.Seed,
 		Thresholds: capacity.ProbeThresholds{MinDurableRatio: 0.99, MaxBacklogGrowth: 0,
-			InteractiveP95MS: float64(manifest.Search.DashboardCoreP95MS), InteractiveP99MS: float64(manifest.Search.DashboardOverallP99MS)},
+			InteractiveP95MS: float64(manifest.Search.DashboardCoreP95MS), InteractiveP99MS: float64(manifest.Search.DashboardCoreP99MS)},
 	})
 	if err != nil {
 		return err
@@ -250,6 +289,7 @@ func runSuite(args []string, resume bool) error {
 	fixedDuration := flags.Duration("fixed-duration", 0, "fixed-rate soak duration; manifest soak duration when empty")
 	fixedPass := flags.String("fixed-pass", "interactive", "fixed-rate pass requirement: interactive or hard")
 	searchDuration := flags.Duration("search-duration", 0, "override each capacity-search probe duration")
+	datasetValidationPath := flags.String("dataset-validation", "", "strict dataset validation JSON produced before the controller run")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -270,6 +310,7 @@ func runSuite(args []string, resume bool) error {
 		KeeperBinary: *keeperBinary, RedisBinary: *redisBinary, RedisPort: *redisPort, AppPort: *appPort,
 		CellIDs: cellIDs, Resume: resume, MaxDuration: *maxDuration,
 		FixedRate: *fixedRate, FixedDuration: *fixedDuration, FixedPass: *fixedPass, SearchDuration: *searchDuration,
+		DatasetValidationPath: *datasetValidationPath,
 	})
 	if err != nil {
 		return err

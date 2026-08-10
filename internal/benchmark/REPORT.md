@@ -4,177 +4,187 @@
 
 # CPA Usage Keeper Capacity Benchmark Report
 
-Test date: 2026-08-07 (Asia/Shanghai)
+Test date: 2026-08-10 (Asia/Shanghai)
 
 Suite: `capacity-v1`
 
-Dataset: `reference-2m`
+Dataset: `reference-3m`
 
-## Conclusions
+Platform: Linux amd64
 
-This benchmark reused the same SQLite database containing about 2.036 million events. Only Keeper CPU was limited; Keeper memory remained unlimited. Every formal capacity result comes from a five-minute fixed-rate run with ingestion and Dashboard traffic active concurrently.
+## Executive Summary
 
-| Keeper CPU | Five-minute ingestion max | 3-second Dashboard max | Conservative sustained rate | CPU at ingestion max | Keeper cgroup peak memory | Recommended memory |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1C | 150 events/s | 100 events/s | Dashboard 70; ingestion-only 105 events/s | 57.3% | 304.4 MiB | 512 MiB |
-| 2C | 200 events/s | 200 events/s | 140 events/s | 35.9% | 417.0 MiB | 1 GiB |
-| 4C | 650 events/s | 650 events/s | 455 events/s | 29.5% | 1,078.2 MiB | 2 GiB |
+Every formal point reused the same validated SQLite database and changed only the CPU available to Keeper: 1C, 2C, or 4C. The database contains 3,205,740 active events across 90 days; the validation anchor used by this campaign placed 1,201,775 events in the queried 30-day window. Keeper memory was unlimited, and the reported cgroup peak includes Keeper, SQLite pages, and database cache charged to that cgroup.
 
-The default production recommendation is **2C / 1 GiB with sustained traffic no higher than 140 events/s**. On the reference dataset, this profile reached both the 200 events/s ingestion and Dashboard limits while maintaining materially lower page latency than the 4C maximum-capacity point.
+Capacity uses five Core Dashboard endpoints under a three-second aggregate p99 gate. Analysis Latency 30d is measured separately every 30 seconds because it is a heavier diagnostic query. Its latency does not decide Core Dashboard capacity, while errors, OOM, panic, and SQLite failures remain visible.
 
-For higher traffic, use **4C / 2 GiB with sustained traffic no higher than 455 events/s**. At 4C/650, overall p99 was 1970.0ms and therefore met the three-second target, but core p95 reached 1387.6ms. This point should be treated as usable within three seconds, not as a low-latency configuration.
+| Keeper CPU | Five-minute pass / lowest fail | 70% sustained recommendation | Core Dashboard p99 at pass | Analysis Latency p99 at pass | Peak memory at pass | Deployment guidance |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| 1C | 150 / 200 events/s | 105 events/s | 858.4ms | 5109.1ms | 472.9 MiB | 1C / 768 MiB, up to 105 sustained events/s |
+| 2C | 200 / 250 events/s | 140 events/s | 627.1ms | 3075.9ms | 522.2 MiB | 2C / 1 GiB, up to 140 sustained events/s |
+| 4C | 500 / 600 events/s | 350 events/s | 1323.0ms | 3044.6ms | 995.7 MiB | 4C / 2 GiB, up to 350 sustained events/s |
 
-For lightweight deployments, use **1C / 512 MiB**. The Dashboard recommendation is about 70 events/s. If concurrent Dashboard use is not required, an ingestion-only deployment can conservatively use about 105 events/s.
+The strongest verified profile is **4C / 2 GiB at no more than 350 sustained events/s**. The measured 500 events/s point durably stored 149,998 of 150,000 offered events and caught up in 14.63 seconds. At 600 events/s, all 179,998 published events were durable, but 12,266 aggregation checkpoint rows remained after the full 30-second drain window.
 
-Memory recommendations add deployment headroom to the observed peaks; they are not hard-cap validation results. Formal peak memory comes from cgroup v2 `memory.peak` and includes the Keeper process, SQLite mmap/page cache, and database cache charged to the Keeper cgroup.
+The 1C and 2C failure boundaries were durable-throughput failures rather than Dashboard failures. All six formal points kept Core Dashboard p99 below 1.6 seconds, including the failing ingestion boundaries. Additional CPU therefore improves capacity, but SQLite ingestion and derived-state catch-up limit scaling before the assigned CPU quota is saturated.
+
+These are five-minute sustained measurements, not instantaneous peaks or exact absolute maxima. The recommendation is 70% of the highest verified full-stack pass.
 
 ## Test Machine
 
-| Item | Configuration |
+| Item | Specification |
 | --- | --- |
 | Operating system | Debian GNU/Linux 13 |
-| Platform | Linux amd64 |
-| Virtualization | KVM |
-| CPU | Intel Xeon Gold 6138 |
+| Kernel | 6.12.90+deb13.1-cloud-amd64 |
+| Architecture | Linux amd64 |
+| Virtualization | KVM, full virtualization |
+| CPU | Intel Xeon Gold 6138 @ 2.00GHz |
+| Topology | 1 socket, 4 cores, 1 thread per core |
 | Online logical CPUs | 4 vCPU |
-| Available physical memory | About 9.5 GiB |
+| Visible memory | 9,948,040 KiB (about 9.49 GiB) |
 | Go | 1.26.2 |
 | GCC | 14.2.0 |
 | SQLite CLI | 3.46.1 |
 | Redis | 8.0.2 |
 
-The 1C, 2C, and 4C Keeper profiles used cgroup `cpu.max=100000/200000/400000 100000` and `AllowedCPUs=0/0-1/0-3`. All profiles used `memory.max=max` and `memory.swap.max=0`. Dataset generation, cloning, load generation, and result aggregation were outside the Keeper cgroup.
+Keeper received a cgroup quota equivalent to 1, 2, or 4 cores and was bound to CPU `0`, `0-1`, or `0-3`. Every profile used `memory.max=max` and `memory.swap.max=0`.
 
-For 1C and 2C, the load driver used the remaining CPUs. At 4C, Keeper and the load driver shared all four vCPUs. Raw results mark this as `shared_driver=true`, so the 4C figures should be treated as conservative whole-machine results.
+Dataset preparation was unrestricted. Database cloning, Redis publishing, and result collection ran outside the Keeper cgroup. The 1C and 2C drivers used CPUs outside Keeper's binding; the 4C profile shared all four vCPUs with the load driver and is therefore a conservative whole-machine measurement.
 
-## Dataset
+CPU utilization is normalized to Keeper's assigned quota. The passing profiles averaged 49.3% of 1C, 35.7% of 2C, and 27.2% of 4C, equivalent to approximately 0.49, 0.71, and 1.09 logical cores.
 
-| Item | Measured value |
+## Reference Dataset
+
+| Item | Validated value |
 | --- | ---: |
-| Dataset ID | `reference-2m` |
-| Database size | 1,171,144,704 bytes (about 1.09 GiB) |
-| Total events | 2,035,740 |
-| Events in the latest 30 days | 1,226,326 |
-| Hot events in the latest 90 days | 1,946,550 |
-| Archived events | 89,190 |
-| Identities | 323 |
-| Models | 52 |
-| API keys | 27 |
+| Database size | 2,044,776,448 bytes (about 1.90 GiB) |
+| Active 90-day events | 3,205,740 |
+| Events in the formal 30-day query window | 1,201,775 |
+| Archived events | 0 |
+| Failed events | 31,831 (0.993%) |
+| Identities | 500 used / 500 total |
+| Models | 50 used / 50 total |
+| API keys | 50 used / 50 total |
+| Orphan identity/model/API-key references | 0 / 0 / 0 |
 | `PRAGMA quick_check` | `ok` |
-| Semantic fingerprint | `eb9dc034942bd6fd16477e037452cb64324158cdf8b48d2671647e409d4ca8d2` |
+| Semantic fingerprint | `4b2b14e41bf7aaf91455fc1c3d9a2fe95ca45403d5448e2de17f08d969316f0b` |
 
-The dataset contains 1,226,326 events in the latest 30 days, 1,946,550 active events in the latest 90 days, and 89,190 archived events. This represents the storage, page-cache, rollup, and query load of a continuously running deployment.
+The active table covers a complete 90-day history. The archive is intentionally empty because the production Dashboard paths in this suite do not query cold events. Every identity, model, and API key is referenced by events.
 
-The 27 API keys are deterministically assigned to high-, medium-, and low-usage tiers in a 30%/50%/20% split. Per-key weights are 10:3:1, and events are normalized across those weights. All 323 identities, 52 models, and 27 API keys are referenced by events. The dataset also passed orphan-reference, token-semantics, derived rollup/checkpoint, and semantic-fingerprint validation.
+| API-key tier | API keys | Key share | Events | Event share |
+| --- | ---: | ---: | ---: | ---: |
+| High usage | 15 | 30% | 2,051,847 | 64.01% |
+| Medium usage | 25 | 50% | 1,018,187 | 31.76% |
+| Low usage | 10 | 20% | 135,706 | 4.23% |
+
+Per-key generation weights are 10:3:1. The intentionally skewed distribution represents a minority of high-usage keys rather than concentrating traffic on one key.
+
+Before every point, the suite created a new byte-for-byte clone of the canonical database, synced it, and evicted it from the controller page cache. Failed points could not carry backlog, WAL, or warmed SQLite pages into the next run.
 
 ## Method and Pass Criteria
 
-- Each formal point created an independent working copy from the same canonical database, restarted Keeper, warmed six Dashboard endpoints sequentially, and then ran at a fixed rate for 300 seconds.
-- Offered load was published through Redis `usage`. Dashboard replay ran at 1 request/s and rotated through six real page endpoints.
-- An ingestion hard pass required at least 99.9% of target events to publish successfully, a final durable ratio of at least 99%, no backlog growth, caught-up Overview/Activity/Latency checkpoints and Identity aggregation, and no OOM, panic, SQLite busy, HTTP, or publish errors.
-- A Dashboard pass first required the hard pass and then required aggregate p99 across the six endpoints to remain within 3000ms.
-- Core p95 was retained as an experience indicator but was not a formal pass gate.
-- Capacity points were measured for five minutes. The 20-second search selected candidates only and did not become a final capacity limit.
-- Adjacent boundaries converged to a 25 events/s interval or an interval of approximately 10% or less.
+- Each formal point started a fresh Keeper process against an independent database clone, warmed all Dashboard paths, and sustained the selected rate for 300 seconds.
+- Events were published through Redis. Core Dashboard replay ran at 1 request/s across Realtime Overview 60m, Overview 30d, Activity 30d, Analysis 30d, and Request Events 30d.
+- Analysis Latency 30d was warmed once and then requested every 30 seconds. Each formal point produced nine successful diagnostic samples.
+- An ingestion hard pass required at least 99.9% successful publication, at least 99% final durable throughput, no growing backlog, caught-up Overview/Activity/Latency checkpoints and Identity aggregation, no OOM, panic, or publisher error, and catch-up within 15 seconds.
+- A Core Dashboard pass first required the ingestion hard pass, then required zero Core HTTP errors and aggregate p99 at or below 3000ms.
+- Analysis Latency errors and percentiles were evaluated separately. A diagnostic error did not relabel ingestion or Core Dashboard capacity.
+- Short probes selected candidates only. Only the six five-minute boundary points below contribute to capacity conclusions.
+- The sustained recommendation is 70% of the highest verified full-stack pass, rounded down to an integer events/s.
 
-Every result table uses the ingestion hard pass and Dashboard overall p99 <=3000ms criteria above.
+## Capacity Boundaries
 
-## All Five-Minute Formal Points
+| CPU | Highest pass | Lowest fail | Durable at pass | Catch-up at pass | CPU at pass | Peak memory at pass | Failure evidence |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 1C | 150 | 200 | 45,000 / 45,000 | 5.37s | 49.3% | 472.9 MiB | 200 stored 53,969 / 60,000 |
+| 2C | 200 | 250 | 60,000 / 60,000 | 3.24s | 35.7% | 522.2 MiB | 250 stored 71,597 / 75,000 |
+| 4C | 500 | 600 | 149,998 / 150,000 | 14.63s | 27.2% | 995.7 MiB | 600 retained 12,266 checkpoint lag after 30.07s |
 
-Each of the following 24 points independently restored the canonical database, restarted Keeper, and ran for 300 seconds. `Hard` covers ingestion, durability, checkpoint, and aggregation integrity. `Dashboard` additionally requires the three-second SLA.
+No formal point OOMed. Increasing memory alone would not resolve these observed boundaries: 1C/2C failures came from durable throughput, while the 4C failure came from derived-state catch-up.
 
-### 1C / Unlimited Memory
+## Core Dashboard Assessment
 
-| Rate | Hard | Dashboard | Durable / Offered | Durable | CPU | Peak memory | Core p95 | Overall p99 | Failure reason |
-| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 25 | Pass | Pass | 7,500 / 7,500 | 100% | 47.4% | 174.0 MiB | 274.8ms | 2,586.7ms | — |
-| 50 | Pass | Pass | 15,000 / 15,000 | 100% | 49.4% | 193.1 MiB | 316.3ms | 2,602.0ms | — |
-| 75 | Pass | Pass | 22,500 / 22,500 | 100% | 50.0% | 248.0 MiB | 376.3ms | 2,717.1ms | — |
-| 100 | Pass | Pass | 30,000 / 30,000 | 100% | 53.0% | 290.7 MiB | 465.7ms | 2,892.5ms | — |
-| 150 | Pass | Fail | 45,000 / 45,000 | 100% | 57.3% | 304.4 MiB | 593.0ms | 3,917.1ms | overall p99 >3s |
-| 200 | Fail | Fail | 53,972 / 60,000 | 89.95% | 58.2% | 328.7 MiB | 613.6ms | 3,549.3ms | durable, overall p99 |
-| 250 | Fail | Fail | 59,894 / 75,000 | 79.86% | 59.8% | 417.2 MiB | 718.1ms | 3,751.1ms | durable, overall p99 |
-| 500 | Fail | Fail | 74,441 / 150,000 | 49.63% | 63.1% | 453.0 MiB | 891.0ms | 5,061.7ms | durable, overall p99 |
-| 1,000 | Fail | Fail | 117,279 / 300,000 | 39.09% | 79.8% | 756.5 MiB | 2,187.7ms | 6,200.1ms | durable, overall p99 |
-| 3,000 | Fail | Fail | 264,819 / 900,000 | 29.42% | 86.2% | 1,705.7 MiB | 4,834.3ms | 8,793.5ms | errors, durable, backlog, checkpoint, Identity, overall p99 |
+| CPU | Pass rate | Samples | Aggregate p50 | Aggregate p95 | Aggregate p99 | Slowest endpoint p99 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1C | 150 events/s | 299 | 299.9ms | 639.4ms | 858.4ms | Overview 30d: 961.8ms |
+| 2C | 200 events/s | 299 | 297.9ms | 532.1ms | 627.1ms | Analysis 30d: 649.7ms |
+| 4C | 500 events/s | 299 | 339.6ms | 938.2ms | 1323.0ms | Overview 30d: 1469.6ms |
 
-At 1C, 25, 50, 75, and 100 events/s all met the three-second target. The highest Dashboard pass was 100 events/s. At 150 events/s, all events were durable, but overall p99 increased to 3917.1ms.
+### Endpoint latency at each passing boundary
 
-### 2C / Unlimited Memory
-
-| Rate | Hard | Dashboard | Durable / Offered | Durable | CPU | Peak memory | Core p95 | Overall p99 | Failure reason |
-| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 200 | Pass | Pass | 60,000 / 60,000 | 100% | 35.9% | 417.0 MiB | 449.3ms | 2,085.8ms | — |
-| 225 | Fail | Fail | 60,741 / 67,500 | 89.99% | 35.6% | 378.2 MiB | 447.8ms | 2,065.0ms | durable |
-| 250 | Fail | Fail | 72,522 / 75,000 | 96.70% | 37.9% | 479.1 MiB | 548.3ms | 2,102.9ms | durable |
-| 300 | Fail | Fail | 80,969 / 90,000 | 89.97% | 39.2% | 454.2 MiB | 589.2ms | 2,196.9ms | durable |
-
-The 2C boundary was clear: 200 events/s passed all criteria, while 225 events/s already failed durable throughput. The failed points did not OOM, so additional memory alone would not move this boundary.
-
-### 4C / Unlimited Memory
-
-| Rate | Hard | Dashboard | Durable / Offered | Durable | CPU | Peak memory | Core p95 | Overall p99 | Failure reason |
-| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 200 | Pass | Pass | 60,000 / 60,000 | 100% | 18.9% | 326.4 MiB | 434.6ms | 1,947.4ms | — |
-| 250 | Pass | Pass | 74,999 / 75,000 | 99.999% | 20.2% | 383.5 MiB | 498.8ms | 1,947.8ms | — |
-| 275 | Pass | Pass | 82,500 / 82,500 | 100% | 20.7% | 435.2 MiB | 556.7ms | 1,973.6ms | — |
-| 300 | Pass | Pass | 90,000 / 90,000 | 100% | 21.4% | 499.8 MiB | 588.4ms | 1,953.7ms | — |
-| 400 | Pass | Pass | 120,000 / 120,000 | 100% | 24.1% | 654.3 MiB | 744.7ms | 1,945.0ms | — |
-| 500 | Pass | Pass | 150,000 / 150,000 | 100% | 25.2% | 661.5 MiB | 978.3ms | 1,974.7ms | — |
-| 600 | Pass | Pass | 180,000 / 180,000 | 100% | 28.4% | 985.9 MiB | 1,130.8ms | 1,964.7ms | — |
-| 650 | Pass | Pass | 195,000 / 195,000 | 100% | 29.5% | 1,078.2 MiB | 1,387.6ms | 1,970.0ms | — |
-| 675 | Fail | Fail | 182,212 / 202,500 | 89.98% | 30.1% | 979.5 MiB | 1,229.5ms | 1,991.5ms | durable |
-| 750 | Fail | Fail | 225,000 / 225,000 | 100% | 30.0% | 1,321.2 MiB | 1,527.8ms | 1,987.1ms | checkpoint lag=39,762 |
-
-The 4C/750 result shows why counting durable `usage_events` alone overstates capacity: all 225,000 events were durable, but the rollup checkpoint still lagged by 39,762 events, so the hard pass failed.
-
-## Ingestion Boundary
-
-| CPU | Highest pass | First adjacent failure | Durable at pass | Failure reason | CPU at pass | Keeper cgroup peak memory |
-| --- | ---: | ---: | ---: | --- | ---: | ---: |
-| 1C | 150 | 200 | 45,000 / 45,000 | 200 persisted only 53,972 / 60,000 | 57.3% | 304.4 MiB |
-| 2C | 200 | 225 | 60,000 / 60,000 | 225 persisted only 60,741 / 67,500 | 35.9% | 417.0 MiB |
-| 4C | 650 | 675 | 195,000 / 195,000 | 675 persisted only 182,212 / 202,500 | 29.5% | 1,078.2 MiB |
-
-CPU utilization is normalized by the CPUs assigned to Keeper. Therefore, 29.5% at 4C/650 corresponds to approximately 1.18 logical CPUs of total CPU time. Every formal point used unlimited memory. The failed points did not OOM; the primary limits were durable/rollup throughput and Dashboard latency under higher traffic.
-
-## Dashboard Assessment
-
-| CPU | Evaluated rate | Hard | Keeper cgroup peak memory | Core p95 | Overall p99 | Slowest endpoint p99 | Conclusion |
-| --- | ---: | --- | ---: | ---: | ---: | ---: | --- |
-| 1C | 100 events/s | Pass | 290.7 MiB | 465.7ms | 2,892.5ms | Analysis Latency 2,946.8ms | Pass; p99 at 150 was 3,917.1ms |
-| 2C | 200 events/s | Pass | 417.0 MiB | 449.3ms | 2,085.8ms | Analysis Latency 2,114.9ms | Pass; ingestion already failed at 225 |
-| 4C | 650 events/s | Pass | 1,078.2 MiB | 1,387.6ms | 1,970.0ms | Analysis Latency 2,008.3ms | Passes within three seconds, but is not a low-latency point |
-
-Steady-state per-endpoint latency at 4C/650:
-
-| Endpoint | p50 | p95 | p99 |
+| Endpoint | 1C/150 p50 / p95 / p99 | 2C/200 p50 / p95 / p99 | 4C/500 p50 / p95 / p99 |
 | --- | ---: | ---: | ---: |
-| Analysis | 1.6ms | 1.8ms | 1.8ms |
-| Request Events | 147.1ms | 171.5ms | 193.8ms |
-| Activity | 171.0ms | 209.0ms | 245.9ms |
-| Realtime Overview | 589.5ms | 1,447.2ms | 1,729.2ms |
-| Overview 30d | 717.0ms | 1,498.4ms | 1,550.7ms |
-| Analysis Latency 30d | 1,902.8ms | 1,970.0ms | 2,008.3ms |
+| Realtime Overview 60m | 204.5 / 585.3 / 668.9ms | 202.6 / 389.0 / 438.5ms | 422.0 / 895.9 / 1160.1ms |
+| Overview 30d | 353.7 / 710.3 / 961.8ms | 338.0 / 565.5 / 592.8ms | 604.8 / 1165.5 / 1469.6ms |
+| Activity 30d | 262.9 / 523.4 / 582.2ms | 309.0 / 345.4 / 364.7ms | 309.9 / 348.6 / 393.3ms |
+| Analysis 30d | 454.5 / 771.9 / 889.3ms | 497.5 / 623.0 / 649.7ms | 504.7 / 578.0 / 593.3ms |
+| Request Events 30d | 148.2 / 333.2 / 444.5ms | 146.6 / 173.2 / 247.4ms | 152.8 / 182.7 / 190.1ms |
 
-If the deployment goal is faster pages rather than merely staying within three seconds, retain more headroom below the capacity limit and continue monitoring core p95.
+Core Dashboard was not the limiting gate in this campaign. Every passing and failing ingestion boundary stayed well below the three-second Core p99 threshold.
 
-## Scale-up Gains
+## Analysis Latency Diagnostics
 
-- 1C → 2C: ingestion max increased from 150 to 200 (+33%), and the three-second Dashboard max increased from 100 to 200. Peak memory increased from 304.4 MiB to 417.0 MiB.
-- 2C → 4C: ingestion and Dashboard max increased from 200 to 650 (3.25x). Peak memory increased to about 1.05 GiB.
-- Increasing available memory alone does not automatically increase capacity. The formal points already used unlimited memory; failures came from durable throughput, checkpoint lag, or the Dashboard SLA.
-- For the reference dataset, 2C is the default balance between throughput, latency, and memory. 4C provides higher throughput but materially increases core page p95.
+| CPU / pass rate | Successful samples | Errors | Status | p50 | p95 | p99 | Max |
+| --- | ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| 1C / 150 | 9 | 0 | Passed | 4453.6ms | 5109.1ms | 5109.1ms | 5109.1ms |
+| 2C / 200 | 9 | 0 | Passed | 2706.1ms | 3075.9ms | 3075.9ms | 3075.9ms |
+| 4C / 500 | 9 | 0 | Passed | 2802.1ms | 3044.6ms | 3044.6ms | 3044.6ms |
+
+Analysis Latency is intentionally outside the Core Dashboard three-second gate. It merges retained latency sketches and sample points across the selected 30-day range, so it is materially heavier than the other Dashboard paths at this dataset size.
+
+Only nine diagnostic requests complete in a five-minute point at a 30-second interval. Nearest-rank p95 and p99 therefore equal the maximum observation and should be read as bounded run evidence, not as a statistically precise production SLO.
+
+## Identity Cardinality Direction (Exploratory)
+
+A separate five-minute 1C comparison used 3,205,740 active events, 50 models, 50 API keys, unlimited memory, and 1 event/s while reducing identities from 500 to 50. The queried 30-day windows differed by about 1% because the runs used different time anchors. It predates the formal diagnostic cadence and is directional evidence, not a new capacity boundary.
+
+| Metric | 500 identities | 50 identities | Observed change |
+| --- | ---: | ---: | ---: |
+| Core Dashboard aggregate p99 | 521.3ms | 277.4ms | -46.8% |
+| Analysis 30d p99 | 557.6ms | 223.0ms | -60.0% |
+| Analysis Latency 30d p99 | 3384.8ms | 3225.9ms | -4.7% |
+| CPU utilization, normalized to 1C | 64.4% | 56.0% | -8.5 percentage points |
+| Peak memory | 310.8 MiB | 251.3 MiB | -59.5 MiB |
+
+Lower identity cardinality can materially reduce Core Dashboard work and memory for lighter installations. Analysis Latency changes much less because its retained statistics are keyed by API group rather than identity. This direction does not change the formal capacity or hardware recommendations above.
+
+## Boundary Evidence
+
+| CPU | Rate | Hard pass | Core Dashboard pass | Diagnostic status | Durable / offered | Catch-up | Peak memory | Core p99 | Reason |
+| --- | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | --- |
+| 1C | 150 | Yes | Yes | Passed | 45,000 / 45,000 | 5.37s | 472.9 MiB | 858.4ms | — |
+| 1C | 200 | No | No | Passed | 53,969 / 60,000 | 3.37s | 471.9 MiB | 786.7ms | `durable_throughput` |
+| 2C | 200 | Yes | Yes | Passed | 60,000 / 60,000 | 3.24s | 522.2 MiB | 627.1ms | — |
+| 2C | 250 | No | No | Passed | 71,597 / 75,000 | 0.00s | 589.6 MiB | 708.8ms | `durable_throughput` |
+| 4C | 500 | Yes | Yes | Passed | 149,998 / 150,000 | 14.63s | 995.7 MiB | 1323.0ms | — |
+| 4C | 600 | No | No | Passed | 179,998 / 180,000 | 30.07s | 1044.3 MiB | 1415.4ms | `drain_lag`, `checkpoint_lag` |
+
+## Capacity Planning Guidance
+
+- **Light deployment:** 1C / 768 MiB, no more than 105 sustained events/s.
+- **Medium deployment:** 2C / 1 GiB, no more than 140 sustained events/s.
+- **Higher-throughput deployment:** 4C / 2 GiB, no more than 350 sustained events/s.
+- Size memory from the observed cgroup peak plus deployment headroom. These are not finite hard-cap startup tests.
+- Do not treat additional memory alone as a throughput upgrade; no capacity failure was caused by OOM.
+- Do not linearly extrapolate beyond 4C or 500 events/s. SQLite writes, Redis-to-SQLite durability, derived-state catch-up, and shared-driver contention limit scaling first.
 
 ## Limitations
 
-- Each final boundary has one five-minute formal run. The suite did not repeat each point or run a 24-hour soak. These results support capacity planning but do not prove a long-term SLO.
-- At 4C, Keeper shared the host CPUs with the load driver, making the result conservative.
-- No 256/512/768/1024 MiB hard cap was applied. The report can provide observed peak memory and recommendations with headroom, but it cannot claim a verified minimum startup memory.
-- events/s represents five-minute sustained traffic on a database preloaded with about 2.036 million historical events. It cannot be multiplied directly by 30 days as a safe monthly capacity because query and aggregation costs will change as the database grows.
-- Conclusions apply only to the recorded hardware specification, dataset fingerprint, binary, and method.
+- Each reported boundary point has one five-minute formal run; the campaign did not repeat every boundary or perform a 24-hour soak.
+- Analysis Latency has nine successful samples per formal point, so its high percentiles are observational.
+- The 4C profile shares host CPUs with the load driver and is conservative but more host-dependent.
+- No 256/512/768/1024 MiB memory hard cap was applied. Memory guidance is observed peak plus headroom, not a verified minimum.
+- The generated database covers 90 active days. The Dashboard workload queries production 30-day and realtime paths; archive/cold-table performance is outside scope.
+- Five-minute sustained events/s on a preloaded history cannot be multiplied by time to claim a contractual monthly capacity.
+- A prior campaign that replayed Analysis Latency as frequently as Core Dashboard endpoints is retained as stress evidence but is superseded for production capacity recommendations.
+- The identity-cardinality comparison is exploratory and does not revise the formal capacity boundaries.
 
 ## Reproducibility
 
-- Keeper binary SHA-256: `4782fc7bfacc1c72667436e4d4471cd26755ed2ae192173beff77bcae4bd27d6`
-- Dataset semantic fingerprint: `eb9dc034942bd6fd16477e037452cb64324158cdf8b48d2671647e409d4ca8d2`
+- Canonical database SHA-256: `55805c8644d2a1dc9a2fc2fffb400e3ba74cbb7b777f1c3098516071add070af`
+- Dataset semantic fingerprint: `4b2b14e41bf7aaf91455fc1c3d9a2fe95ca45403d5448e2de17f08d969316f0b`
+- Dataset validation SHA-256: `d0a90239ef1590b30c36b5be51bb61a25b1fc00eda3f7e5cbd9a870ad3a9b557`
+- Keeper binary SHA-256: `75ae2e29e0a4edd8ec7d29954cc9f037721c8c9173d2ff8e2f337f0ea5a68b0e`
+- `benchctl` binary SHA-256: `9b2b8bb5bfcbd57d78ef4bdf95f714203718a5a84d495428ced3757896d89c6c`
+- Manifest SHA-256: `e6513ff3cb50d352a2b1c325daec2d5cec57ea862af3837cdf75789e0419afa2`
+- Expanded plan SHA-256: `0976acf6a94518f536ac84f1b6d7fb0502a1e2c8344966ec11c8241755117323`

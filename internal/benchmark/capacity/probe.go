@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -57,10 +56,11 @@ type usagePayloadTokens struct {
 }
 
 type LatencySummary struct {
-	P50MS float64 `json:"p50_ms"`
-	P95MS float64 `json:"p95_ms"`
-	P99MS float64 `json:"p99_ms"`
-	MaxMS float64 `json:"max_ms"`
+	Samples int64   `json:"samples"`
+	P50MS   float64 `json:"p50_ms"`
+	P95MS   float64 `json:"p95_ms"`
+	P99MS   float64 `json:"p99_ms"`
+	MaxMS   float64 `json:"max_ms"`
 }
 
 type DashboardLatencySample struct {
@@ -68,31 +68,40 @@ type DashboardLatencySample struct {
 	Duration time.Duration
 }
 
-const heavyDashboardLatencyPath = "/api/v1/usage/analysis/latency?range=30d"
+const analysisLatencyDashboardPath = "/api/v1/usage/analysis/latency?range=30d"
 
-var dashboardReplayPaths = []string{
+var coreDashboardReplayPaths = []string{
 	"/api/v1/usage/overview?range=30d",
-	"/api/v1/usage/overview/realtime?range=1h",
+	"/api/v1/usage/overview/realtime?window=60m",
 	"/api/v1/usage/activity?range=30d",
 	"/api/v1/usage/analysis?range=30d",
-	"/api/v1/usage/analysis/latency?range=30d",
 	"/api/v1/usage/events?range=30d&page=1&page_size=50",
 }
 
+func DashboardReplayPaths() []string {
+	paths := append([]string(nil), coreDashboardReplayPaths...)
+	return append(paths, analysisLatencyDashboardPath)
+}
+
+func CoreDashboardReplayPaths() []string {
+	return append([]string(nil), coreDashboardReplayPaths...)
+}
+
 type ProbeOptions struct {
-	RedisAddress      string
-	RedisPassword     string
-	RedisChannel      string
-	ApplicationURL    string
-	DatabasePath      string
-	RatePerSecond     int
-	Duration          time.Duration
-	DrainTimeout      time.Duration
-	HTTPRatePerSecond int
-	Cardinality       Cardinality
-	APIKeyProfiles    []APIKeyProfile
-	Seed              uint64
-	Thresholds        ProbeThresholds
+	RedisAddress            string
+	RedisPassword           string
+	RedisChannel            string
+	ApplicationURL          string
+	DatabasePath            string
+	RatePerSecond           int
+	Duration                time.Duration
+	DrainTimeout            time.Duration
+	HTTPRatePerSecond       int
+	AnalysisLatencyInterval time.Duration
+	Cardinality             Cardinality
+	APIKeyProfiles          []APIKeyProfile
+	Seed                    uint64
+	Thresholds              ProbeThresholds
 }
 
 type ProbeReport struct {
@@ -101,8 +110,8 @@ type ProbeReport struct {
 	RatePerSecond        int                       `json:"rate_per_second"`
 	Metrics              ProbeMetrics              `json:"metrics"`
 	Evaluation           ProbeEvaluation           `json:"evaluation"`
-	Latency              LatencySummary            `json:"latency"`
 	CoreLatency          LatencySummary            `json:"core_latency"`
+	AnalysisLatency      LatencySummary            `json:"analysis_latency"`
 	LatencyByPath        map[string]LatencySummary `json:"latency_by_path"`
 	DrainSeconds         float64                   `json:"drain_seconds"`
 	FinalBacklog         int64                     `json:"final_backlog"`
@@ -155,7 +164,7 @@ func buildUsagePayload(sequence int64, timestamp time.Time, cardinality Cardinal
 	total := input + output
 	metadata := UsagePayloadMetadata{
 		APIKeyIndex: apiIndex + 1, ModelIndex: modelIndex + 1, IdentityIndex: identityIndex + 1,
-		APIGroupKey: strconv.Itoa(apiIndex + 1), Model: fmt.Sprintf("bench-model-%03d", modelIndex+1),
+		APIGroupKey: benchmarkAPIKey(apiIndex + 1), Model: fmt.Sprintf("bench-model-%03d", modelIndex+1),
 		AuthIndex: fmt.Sprintf("bench-auth-%04d", identityIndex+1),
 	}
 	payload := usagePayload{
@@ -193,7 +202,7 @@ func LatencyPercentiles(values []time.Duration) LatencySummary {
 		return ordered[index]
 	}
 	toMS := func(value time.Duration) float64 { return float64(value) / float64(time.Millisecond) }
-	return LatencySummary{P50MS: toMS(nearest(0.50)), P95MS: toMS(nearest(0.95)), P99MS: toMS(nearest(0.99)), MaxMS: toMS(ordered[len(ordered)-1])}
+	return LatencySummary{Samples: int64(len(ordered)), P50MS: toMS(nearest(0.50)), P95MS: toMS(nearest(0.95)), P99MS: toMS(nearest(0.99)), MaxMS: toMS(ordered[len(ordered)-1])}
 }
 
 func mathCeil(value float64) float64 {
@@ -220,6 +229,9 @@ func RunProbe(ctx context.Context, options ProbeOptions) (ProbeReport, error) {
 	if options.DrainTimeout <= 0 {
 		options.DrainTimeout = 15 * time.Second
 	}
+	if options.AnalysisLatencyInterval <= 0 {
+		options.AnalysisLatencyInterval = 30 * time.Second
+	}
 	database, err := openProbeDatabase(options.DatabasePath)
 	if err != nil {
 		return ProbeReport{}, err
@@ -242,10 +254,11 @@ func RunProbe(ctx context.Context, options ProbeOptions) (ProbeReport, error) {
 	report := ProbeReport{StartedAt: time.Now(), RatePerSecond: options.RatePerSecond, PublishedByTier: map[string]int64{}}
 	probeContext, cancel := context.WithTimeout(ctx, options.Duration)
 	defer cancel()
-	var httpErrors atomic.Int64
+	var coreHTTPErrors atomic.Int64
+	var analysisLatencyErrors atomic.Int64
 	latencyDone := make(chan []DashboardLatencySample, 1)
 	go func() {
-		latencyDone <- runHTTPReplay(probeContext, options.ApplicationURL, options.HTTPRatePerSecond, &httpErrors)
+		latencyDone <- runHTTPReplay(probeContext, options.ApplicationURL, options.HTTPRatePerSecond, options.AnalysisLatencyInterval, &coreHTTPErrors, &analysisLatencyErrors)
 	}()
 
 	sequence := int64(0)
@@ -318,15 +331,18 @@ finishedPublishing:
 		return ProbeReport{}, err
 	}
 	expectedEvents := targetTotal
+	report.CoreLatency, report.AnalysisLatency, report.LatencyByPath = SummarizeDashboardLatencies(latencySamples)
 	report.Metrics = ProbeMetrics{
 		OfferedEvents: expectedEvents, PublishedEvents: sequence, DurableEvents: durableEvents,
 		BacklogStart: startState.Backlog, BacklogEnd: finalState.Backlog,
-		Errors: publishErrors + httpErrors.Load(), HTTPRequests: int64(len(latencySamples)),
-		CheckpointLag: report.FinalCheckpointLag, IdentityPending: report.FinalIdentityPending,
+		Errors:           publishErrors,
+		HTTPRequests:     report.CoreLatency.Samples + report.AnalysisLatency.Samples + coreHTTPErrors.Load() + analysisLatencyErrors.Load(),
+		CoreHTTPRequests: report.CoreLatency.Samples + coreHTTPErrors.Load(), CoreHTTPErrors: coreHTTPErrors.Load(),
+		AnalysisLatencyRequests: report.AnalysisLatency.Samples + analysisLatencyErrors.Load(), AnalysisLatencyErrors: analysisLatencyErrors.Load(),
+		CheckpointLag: report.FinalCheckpointLag, IdentityPending: report.FinalIdentityPending, DrainSeconds: report.DrainSeconds,
 	}
-	report.Latency, report.CoreLatency, report.LatencyByPath = SummarizeDashboardLatencies(latencySamples)
 	report.Metrics.HTTPP95MS = report.CoreLatency.P95MS
-	report.Metrics.HTTPP99MS = report.Latency.P99MS
+	report.Metrics.HTTPP99MS = report.CoreLatency.P99MS
 	report.Evaluation = EvaluateProbe(report.Metrics, options.Thresholds)
 	return report, nil
 }
@@ -384,7 +400,7 @@ func countNewDurableEvents(ctx context.Context, database *sql.DB, afterID int64)
 	return count, nil
 }
 
-func runHTTPReplay(ctx context.Context, baseURL string, rate int, errors *atomic.Int64) []DashboardLatencySample {
+func runHTTPReplay(ctx context.Context, baseURL string, rate int, analysisLatencyInterval time.Duration, coreErrors, analysisErrors *atomic.Int64) []DashboardLatencySample {
 	if strings.TrimSpace(baseURL) == "" || rate <= 0 {
 		return nil
 	}
@@ -393,45 +409,74 @@ func runHTTPReplay(ctx context.Context, baseURL string, rate int, errors *atomic
 	var wait sync.WaitGroup
 	go func() {
 		defer close(latencies)
-		interval := time.Second / time.Duration(rate)
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
+		coreTicker := time.NewTicker(time.Second / time.Duration(rate))
+		defer coreTicker.Stop()
+		var analysisTicker *time.Ticker
+		var analysisTick <-chan time.Time
+		if analysisLatencyInterval > 0 {
+			analysisTicker = time.NewTicker(analysisLatencyInterval)
+			analysisTick = analysisTicker.C
+			defer analysisTicker.Stop()
+		}
 		semaphore := make(chan struct{}, 16)
 		sequence := 0
+		launch := func(path string) bool {
+			recordError := func() {
+				if path == analysisLatencyDashboardPath {
+					analysisErrors.Add(1)
+					return
+				}
+				coreErrors.Add(1)
+			}
+			select {
+			case semaphore <- struct{}{}:
+			case <-ctx.Done():
+				return false
+			}
+			wait.Add(1)
+			go func() {
+				defer wait.Done()
+				defer func() { <-semaphore }()
+				started := time.Now()
+				request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(baseURL, "/")+path, nil)
+				if err != nil {
+					recordError()
+					return
+				}
+				response, err := client.Do(request)
+				if err != nil {
+					if ctx.Err() == nil {
+						recordError()
+					}
+					return
+				}
+				_, _ = io.Copy(io.Discard, response.Body)
+				_ = response.Body.Close()
+				if response.StatusCode < 200 || response.StatusCode >= 300 {
+					recordError()
+					return
+				}
+				latencies <- DashboardLatencySample{Path: path, Duration: time.Since(started)}
+			}()
+			return true
+		}
 		for {
 			select {
 			case <-ctx.Done():
 				wait.Wait()
 				return
-			case <-ticker.C:
-				path := dashboardReplayPaths[sequence%len(dashboardReplayPaths)]
+			case <-coreTicker.C:
+				path := coreDashboardReplayPaths[sequence%len(coreDashboardReplayPaths)]
 				sequence++
-				semaphore <- struct{}{}
-				wait.Add(1)
-				go func() {
-					defer wait.Done()
-					defer func() { <-semaphore }()
-					started := time.Now()
-					request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(baseURL, "/")+path, nil)
-					if err != nil {
-						errors.Add(1)
-						return
-					}
-					response, err := client.Do(request)
-					if err != nil {
-						if ctx.Err() == nil {
-							errors.Add(1)
-						}
-						return
-					}
-					_, _ = io.Copy(io.Discard, response.Body)
-					_ = response.Body.Close()
-					if response.StatusCode < 200 || response.StatusCode >= 300 {
-						errors.Add(1)
-						return
-					}
-					latencies <- DashboardLatencySample{Path: path, Duration: time.Since(started)}
-				}()
+				if !launch(path) {
+					wait.Wait()
+					return
+				}
+			case <-analysisTick:
+				if !launch(analysisLatencyDashboardPath) {
+					wait.Wait()
+					return
+				}
 			}
 		}
 	}()
@@ -443,13 +488,14 @@ func runHTTPReplay(ctx context.Context, baseURL string, rate int, errors *atomic
 }
 
 func SummarizeDashboardLatencies(samples []DashboardLatencySample) (LatencySummary, LatencySummary, map[string]LatencySummary) {
-	overallValues := make([]time.Duration, 0, len(samples))
 	coreValues := make([]time.Duration, 0, len(samples))
+	analysisValues := make([]time.Duration, 0, len(samples))
 	grouped := make(map[string][]time.Duration)
 	for _, sample := range samples {
-		overallValues = append(overallValues, sample.Duration)
 		grouped[sample.Path] = append(grouped[sample.Path], sample.Duration)
-		if sample.Path != heavyDashboardLatencyPath {
+		if sample.Path == analysisLatencyDashboardPath {
+			analysisValues = append(analysisValues, sample.Duration)
+		} else {
 			coreValues = append(coreValues, sample.Duration)
 		}
 	}
@@ -457,13 +503,13 @@ func SummarizeDashboardLatencies(samples []DashboardLatencySample) (LatencySumma
 	for path, values := range grouped {
 		byPath[path] = LatencyPercentiles(values)
 	}
-	return LatencyPercentiles(overallValues), LatencyPercentiles(coreValues), byPath
+	return LatencyPercentiles(coreValues), LatencyPercentiles(analysisValues), byPath
 }
 
 func WarmDashboard(ctx context.Context, baseURL string) (time.Duration, error) {
 	started := time.Now()
 	client := &http.Client{Timeout: 30 * time.Second}
-	for _, path := range dashboardReplayPaths {
+	for _, path := range DashboardReplayPaths() {
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(baseURL, "/")+path, nil)
 		if err != nil {
 			return time.Since(started), err

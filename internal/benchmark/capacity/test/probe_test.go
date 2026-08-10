@@ -2,6 +2,8 @@ package capacity_test
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +30,9 @@ func TestBuildUsagePayloadUsesValidSyntheticMetadata(t *testing.T) {
 	}
 	if metadata.APIKeyIndex < 1 || metadata.APIKeyIndex > 100 || metadata.ModelIndex < 1 || metadata.ModelIndex > 100 || metadata.IdentityIndex < 1 || metadata.IdentityIndex > 1000 {
 		t.Fatalf("metadata outside configured cardinality: %+v", metadata)
+	}
+	if want := fmt.Sprintf("bench-key-%03d", metadata.APIKeyIndex); metadata.APIGroupKey != want {
+		t.Fatalf("API group key=%q, want seeded CPA API key %q", metadata.APIGroupKey, want)
 	}
 	if decoded["api_key"] != metadata.APIGroupKey || decoded["model"] != metadata.Model || decoded["auth_index"] != metadata.AuthIndex {
 		t.Fatalf("payload metadata mismatch: payload=%v metadata=%+v", decoded, metadata)
@@ -92,7 +97,7 @@ func TestLatencyPercentilesUseNearestRank(t *testing.T) {
 		40 * time.Millisecond,
 		100 * time.Millisecond,
 	})
-	if percentiles.P50MS != 30 || percentiles.P95MS != 100 || percentiles.P99MS != 100 {
+	if percentiles.Samples != 5 || percentiles.P50MS != 30 || percentiles.P95MS != 100 || percentiles.P99MS != 100 {
 		t.Fatalf("unexpected percentiles: %+v", percentiles)
 	}
 }
@@ -100,18 +105,42 @@ func TestLatencyPercentilesUseNearestRank(t *testing.T) {
 func TestSummarizeDashboardLatenciesSeparatesHeavyDiagnosticEndpoint(t *testing.T) {
 	samples := []capacity.DashboardLatencySample{
 		{Path: "/api/v1/usage/overview?range=30d", Duration: 120 * time.Millisecond},
-		{Path: "/api/v1/usage/overview/realtime?range=1h", Duration: 2 * time.Millisecond},
+		{Path: "/api/v1/usage/overview/realtime?window=60m", Duration: 2 * time.Millisecond},
 		{Path: "/api/v1/usage/activity?range=30d", Duration: 210 * time.Millisecond},
 		{Path: "/api/v1/usage/analysis?range=30d", Duration: 3 * time.Millisecond},
 		{Path: "/api/v1/usage/events?range=30d&page=1&page_size=50", Duration: 140 * time.Millisecond},
 		{Path: "/api/v1/usage/analysis/latency?range=30d", Duration: 1900 * time.Millisecond},
 	}
-	overall, core, byPath := capacity.SummarizeDashboardLatencies(samples)
-	if overall.P95MS != 1900 || core.P95MS != 210 {
-		t.Fatalf("unexpected overall/core latency: overall=%+v core=%+v", overall, core)
+	core, diagnostic, byPath := capacity.SummarizeDashboardLatencies(samples)
+	if core.Samples != 5 || diagnostic.Samples != 1 || core.P95MS != 210 || diagnostic.P95MS != 1900 {
+		t.Fatalf("unexpected core/diagnostic latency: core=%+v diagnostic=%+v", core, diagnostic)
 	}
 	if byPath["/api/v1/usage/analysis/latency?range=30d"].P99MS != 1900 {
 		t.Fatalf("heavy endpoint summary missing: %+v", byPath)
+	}
+}
+
+func TestCoreDashboardReplayExcludesAnalysisLatency(t *testing.T) {
+	for _, path := range capacity.CoreDashboardReplayPaths() {
+		if path == "/api/v1/usage/analysis/latency?range=30d" {
+			t.Fatalf("analysis latency must not participate in the core Dashboard replay: %v", capacity.CoreDashboardReplayPaths())
+		}
+	}
+}
+
+func TestDashboardReplayUsesExplicitRealtimeWindow(t *testing.T) {
+	paths := capacity.DashboardReplayPaths()
+	found := false
+	for _, path := range paths {
+		if path == "/api/v1/usage/overview/realtime?window=60m" {
+			found = true
+		}
+		if strings.Contains(path, "realtime?range=") {
+			t.Fatalf("realtime path uses ignored range parameter: %q", path)
+		}
+	}
+	if !found {
+		t.Fatalf("explicit 60-minute realtime path missing: %v", paths)
 	}
 }
 

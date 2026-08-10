@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -26,59 +27,67 @@ import (
 
 const usageEventInsertColumns = entities.UsageEventStorageColumns
 
-const DatasetGeneratorVersion = "production-v6-token-canonical"
+const DatasetGeneratorVersion = "production-v8-month-window-canonical"
 
 type GenerateOptions struct {
-	Path            string
-	HotEvents       int64
-	ArchiveEvents   int64
-	HotDays         int
-	ArchiveDays     int
-	FailureRate     float64
-	Seed            uint64
-	Now             time.Time
-	Cardinality     Cardinality
-	TrafficTiers    []TrafficTier
-	InsertBatchSize int
-	AggregatePage   int
-	Vacuum          bool
+	Path              string
+	HotEvents         int64
+	Recent30DayEvents int64
+	ArchiveEvents     int64
+	HotDays           int
+	ArchiveDays       int
+	FailureRate       float64
+	Seed              uint64
+	Now               time.Time
+	Cardinality       Cardinality
+	TrafficTiers      []TrafficTier
+	InsertBatchSize   int
+	AggregatePage     int
+	Vacuum            bool
 }
 
 type DatasetResult struct {
-	Path                    string    `json:"-"`
-	GeneratorVersion        string    `json:"generator_version,omitempty"`
-	Seed                    uint64    `json:"seed,omitempty"`
-	BenchmarkNow            time.Time `json:"benchmark_now,omitempty"`
-	HotEvents               int64     `json:"hot_events"`
-	ArchiveEvents           int64     `json:"archive_events"`
-	TotalEvents             int64     `json:"total_events"`
-	FailedEvents            int64     `json:"failed_events"`
-	Identities              int64     `json:"identities"`
-	Models                  int64     `json:"models"`
-	APIKeys                 int64     `json:"api_keys"`
-	UsedIdentities          int64     `json:"used_identities"`
-	UsedModels              int64     `json:"used_models"`
-	UsedAPIKeys             int64     `json:"used_api_keys"`
-	OrphanIdentities        int64     `json:"orphan_identities"`
-	OrphanModels            int64     `json:"orphan_models"`
-	OrphanAPIKeys           int64     `json:"orphan_api_keys"`
-	DuplicateEventKeys      int64     `json:"duplicate_event_keys"`
-	TokenSemanticViolations int64     `json:"token_semantic_violations"`
-	OverviewHourlyRequests  int64     `json:"overview_hourly_requests"`
-	OverviewDailyRequests   int64     `json:"overview_daily_requests"`
-	IdentityRequests        int64     `json:"identity_requests"`
-	OverviewHourlyRows      int64     `json:"overview_hourly_rows"`
-	OverviewDailyRows       int64     `json:"overview_daily_rows"`
-	ActivityRows            int64     `json:"activity_rows"`
-	LatencyRows             int64     `json:"latency_rows"`
-	InputTokens             int64     `json:"input_tokens"`
-	OutputTokens            int64     `json:"output_tokens"`
-	TotalLatencyMS          int64     `json:"total_latency_ms"`
-	CheckpointMin           int64     `json:"checkpoint_min"`
-	CheckpointMax           int64     `json:"checkpoint_max"`
-	QuickCheck              string    `json:"quick_check"`
-	DatabaseBytes           int64     `json:"database_bytes"`
-	SemanticFingerprint     string    `json:"semantic_fingerprint"`
+	Path                    string        `json:"-"`
+	GeneratorVersion        string        `json:"generator_version,omitempty"`
+	Seed                    uint64        `json:"seed,omitempty"`
+	BenchmarkNow            time.Time     `json:"benchmark_now,omitempty"`
+	FailureRate             float64       `json:"failure_rate"`
+	TrafficTiers            []TrafficTier `json:"traffic_tiers"`
+	QueryAnchor             time.Time     `json:"query_anchor,omitempty"`
+	EventTimeMin            time.Time     `json:"event_time_min,omitempty"`
+	EventTimeMax            time.Time     `json:"event_time_max,omitempty"`
+	Recent30DayEvents       int64         `json:"recent_30_day_events"`
+	HotEvents               int64         `json:"hot_events"`
+	ArchiveEvents           int64         `json:"archive_events"`
+	TotalEvents             int64         `json:"total_events"`
+	FailedEvents            int64         `json:"failed_events"`
+	Identities              int64         `json:"identities"`
+	Models                  int64         `json:"models"`
+	APIKeys                 int64         `json:"api_keys"`
+	UsedIdentities          int64         `json:"used_identities"`
+	UsedModels              int64         `json:"used_models"`
+	UsedAPIKeys             int64         `json:"used_api_keys"`
+	OrphanIdentities        int64         `json:"orphan_identities"`
+	OrphanModels            int64         `json:"orphan_models"`
+	OrphanAPIKeys           int64         `json:"orphan_api_keys"`
+	DuplicateEventKeys      int64         `json:"duplicate_event_keys"`
+	TokenSemanticViolations int64         `json:"token_semantic_violations"`
+	OverviewHourlyRequests  int64         `json:"overview_hourly_requests"`
+	OverviewDailyRequests   int64         `json:"overview_daily_requests"`
+	IdentityRequests        int64         `json:"identity_requests"`
+	OverviewHourlyRows      int64         `json:"overview_hourly_rows"`
+	OverviewDailyRows       int64         `json:"overview_daily_rows"`
+	ActivityRows            int64         `json:"activity_rows"`
+	LatencyRows             int64         `json:"latency_rows"`
+	InputTokens             int64         `json:"input_tokens"`
+	OutputTokens            int64         `json:"output_tokens"`
+	TotalLatencyMS          int64         `json:"total_latency_ms"`
+	CheckpointMin           int64         `json:"checkpoint_min"`
+	CheckpointMax           int64         `json:"checkpoint_max"`
+	QuickCheck              string        `json:"quick_check"`
+	DatabaseBytes           int64         `json:"database_bytes"`
+	DimensionFingerprint    string        `json:"dimension_fingerprint"`
+	SemanticFingerprint     string        `json:"semantic_fingerprint"`
 }
 
 type storedIndex struct {
@@ -118,6 +127,10 @@ type generatedEvent struct {
 type identityProfile struct {
 	Identity string
 	AuthType entities.UsageIdentityAuthType
+}
+
+func benchmarkAPIKey(index int) string {
+	return fmt.Sprintf("bench-key-%03d", index)
 }
 
 type weightedSelector struct {
@@ -198,13 +211,15 @@ func GenerateDataset(ctx context.Context, options GenerateOptions) (DatasetResul
 	if err := db.Exec("PRAGMA wal_checkpoint(TRUNCATE)").Error; err != nil {
 		return DatasetResult{}, fmt.Errorf("checkpoint benchmark WAL: %w", err)
 	}
-	result, err := ValidateDataset(db, options.Path)
+	result, err := ValidateDatasetAt(db, options.Path, options.Now)
 	if err != nil {
 		return DatasetResult{}, err
 	}
 	result.GeneratorVersion = DatasetGeneratorVersion
 	result.Seed = options.Seed
 	result.BenchmarkNow = options.Now
+	result.FailureRate = options.FailureRate
+	result.TrafficTiers = append([]TrafficTier(nil), options.TrafficTiers...)
 	return result, nil
 }
 
@@ -212,8 +227,11 @@ func validateGenerateOptions(options GenerateOptions) error {
 	if strings.TrimSpace(options.Path) == "" {
 		return fmt.Errorf("benchmark dataset path is required")
 	}
-	if options.HotEvents <= 0 || options.ArchiveEvents < 0 || options.HotDays <= 0 || options.ArchiveDays < 0 {
+	if options.HotEvents <= 0 || options.Recent30DayEvents <= 0 || options.Recent30DayEvents > options.HotEvents || options.ArchiveEvents < 0 || options.HotDays <= 0 || options.ArchiveDays < 0 {
 		return fmt.Errorf("benchmark event counts and day windows are invalid")
+	}
+	if (options.HotDays <= 30 && options.Recent30DayEvents != options.HotEvents) || (options.HotDays > 30 && options.Recent30DayEvents >= options.HotEvents) {
+		return fmt.Errorf("benchmark recent 30-day count is inconsistent with the hot window")
 	}
 	if options.FailureRate < 0 || options.FailureRate > 1 {
 		return fmt.Errorf("benchmark failure rate must be between zero and one")
@@ -245,7 +263,7 @@ func seedDatasetMetadata(db *gorm.DB, options GenerateOptions) ([]identityProfil
 	apiKeys := make([]entities.CPAAPIKey, 0, len(apiProfiles))
 	for _, profile := range apiProfiles {
 		apiKeys = append(apiKeys, entities.CPAAPIKey{
-			ID: int64(profile.Index), APIKey: fmt.Sprintf("bench-key-%03d", profile.Index),
+			ID: int64(profile.Index), APIKey: benchmarkAPIKey(profile.Index),
 			DisplayKey: fmt.Sprintf("bench-***-%03d", profile.Index), KeyAlias: fmt.Sprintf("bench-%s-%03d", profile.Tier, profile.Index),
 			IsDeleted: false, LastSyncedAt: &now, CreatedAt: now, UpdatedAt: now,
 		})
@@ -393,7 +411,7 @@ func makeGeneratedEvent(eventID int64, timestamp time.Time, options GenerateOpti
 	}
 	endpoint, serviceTier, responseTier, reasoningEffort, executorType := correlatedDimensions(modelIndex, identityIndex, provider, random)
 	return generatedEvent{
-		ID: eventID, EventKey: fmt.Sprintf("bench-event-%012d", eventKeyIndex), APIGroupKey: fmt.Sprint(apiIndex + 1),
+		ID: eventID, EventKey: fmt.Sprintf("bench-event-%012d", eventKeyIndex), APIGroupKey: benchmarkAPIKey(apiIndex + 1),
 		Provider: provider, Endpoint: endpoint, AuthType: authType,
 		RequestID: fmt.Sprintf("bench-request-%012d", requestIDIndex), Model: fmt.Sprintf("bench-model-%03d", modelIndex+1),
 		ModelAlias: fmt.Sprintf("bench-alias-%03d", modelIndex+1), ReasoningEffort: reasoningEffort,
@@ -514,11 +532,9 @@ func buildEventTimeline(options GenerateOptions) *eventTimeline {
 	}
 	recentDays := min(options.HotDays, 30)
 	olderDays := options.HotDays - recentDays
-	recentEvents := options.HotEvents
-	olderEvents := int64(0)
+	recentEvents := options.Recent30DayEvents
+	olderEvents := options.HotEvents - recentEvents
 	if olderDays > 0 {
-		olderEvents = int64(math.Round(float64(options.HotEvents) * 0.37))
-		recentEvents = options.HotEvents - olderEvents
 		buckets = append(buckets, weightedTimeBuckets(hotStart, olderDays*24, olderEvents, options.Seed^2)...)
 	}
 	recentStart := hotStart.AddDate(0, 0, olderDays)
@@ -719,8 +735,43 @@ func moveArchiveRows(db *gorm.DB, archiveEvents int64) error {
 	})
 }
 
+const MaxReusableDatasetAge = 7 * 24 * time.Hour
+
 func ValidateDataset(db *gorm.DB, path string) (DatasetResult, error) {
-	result := DatasetResult{Path: filepath.Clean(path)}
+	return ValidateDatasetAt(db, path, time.Now())
+}
+
+func ValidateDatasetPath(ctx context.Context, sourcePath string, queryAnchor time.Time) (DatasetResult, error) {
+	validationPath := sourcePath
+	if strings.HasSuffix(sourcePath, ".zst") {
+		temporaryDir, err := os.MkdirTemp(filepath.Dir(sourcePath), ".benchmark-validate-*")
+		if err != nil {
+			return DatasetResult{}, fmt.Errorf("create compressed dataset validation directory: %w", err)
+		}
+		defer os.RemoveAll(temporaryDir)
+		validationPath = filepath.Join(temporaryDir, "app.db")
+		if err := RestoreDataset(ctx, sourcePath, validationPath); err != nil {
+			return DatasetResult{}, err
+		}
+	}
+	db, err := repository.OpenReadDatabase(config.Config{SQLitePath: validationPath})
+	if err != nil {
+		return DatasetResult{}, err
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return DatasetResult{}, err
+	}
+	defer sqlDB.Close()
+	return ValidateDatasetAt(db, validationPath, queryAnchor)
+}
+
+func ValidateDatasetAt(db *gorm.DB, path string, queryAnchor time.Time) (DatasetResult, error) {
+	if queryAnchor.IsZero() {
+		return DatasetResult{}, fmt.Errorf("benchmark dataset query anchor is required")
+	}
+	queryAnchor = timeutil.NormalizeStorageTime(queryAnchor)
+	result := DatasetResult{Path: filepath.Clean(path), QueryAnchor: queryAnchor}
 	queries := []struct {
 		name   string
 		query  string
@@ -737,7 +788,7 @@ func ValidateDataset(db *gorm.DB, path string) (DatasetResult, error) {
 		{"used API keys", "SELECT COUNT(DISTINCT api_group_key) FROM (SELECT api_group_key FROM usage_events UNION ALL SELECT api_group_key FROM usage_events_archive)", &result.UsedAPIKeys},
 		{"orphan identities", "SELECT COUNT(*) FROM (SELECT auth_index, auth_type FROM usage_events UNION ALL SELECT auth_index, auth_type FROM usage_events_archive) e LEFT JOIN usage_identities i ON i.identity = e.auth_index AND ((i.auth_type = 1 AND e.auth_type = 'oauth') OR (i.auth_type = 2 AND e.auth_type = 'apikey')) AND i.is_deleted = 0 WHERE i.id IS NULL", &result.OrphanIdentities},
 		{"orphan models", "SELECT COUNT(*) FROM (SELECT model FROM usage_events UNION ALL SELECT model FROM usage_events_archive) e LEFT JOIN model_price_settings p ON p.model = e.model WHERE p.id IS NULL", &result.OrphanModels},
-		{"orphan API keys", "SELECT COUNT(*) FROM (SELECT api_group_key FROM usage_events UNION ALL SELECT api_group_key FROM usage_events_archive) e LEFT JOIN cpa_api_keys k ON CAST(k.id AS TEXT) = e.api_group_key AND k.is_deleted = 0 WHERE k.id IS NULL", &result.OrphanAPIKeys},
+		{"orphan API keys", "SELECT COUNT(*) FROM (SELECT api_group_key FROM usage_events UNION ALL SELECT api_group_key FROM usage_events_archive) e LEFT JOIN cpa_api_keys k ON k.api_key = e.api_group_key AND k.is_deleted = 0 WHERE k.id IS NULL", &result.OrphanAPIKeys},
 		{"duplicate event keys", "SELECT COUNT(*) - COUNT(DISTINCT event_key) FROM (SELECT event_key FROM usage_events UNION ALL SELECT event_key FROM usage_events_archive)", &result.DuplicateEventKeys},
 		{"overview hourly requests", "SELECT COALESCE(SUM(request_count), 0) FROM usage_overview_hourly_stats", &result.OverviewHourlyRequests},
 		{"overview daily requests", "SELECT COALESCE(SUM(request_count), 0) FROM usage_overview_daily_stats", &result.OverviewDailyRequests},
@@ -755,6 +806,37 @@ func ValidateDataset(db *gorm.DB, path string) (DatasetResult, error) {
 		}
 	}
 	result.TotalEvents = result.HotEvents + result.ArchiveEvents
+	var bounds struct {
+		Minimum sql.NullString `gorm:"column:minimum"`
+		Maximum sql.NullString `gorm:"column:maximum"`
+	}
+	if err := db.Raw(`
+		SELECT MIN(timestamp) AS minimum, MAX(timestamp) AS maximum
+		FROM (SELECT timestamp FROM usage_events UNION ALL SELECT timestamp FROM usage_events_archive)
+	`).Scan(&bounds).Error; err != nil {
+		return DatasetResult{}, fmt.Errorf("validate benchmark event bounds: %w", err)
+	}
+	if !bounds.Minimum.Valid || !bounds.Maximum.Valid {
+		return DatasetResult{}, fmt.Errorf("benchmark event bounds are empty")
+	}
+	var err error
+	if result.EventTimeMin, err = timeutil.ParseStorageTime(bounds.Minimum.String); err != nil {
+		return DatasetResult{}, fmt.Errorf("parse benchmark minimum event time: %w", err)
+	}
+	if result.EventTimeMax, err = timeutil.ParseStorageTime(bounds.Maximum.String); err != nil {
+		return DatasetResult{}, fmt.Errorf("parse benchmark maximum event time: %w", err)
+	}
+	recentStart := timeutil.FormatStorageTime(queryAnchor.Add(-30 * 24 * time.Hour))
+	recentEnd := timeutil.FormatStorageTime(queryAnchor)
+	if err := db.Raw(`
+		SELECT COUNT(*) FROM (
+			SELECT timestamp FROM usage_events
+			UNION ALL
+			SELECT timestamp FROM usage_events_archive
+		) WHERE timestamp >= ? AND timestamp <= ?
+	`, recentStart, recentEnd).Scan(&result.Recent30DayEvents).Error; err != nil {
+		return DatasetResult{}, fmt.Errorf("validate benchmark recent 30-day events: %w", err)
+	}
 	var totals struct {
 		InputTokens             int64
 		OutputTokens            int64
@@ -781,6 +863,11 @@ func ValidateDataset(db *gorm.DB, path string) (DatasetResult, error) {
 	result.OutputTokens = totals.OutputTokens
 	result.TotalLatencyMS = totals.TotalLatencyMS
 	result.TokenSemanticViolations = totals.TokenSemanticViolations
+	dimensionFingerprint, err := benchmarkDimensionFingerprint(db)
+	if err != nil {
+		return DatasetResult{}, err
+	}
+	result.DimensionFingerprint = dimensionFingerprint
 	if err := db.Raw("PRAGMA quick_check").Scan(&result.QuickCheck).Error; err != nil {
 		return DatasetResult{}, fmt.Errorf("quick check benchmark database: %w", err)
 	}
@@ -790,18 +877,22 @@ func ValidateDataset(db *gorm.DB, path string) (DatasetResult, error) {
 		return DatasetResult{}, fmt.Errorf("stat benchmark database: %w", err)
 	}
 	semantic := struct {
-		Hot, Archive, Total, Failed, Identities, Models, APIKeys, UsedIdentities, UsedModels, UsedAPIKeys, DuplicateKeys  int64
+		Hot, Archive, Total, Failed, Identities, Models, APIKeys, UsedIdentities, UsedModels, UsedAPIKeys                 int64
+		OrphanIdentities, OrphanModels, OrphanAPIKeys, DuplicateKeys                                                      int64
 		TokenSemanticViolations                                                                                           int64
 		OverviewHourly, OverviewDaily, IdentityRequests, OverviewHourlyRows, OverviewDailyRows, ActivityRows, LatencyRows int64
 		InputTokens, OutputTokens, TotalLatencyMS, CheckpointMin, CheckpointMax                                           int64
+		EventTimeMin, EventTimeMax, DimensionFingerprint                                                                  string
 	}{
 		result.HotEvents, result.ArchiveEvents, result.TotalEvents, result.FailedEvents,
-		result.Identities, result.Models, result.APIKeys, result.UsedIdentities, result.UsedModels, result.UsedAPIKeys, result.DuplicateEventKeys,
+		result.Identities, result.Models, result.APIKeys, result.UsedIdentities, result.UsedModels, result.UsedAPIKeys,
+		result.OrphanIdentities, result.OrphanModels, result.OrphanAPIKeys, result.DuplicateEventKeys,
 		result.TokenSemanticViolations,
 		result.OverviewHourlyRequests, result.OverviewDailyRequests, result.IdentityRequests,
 		result.OverviewHourlyRows, result.OverviewDailyRows, result.ActivityRows, result.LatencyRows,
 		result.InputTokens, result.OutputTokens, result.TotalLatencyMS,
 		result.CheckpointMin, result.CheckpointMax,
+		result.EventTimeMin.UTC().Format(time.RFC3339Nano), result.EventTimeMax.UTC().Format(time.RFC3339Nano), result.DimensionFingerprint,
 	}
 	data, err := json.Marshal(semantic)
 	if err != nil {
@@ -810,4 +901,146 @@ func ValidateDataset(db *gorm.DB, path string) (DatasetResult, error) {
 	digest := sha256.Sum256(data)
 	result.SemanticFingerprint = hex.EncodeToString(digest[:])
 	return result, nil
+}
+
+func benchmarkDimensionFingerprint(db *gorm.DB) (string, error) {
+	hash := sha256.New()
+	queries := []struct {
+		name  string
+		value string
+	}{
+		{"api_key", "api_group_key"},
+		{"identity", "auth_index"},
+		{"model", "model"},
+	}
+	for _, item := range queries {
+		query := fmt.Sprintf(`
+			SELECT %s AS value, COUNT(*) AS count
+			FROM (SELECT %s FROM usage_events UNION ALL SELECT %s FROM usage_events_archive)
+			GROUP BY %s ORDER BY %s
+		`, item.value, item.value, item.value, item.value, item.value)
+		rows, err := db.Raw(query).Rows()
+		if err != nil {
+			return "", fmt.Errorf("validate benchmark %s distribution: %w", item.name, err)
+		}
+		for rows.Next() {
+			var value string
+			var count int64
+			if err := rows.Scan(&value, &count); err != nil {
+				rows.Close()
+				return "", fmt.Errorf("scan benchmark %s distribution: %w", item.name, err)
+			}
+			_, _ = fmt.Fprintf(hash, "%s\x00%s\x00%d\n", item.name, value, count)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return "", fmt.Errorf("iterate benchmark %s distribution: %w", item.name, err)
+		}
+		rows.Close()
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func ValidateDatasetAgainstManifest(actual, metadata DatasetResult, manifest Manifest) error {
+	if metadata.GeneratorVersion != DatasetGeneratorVersion {
+		return fmt.Errorf("dataset generator=%q, want %q", metadata.GeneratorVersion, DatasetGeneratorVersion)
+	}
+	if metadata.Seed != manifest.Dataset.Seed {
+		return fmt.Errorf("dataset seed=%d, want %d", metadata.Seed, manifest.Dataset.Seed)
+	}
+	if metadata.FailureRate != manifest.Dataset.FailureRate {
+		return fmt.Errorf("dataset failure_rate=%g, want %g", metadata.FailureRate, manifest.Dataset.FailureRate)
+	}
+	if !slices.Equal(metadata.TrafficTiers, manifest.TrafficTiers) {
+		return fmt.Errorf("dataset traffic_tiers do not match the manifest")
+	}
+	if metadata.BenchmarkNow.IsZero() {
+		return fmt.Errorf("dataset benchmark_now is missing")
+	}
+	if strings.TrimSpace(manifest.Dataset.BenchmarkNow) != "generation-time" {
+		benchmarkNow, err := ResolveDatasetBenchmarkNow(manifest.Dataset.BenchmarkNow, time.Time{})
+		if err != nil {
+			return err
+		}
+		if !metadata.BenchmarkNow.Equal(benchmarkNow) {
+			return fmt.Errorf("dataset benchmark_now=%s, want %s", metadata.BenchmarkNow.Format(time.RFC3339), benchmarkNow.Format(time.RFC3339))
+		}
+	}
+	if actual.HotEvents != manifest.Dataset.HotEvents || actual.ArchiveEvents != manifest.Dataset.ArchiveEvents {
+		return fmt.Errorf("dataset rows hot=%d archive=%d, want %d/%d", actual.HotEvents, actual.ArchiveEvents, manifest.Dataset.HotEvents, manifest.Dataset.ArchiveEvents)
+	}
+	if metadata.Recent30DayEvents != manifest.Dataset.Recent30DayEvents {
+		return fmt.Errorf("dataset generation-time recent 30-day events=%d, want %d", metadata.Recent30DayEvents, manifest.Dataset.Recent30DayEvents)
+	}
+	cardinality := manifest.Dataset.Cardinality
+	if actual.Identities != int64(cardinality.Identities) || actual.Models != int64(cardinality.Models) || actual.APIKeys != int64(cardinality.APIKeys) {
+		return fmt.Errorf("dataset cardinality=%d/%d/%d, want %d/%d/%d", actual.Identities, actual.Models, actual.APIKeys, cardinality.Identities, cardinality.Models, cardinality.APIKeys)
+	}
+	if actual.UsedIdentities != actual.Identities || actual.UsedModels != actual.Models || actual.UsedAPIKeys != actual.APIKeys {
+		return fmt.Errorf("dataset does not exercise every identity/model/API key")
+	}
+	if actual.QuickCheck != "ok" {
+		return fmt.Errorf("dataset quick_check=%q, want ok", actual.QuickCheck)
+	}
+	if actual.OrphanIdentities != 0 || actual.OrphanModels != 0 || actual.OrphanAPIKeys != 0 {
+		return fmt.Errorf("dataset has orphan references identities=%d models=%d API keys=%d", actual.OrphanIdentities, actual.OrphanModels, actual.OrphanAPIKeys)
+	}
+	if actual.TokenSemanticViolations != 0 {
+		return fmt.Errorf("dataset has %d token semantic violations", actual.TokenSemanticViolations)
+	}
+	if actual.OverviewHourlyRequests != actual.TotalEvents || actual.OverviewDailyRequests != actual.TotalEvents || actual.IdentityRequests != actual.TotalEvents {
+		return fmt.Errorf("dataset derived totals hourly=%d daily=%d identity=%d, want %d", actual.OverviewHourlyRequests, actual.OverviewDailyRequests, actual.IdentityRequests, actual.TotalEvents)
+	}
+	if actual.CheckpointMin != actual.TotalEvents || actual.CheckpointMax != actual.TotalEvents {
+		return fmt.Errorf("dataset checkpoints=%d..%d, want %d", actual.CheckpointMin, actual.CheckpointMax, actual.TotalEvents)
+	}
+	if datasetStaticMetadata(actual) != datasetStaticMetadata(metadata) {
+		return fmt.Errorf("dataset statistics do not match dataset.json metadata")
+	}
+	if actual.SemanticFingerprint == "" || actual.SemanticFingerprint != metadata.SemanticFingerprint {
+		return fmt.Errorf("dataset semantic fingerprint=%q does not match metadata %q", actual.SemanticFingerprint, metadata.SemanticFingerprint)
+	}
+	if actual.Recent30DayEvents <= 0 {
+		return fmt.Errorf("dataset has no events in the effective 30-day Dashboard window")
+	}
+	if actual.QueryAnchor.IsZero() || actual.EventTimeMax.IsZero() {
+		return fmt.Errorf("dataset freshness timestamps are missing")
+	}
+	age := actual.QueryAnchor.Sub(actual.EventTimeMax)
+	if age < -time.Hour {
+		return fmt.Errorf("dataset contains future events: latest=%s query_anchor=%s", actual.EventTimeMax.Format(time.RFC3339), actual.QueryAnchor.Format(time.RFC3339))
+	}
+	if age > MaxReusableDatasetAge {
+		return fmt.Errorf("dataset is stale by %s; regenerate it within %s of the formal run", age.Round(time.Minute), MaxReusableDatasetAge)
+	}
+	return nil
+}
+
+type datasetStaticSnapshot struct {
+	EventTimeMin, EventTimeMax, QuickCheck, DimensionFingerprint            string
+	HotEvents, ArchiveEvents, TotalEvents, FailedEvents                     int64
+	Identities, Models, APIKeys                                             int64
+	UsedIdentities, UsedModels, UsedAPIKeys                                 int64
+	OrphanIdentities, OrphanModels, OrphanAPIKeys                           int64
+	DuplicateEventKeys, TokenSemanticViolations                             int64
+	OverviewHourlyRequests, OverviewDailyRequests, IdentityRequests         int64
+	OverviewHourlyRows, OverviewDailyRows, ActivityRows, LatencyRows        int64
+	InputTokens, OutputTokens, TotalLatencyMS, CheckpointMin, CheckpointMax int64
+}
+
+func datasetStaticMetadata(result DatasetResult) datasetStaticSnapshot {
+	return datasetStaticSnapshot{
+		EventTimeMin: result.EventTimeMin.UTC().Format(time.RFC3339Nano), EventTimeMax: result.EventTimeMax.UTC().Format(time.RFC3339Nano),
+		QuickCheck: result.QuickCheck, DimensionFingerprint: result.DimensionFingerprint,
+		HotEvents: result.HotEvents, ArchiveEvents: result.ArchiveEvents, TotalEvents: result.TotalEvents, FailedEvents: result.FailedEvents,
+		Identities: result.Identities, Models: result.Models, APIKeys: result.APIKeys,
+		UsedIdentities: result.UsedIdentities, UsedModels: result.UsedModels, UsedAPIKeys: result.UsedAPIKeys,
+		OrphanIdentities: result.OrphanIdentities, OrphanModels: result.OrphanModels, OrphanAPIKeys: result.OrphanAPIKeys,
+		DuplicateEventKeys: result.DuplicateEventKeys, TokenSemanticViolations: result.TokenSemanticViolations,
+		OverviewHourlyRequests: result.OverviewHourlyRequests, OverviewDailyRequests: result.OverviewDailyRequests, IdentityRequests: result.IdentityRequests,
+		OverviewHourlyRows: result.OverviewHourlyRows, OverviewDailyRows: result.OverviewDailyRows,
+		ActivityRows: result.ActivityRows, LatencyRows: result.LatencyRows,
+		InputTokens: result.InputTokens, OutputTokens: result.OutputTokens, TotalLatencyMS: result.TotalLatencyMS,
+		CheckpointMin: result.CheckpointMin, CheckpointMax: result.CheckpointMax,
+	}
 }

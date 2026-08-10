@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -24,15 +25,16 @@ func TestDatasetResultJSONOmitsLocalPath(t *testing.T) {
 func TestGenerateDatasetBuildsValidatedSteadyState(t *testing.T) {
 	location := time.FixedZone("Asia/Shanghai", 8*60*60)
 	options := capacity.GenerateOptions{
-		Path:          filepath.Join(t.TempDir(), "dataset.db"),
-		HotEvents:     400,
-		ArchiveEvents: 50,
-		HotDays:       90,
-		ArchiveDays:   7,
-		FailureRate:   0.041818,
-		Seed:          20260806,
-		Now:           time.Date(2026, 8, 6, 15, 0, 0, 0, location),
-		Cardinality:   capacity.Cardinality{Identities: 12, Models: 6, APIKeys: 4},
+		Path:              filepath.Join(t.TempDir(), "dataset.db"),
+		HotEvents:         400,
+		Recent30DayEvents: 250,
+		ArchiveEvents:     50,
+		HotDays:           90,
+		ArchiveDays:       7,
+		FailureRate:       0.041818,
+		Seed:              20260806,
+		Now:               time.Date(2026, 8, 6, 15, 0, 0, 0, location),
+		Cardinality:       capacity.Cardinality{Identities: 12, Models: 6, APIKeys: 4},
 		TrafficTiers: []capacity.TrafficTier{
 			{Name: "high", KeyShare: 0.30, PerKeyWeight: 10},
 			{Name: "medium", KeyShare: 0.50, PerKeyWeight: 3},
@@ -48,6 +50,12 @@ func TestGenerateDatasetBuildsValidatedSteadyState(t *testing.T) {
 	}
 	if result.HotEvents != 400 || result.ArchiveEvents != 50 || result.TotalEvents != 450 {
 		t.Fatalf("unexpected generated counts: %+v", result)
+	}
+	if result.Recent30DayEvents != 250 {
+		t.Fatalf("recent 30-day events=%d, want 250", result.Recent30DayEvents)
+	}
+	if result.FailureRate != options.FailureRate || !reflect.DeepEqual(result.TrafficTiers, options.TrafficTiers) {
+		t.Fatalf("generation config=%v/%+v, want %v/%+v", result.FailureRate, result.TrafficTiers, options.FailureRate, options.TrafficTiers)
 	}
 	if result.Identities != 12 || result.Models != 6 || result.APIKeys != 4 {
 		t.Fatalf("unexpected cardinality: %+v", result)
@@ -75,14 +83,15 @@ func TestGenerateDatasetBuildsValidatedSteadyState(t *testing.T) {
 func TestGenerateDatasetIsSemanticallyDeterministic(t *testing.T) {
 	location := time.FixedZone("Asia/Shanghai", 8*60*60)
 	base := capacity.GenerateOptions{
-		HotEvents:     120,
-		ArchiveEvents: 12,
-		HotDays:       30,
-		ArchiveDays:   2,
-		FailureRate:   0.05,
-		Seed:          99,
-		Now:           time.Date(2026, 8, 6, 15, 0, 0, 0, location),
-		Cardinality:   capacity.Cardinality{Identities: 6, Models: 4, APIKeys: 4},
+		HotEvents:         120,
+		Recent30DayEvents: 120,
+		ArchiveEvents:     12,
+		HotDays:           30,
+		ArchiveDays:       2,
+		FailureRate:       0.05,
+		Seed:              99,
+		Now:               time.Date(2026, 8, 6, 15, 0, 0, 0, location),
+		Cardinality:       capacity.Cardinality{Identities: 6, Models: 4, APIKeys: 4},
 		TrafficTiers: []capacity.TrafficTier{
 			{Name: "high", KeyShare: 0.30, PerKeyWeight: 10},
 			{Name: "medium", KeyShare: 0.50, PerKeyWeight: 3},
@@ -115,5 +124,65 @@ func TestGenerateDatasetIsSemanticallyDeterministic(t *testing.T) {
 	}
 	if first.SemanticFingerprint == third.SemanticFingerprint {
 		t.Fatalf("different seeds must produce different fingerprints: %q", first.SemanticFingerprint)
+	}
+}
+
+func TestValidateDatasetAgainstManifestRejectsStaleOrMismatchedMetadata(t *testing.T) {
+	queryAnchor := time.Date(2026, 8, 9, 12, 0, 0, 0, time.FixedZone("Asia/Shanghai", 8*60*60))
+	actual := capacity.DatasetResult{
+		QueryAnchor: queryAnchor, EventTimeMax: queryAnchor.Add(-24 * time.Hour), Recent30DayEvents: 90,
+		HotEvents: 90, ArchiveEvents: 10, TotalEvents: 100,
+		Identities: 3, Models: 2, APIKeys: 2, UsedIdentities: 3, UsedModels: 2, UsedAPIKeys: 2,
+		OverviewHourlyRequests: 100, OverviewDailyRequests: 100, IdentityRequests: 100,
+		CheckpointMin: 100, CheckpointMax: 100, QuickCheck: "ok", SemanticFingerprint: "fingerprint",
+	}
+	metadata := actual
+	metadata.GeneratorVersion = capacity.DatasetGeneratorVersion
+	metadata.Seed = 42
+	metadata.BenchmarkNow = queryAnchor.Add(-24 * time.Hour)
+	metadata.FailureRate = 0.01
+	metadata.TrafficTiers = []capacity.TrafficTier{{Name: "all", KeyShare: 1, PerKeyWeight: 1}}
+	manifest := capacity.Manifest{Dataset: capacity.DatasetSpec{
+		HotEvents: 90, Recent30DayEvents: 90, ArchiveEvents: 10, FailureRate: 0.01, Seed: 42, BenchmarkNow: "generation-time",
+		Cardinality: capacity.Cardinality{Identities: 3, Models: 2, APIKeys: 2},
+	}, TrafficTiers: []capacity.TrafficTier{{Name: "all", KeyShare: 1, PerKeyWeight: 1}}}
+	if err := capacity.ValidateDatasetAgainstManifest(actual, metadata, manifest); err != nil {
+		t.Fatalf("valid dataset rejected: %v", err)
+	}
+
+	mismatched := actual
+	mismatched.OrphanAPIKeys = 1
+	if err := capacity.ValidateDatasetAgainstManifest(mismatched, metadata, manifest); err == nil {
+		t.Fatal("orphan API key must fail strict validation")
+	}
+
+	stale := actual
+	stale.EventTimeMax = queryAnchor.Add(-8 * 24 * time.Hour)
+	if err := capacity.ValidateDatasetAgainstManifest(stale, metadata, manifest); err == nil {
+		t.Fatal("dataset older than the freshness window must fail")
+	}
+
+	wrongMetadata := metadata
+	wrongMetadata.OverviewDailyRows++
+	if err := capacity.ValidateDatasetAgainstManifest(actual, wrongMetadata, manifest); err == nil {
+		t.Fatal("dataset statistics must match dataset.json")
+	}
+
+	wrongRecentWindow := metadata
+	wrongRecentWindow.Recent30DayEvents--
+	if err := capacity.ValidateDatasetAgainstManifest(actual, wrongRecentWindow, manifest); err == nil {
+		t.Fatal("generation-time recent 30-day count must match the manifest")
+	}
+
+	wrongFailureRate := metadata
+	wrongFailureRate.FailureRate = 0.02
+	if err := capacity.ValidateDatasetAgainstManifest(actual, wrongFailureRate, manifest); err == nil {
+		t.Fatal("dataset failure rate must match the manifest")
+	}
+
+	wrongTrafficTiers := metadata
+	wrongTrafficTiers.TrafficTiers = []capacity.TrafficTier{{Name: "all", KeyShare: 1, PerKeyWeight: 2}}
+	if err := capacity.ValidateDatasetAgainstManifest(actual, wrongTrafficTiers, manifest); err == nil {
+		t.Fatal("dataset traffic tiers must match the manifest")
 	}
 }

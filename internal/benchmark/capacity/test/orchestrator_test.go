@@ -4,24 +4,55 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"cpa-usage-keeper/internal/benchmark/capacity"
 )
 
-func TestResumeCellMatchesOnlyCompleteExactProvenance(t *testing.T) {
+func TestResumeCellMatchesTerminalExactProvenance(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "result.json")
+	provenance := capacity.ExecutionProvenance{
+		ManifestSHA256: "manifest", PlanSHA256: "plan", KeeperBinarySHA256: "keeper", BenchctlBinarySHA256: "benchctl",
+		DatasetFingerprint: "dataset", DatasetValidationSHA256: "proof", FixedRate: 100, FixedDurationSeconds: 300, FixedPass: "hard",
+	}
 	result := capacity.CellResult{
-		Status: "completed", ManifestSHA256: "manifest", KeeperBinarySHA256: "keeper", BenchctlBinarySHA256: "benchctl", DatasetFingerprint: "dataset",
+		Status: "completed", ManifestSHA256: "manifest", PlanSHA256: "plan", KeeperBinarySHA256: "keeper", BenchctlBinarySHA256: "benchctl", DatasetFingerprint: "dataset",
+		DatasetValidationSHA256: "proof", FixedRate: 100, FixedDurationSeconds: 300, FixedPass: "hard",
 	}
 	if err := capacity.WriteJSONAtomic(path, result); err != nil {
 		t.Fatalf("WriteJSONAtomic returned error: %v", err)
 	}
-	matched, err := capacity.ResumeCellMatches(path, "manifest", "keeper", "benchctl", "dataset")
+	matched, err := capacity.ResumeCellMatches(path, provenance)
 	if err != nil || !matched {
 		t.Fatalf("expected exact result to resume: matched=%v err=%v", matched, err)
 	}
-	matched, err = capacity.ResumeCellMatches(path, "manifest", "different", "benchctl", "dataset")
+	result.Status = "failed"
+	result.Error = "hard soak failed at 100 events/s: durable_throughput,http_p99"
+	result.Attempts = []capacity.ProbeAttempt{{RatePerSecond: 100}}
+	if err := capacity.WriteJSONAtomic(path, result); err != nil {
+		t.Fatalf("WriteJSONAtomic failed result returned error: %v", err)
+	}
+	matched, err = capacity.ResumeCellMatches(path, provenance)
+	if err != nil || !matched {
+		t.Fatalf("expected terminal fixed-rate failure to resume: matched=%v err=%v", matched, err)
+	}
+	result.Error = "start keeper: unit failed"
+	if err := capacity.WriteJSONAtomic(path, result); err != nil {
+		t.Fatalf("WriteJSONAtomic infrastructure failure returned error: %v", err)
+	}
+	matched, err = capacity.ResumeCellMatches(path, provenance)
+	if err != nil || matched {
+		t.Fatalf("infrastructure failure must rerun: matched=%v err=%v", matched, err)
+	}
+	result.Status = "completed"
+	result.Error = ""
+	result.Attempts = nil
+	if err := capacity.WriteJSONAtomic(path, result); err != nil {
+		t.Fatalf("restore completed result returned error: %v", err)
+	}
+	provenance.KeeperBinarySHA256 = "different"
+	matched, err = capacity.ResumeCellMatches(path, provenance)
 	if err != nil || matched {
 		t.Fatalf("changed binary must rerun: matched=%v err=%v", matched, err)
 	}
@@ -35,6 +66,37 @@ func TestExecuteRunRejectsUnsafeRootAndRunIDBeforeRuntimeSetup(t *testing.T) {
 		if _, err := capacity.ExecuteRun(t.Context(), options); err == nil {
 			t.Fatalf("ExecuteRun should reject unsafe options: %+v", options)
 		}
+	}
+}
+
+func TestRedisCPUSetUsesLastOnlineCPU(t *testing.T) {
+	for online, want := range map[int]string{0: "", 1: "0", 4: "3", 8: "7"} {
+		if got := capacity.RedisCPUSet(online); got != want {
+			t.Fatalf("RedisCPUSet(%d)=%q, want %q", online, got, want)
+		}
+	}
+}
+
+func TestPreflightDatasetDependenciesRequiresZstdOnlyForCompressedCanonical(t *testing.T) {
+	root := t.TempDir()
+	datasetDir := filepath.Join(root, "datasets", "custom-dataset")
+	if err := os.MkdirAll(datasetDir, 0o755); err != nil {
+		t.Fatalf("create dataset directory: %v", err)
+	}
+	compressed := filepath.Join(datasetDir, "app.db.zst")
+	if err := os.WriteFile(compressed, []byte("compressed"), 0o600); err != nil {
+		t.Fatalf("write compressed canonical: %v", err)
+	}
+	t.Setenv("PATH", t.TempDir())
+	cells := []capacity.Cell{{DatasetID: "custom-dataset"}}
+	if err := capacity.PreflightDatasetDependencies(root, cells); err == nil || !strings.Contains(err.Error(), "zstd") {
+		t.Fatalf("compressed canonical without zstd error=%v", err)
+	}
+	if err := os.WriteFile(filepath.Join(datasetDir, "app.db"), []byte("raw"), 0o600); err != nil {
+		t.Fatalf("write raw canonical: %v", err)
+	}
+	if err := capacity.PreflightDatasetDependencies(root, cells); err != nil {
+		t.Fatalf("raw canonical should not require zstd: %v", err)
 	}
 }
 
@@ -117,9 +179,19 @@ func TestReadAndValidateUnlimitedMemoryCgroupLimits(t *testing.T) {
 }
 
 func TestResumeCellMissingResultNeedsRun(t *testing.T) {
-	matched, err := capacity.ResumeCellMatches(filepath.Join(t.TempDir(), "missing.json"), "m", "k", "b", "d")
+	matched, err := capacity.ResumeCellMatches(filepath.Join(t.TempDir(), "missing.json"), capacity.ExecutionProvenance{})
 	if err != nil || matched {
 		t.Fatalf("missing result should not resume: matched=%v err=%v", matched, err)
+	}
+}
+
+func TestDropFilePageCacheAcceptsSyncedClone(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.db")
+	if err := os.WriteFile(path, []byte("sqlite pages"), 0o600); err != nil {
+		t.Fatalf("write clone: %v", err)
+	}
+	if err := capacity.DropFilePageCache(path); err != nil {
+		t.Fatalf("DropFilePageCache returned error: %v", err)
 	}
 }
 

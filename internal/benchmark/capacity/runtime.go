@@ -128,16 +128,17 @@ func StartKeeperUnit(ctx context.Context, options KeeperStartOptions) (SystemdRu
 }
 
 type RedisStartOptions struct {
-	UnitName   string
-	Root       string
-	Port       int
-	Password   string
-	BinaryPath string
+	UnitName    string
+	Root        string
+	Port        int
+	Password    string
+	BinaryPath  string
+	AllowedCPUs string
 }
 
 func StartRedisUnit(ctx context.Context, options RedisStartOptions) (SystemdRuntime, error) {
-	if options.Port <= 0 || strings.TrimSpace(options.Password) == "" || strings.TrimSpace(options.Root) == "" {
-		return SystemdRuntime{}, fmt.Errorf("Redis root, port, and password are required")
+	if options.Port <= 0 || strings.TrimSpace(options.Password) == "" || strings.TrimSpace(options.Root) == "" || strings.TrimSpace(options.AllowedCPUs) == "" {
+		return SystemdRuntime{}, fmt.Errorf("Redis root, port, password, and CPU affinity are required")
 	}
 	if options.BinaryPath == "" {
 		options.BinaryPath = "redis-server"
@@ -154,6 +155,7 @@ func StartRedisUnit(ctx context.Context, options RedisStartOptions) (SystemdRunt
 		"--property=Restart=no",
 		"--property=KillMode=mixed",
 		"--property=TimeoutStopSec=10s",
+		"--property=AllowedCPUs=" + options.AllowedCPUs,
 		"--property=WorkingDirectory=" + redisDir,
 		"--property=StandardOutput=append:" + stdoutPath,
 		"--property=StandardError=append:" + stderrPath,
@@ -177,7 +179,17 @@ func StartRedisUnit(ctx context.Context, options RedisStartOptions) (SystemdRunt
 				_ = StopUnit(context.Background(), options.UnitName)
 				return SystemdRuntime{}, stateErr
 			}
-			return SystemdRuntime{UnitName: options.UnitName, CgroupPath: filepath.Join("/sys/fs/cgroup", strings.TrimPrefix(state.ControlGroup, "/"))}, nil
+			cgroupPath := filepath.Join("/sys/fs/cgroup", strings.TrimPrefix(state.ControlGroup, "/"))
+			allowedCPUs, allowedErr := ReadCgroupAllowedCPUs(cgroupPath)
+			if allowedErr != nil {
+				_ = StopUnit(context.Background(), options.UnitName)
+				return SystemdRuntime{}, allowedErr
+			}
+			if allowedCPUs != options.AllowedCPUs {
+				_ = StopUnit(context.Background(), options.UnitName)
+				return SystemdRuntime{}, fmt.Errorf("Redis effective AllowedCPUs=%q, want %q", allowedCPUs, options.AllowedCPUs)
+			}
+			return SystemdRuntime{UnitName: options.UnitName, CgroupPath: cgroupPath, Limits: CgroupLimits{AllowedCPUs: allowedCPUs}}, nil
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -313,6 +325,9 @@ func copyStaticDataset(sourcePath, destinationPath string) (returnErr error) {
 	if _, err := io.Copy(destination, source); err != nil {
 		return fmt.Errorf("copy static benchmark dataset: %w", err)
 	}
+	if err := destination.Sync(); err != nil {
+		return fmt.Errorf("sync static benchmark dataset: %w", err)
+	}
 	return nil
 }
 
@@ -330,10 +345,11 @@ func RestoreDataset(ctx context.Context, sourcePath, destinationPath string) err
 		var stderr bytes.Buffer
 		command.Stderr = &stderr
 		commandErr := command.Run()
+		syncErr := destination.Sync()
 		closeErr := destination.Close()
-		if commandErr != nil || closeErr != nil {
+		if commandErr != nil || syncErr != nil || closeErr != nil {
 			_ = os.Remove(destinationPath)
-			return errors.Join(fmt.Errorf("restore compressed benchmark dataset: %w: %s", commandErr, strings.TrimSpace(stderr.String())), closeErr)
+			return errors.Join(fmt.Errorf("restore compressed benchmark dataset: %w: %s", commandErr, strings.TrimSpace(stderr.String())), syncErr, closeErr)
 		}
 		return nil
 	}
@@ -356,7 +372,14 @@ func ResetDatasetClone(ctx context.Context, sourcePath, destinationPath string) 
 			return fmt.Errorf("remove previous probe database %s: %w", path, err)
 		}
 	}
-	return RestoreDataset(ctx, sourcePath, destinationPath)
+	if err := RestoreDataset(ctx, sourcePath, destinationPath); err != nil {
+		return err
+	}
+	if err := DropFilePageCache(destinationPath); err != nil {
+		_ = os.Remove(destinationPath)
+		return fmt.Errorf("evict restored dataset page cache: %w", err)
+	}
+	return nil
 }
 
 func CompressDataset(ctx context.Context, sourcePath, destinationPath string, removeSource bool) error {
@@ -419,11 +442,9 @@ func ReadCgroupLimits(path string) (CgroupLimits, error) {
 	if err != nil {
 		return limits, fmt.Errorf("parse cgroup CPU period: %w", err)
 	}
-	allowed, err := os.ReadFile(filepath.Join(path, "cpuset.cpus.effective"))
-	if err != nil {
-		return limits, fmt.Errorf("read cgroup effective CPUs: %w", err)
+	if limits.AllowedCPUs, err = ReadCgroupAllowedCPUs(path); err != nil {
+		return limits, err
 	}
-	limits.AllowedCPUs = strings.TrimSpace(string(allowed))
 	if limits.MemoryMaxBytes, limits.MemoryMaxUnlimited, err = readMemoryMaxFile(filepath.Join(path, "memory.max")); err != nil {
 		return limits, err
 	}
@@ -431,6 +452,14 @@ func ReadCgroupLimits(path string) (CgroupLimits, error) {
 		return limits, err
 	}
 	return limits, nil
+}
+
+func ReadCgroupAllowedCPUs(path string) (string, error) {
+	allowed, err := os.ReadFile(filepath.Join(path, "cpuset.cpus.effective"))
+	if err != nil {
+		return "", fmt.Errorf("read cgroup effective CPUs: %w", err)
+	}
+	return strings.TrimSpace(string(allowed)), nil
 }
 
 func ValidateCgroupLimits(limits CgroupLimits, cpu, memoryMiB int, allowedCPUs string) error {
