@@ -1,13 +1,14 @@
 package capacity_test
 
 import (
+	"database/sql"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"cpa-usage-keeper/internal/benchmark/capacity"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func TestResumeCellMatchesTerminalExactProvenance(t *testing.T) {
@@ -219,8 +220,16 @@ func TestResetDatasetCloneReplacesPreviousProbeState(t *testing.T) {
 	root := t.TempDir()
 	source := filepath.Join(root, "source.db")
 	destination := filepath.Join(root, "work", "app.db")
-	if output, err := exec.Command("sqlite3", source, "CREATE TABLE marker(value TEXT); INSERT INTO marker VALUES ('canonical');").CombinedOutput(); err != nil {
-		t.Fatalf("create source database: %v: %s", err, output)
+	sourceDB, err := sql.Open("sqlite3", source)
+	if err != nil {
+		t.Fatalf("open source database: %v", err)
+	}
+	if _, err := sourceDB.Exec("CREATE TABLE marker(value TEXT); INSERT INTO marker VALUES ('canonical');"); err != nil {
+		sourceDB.Close()
+		t.Fatalf("create source database: %v", err)
+	}
+	if err := sourceDB.Close(); err != nil {
+		t.Fatalf("close source database: %v", err)
 	}
 	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
 		t.Fatalf("create work directory: %v", err)
@@ -233,12 +242,17 @@ func TestResetDatasetCloneReplacesPreviousProbeState(t *testing.T) {
 	if err := capacity.ResetDatasetClone(t.Context(), source, destination); err != nil {
 		t.Fatalf("ResetDatasetClone returned error: %v", err)
 	}
-	output, err := exec.Command("sqlite3", destination, "SELECT value FROM marker;").CombinedOutput()
+	destinationDB, err := sql.Open("sqlite3", destination+"?mode=ro")
 	if err != nil {
-		t.Fatalf("query restored clone: %v: %s", err, output)
+		t.Fatalf("open restored clone: %v", err)
 	}
-	if string(output) != "canonical\n" {
-		t.Fatalf("unexpected restored content: %q", output)
+	defer destinationDB.Close()
+	var value string
+	if err := destinationDB.QueryRow("SELECT value FROM marker").Scan(&value); err != nil {
+		t.Fatalf("query restored clone: %v", err)
+	}
+	if value != "canonical" {
+		t.Fatalf("unexpected restored content: %q", value)
 	}
 	for _, path := range []string{destination + "-wal", destination + "-shm"} {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
