@@ -35,6 +35,10 @@ exploration, cost analysis, quota monitoring, and community ranking.
 - Proxying LLM traffic (that is CPA's job).
 - Multi-tenant SaaS operation; Usage Keeper is a single-instance,
   single-admin tool.
+- Production capacity benchmarking. The capacity suite under
+  `internal/benchmark/` is internal, test-only tooling with no runtime API
+  surface and no user-visible behavior; it exists to validate deployment
+  capacity and is documented in its own README/REPORT.
 
 ---
 

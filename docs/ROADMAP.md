@@ -94,6 +94,37 @@ of the system that already work.
     `pro-5x`→`pro-20x`, Claude `free`→`pro`, …) and surface it in the
     credential detail view.
 
+### Capacity & Performance Benchmarking (new, from upstream PR #417)
+
+*Derived from the production capacity suite merged from `author/main`
+(`internal/benchmark/`) — these are the recommended follow-ups.*
+
+- **2.9 Multi-arch capacity results.** ⬜
+  - Extend the `capacity-v1` manifest to `linux/arm64` and capture a second
+    reference dataset/measurement column so the deployment guidance covers
+    ARM hosts, not just `linux/amd64`.
+- **2.10 Benchmark regression gate in CI.** ⬜
+  - Promote the JSON result contracts (`internal/benchmark/schema/`) into a
+    CI check: run a reduced-rate cell against a small fixture dataset and
+    fail the build when sustained ingestion or Core Dashboard p99 regresses
+    beyond a manifest-defined budget.
+- **2.11 Dashboard-latency SLO tracking over time.** ⬜
+  - Persist each formal campaign's Core p99 / Analysis Latency p99 per CPU
+    profile to a versioned history so latency drift across releases is
+    visible as a trend, not a single point-in-time report.
+- **2.12 Memory-pressure & limit scenarios.** ⬜
+  - Add cells that run the same workload under bounded cgroup memory
+    (256/512/768/1024 MiB) to convert the current "observed peak +
+    headroom" guidance into a verified minimum-memory recommendation.
+- **2.13 Schema-evolution re-benchmarking.** ⬜
+  - Re-run the canonical dataset across schema migrations (new rollup
+    tables/columns) so a migration's cost is measured before release, and
+    publish the before/after in `internal/benchmark/REPORT.md`.
+- **2.14 Versioned benchmark manifest publishing.** ⬜
+  - Publish `manifest/capacity-v*.json` alongside each release with the
+    expanded-plan and binary SHA-256 digests so results stay attributable to
+    an exact, reproducible build.
+
 ---
 
 ## Phase 3 — Alerts, Metrics & Integrations
