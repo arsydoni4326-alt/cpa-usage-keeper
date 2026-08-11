@@ -60,6 +60,7 @@ internal/api ────── Gin router, handlers, auth middleware, DTO mappi
         │                          offline subscription resolvers (claude /
         │                          codex / antigravity plan classification)
         ├── internal/ranking ───── opt-in community ranking client/service
+        ├── internal/benchmark ─── production capacity suite (test-only tooling)
         ├── internal/pricing ───── price catalog, resolver, snapshot
         ├── internal/cpa ───────── CPA management API client (HTTP + Redis queue client)
         ├── internal/auth ──────── session management (memory/persistent)
@@ -269,6 +270,11 @@ Container/start script: `docker-entrypoint.sh`; version injected via
 - `make verify` (the baseline, also in CI `ci.yml`):
   `go test ./cmd/... ./internal/...` plus `npm --prefix ./web run
   test | lint | typecheck | build`.
+- The production capacity benchmark suite (`internal/benchmark/`) is **not**
+  part of the baseline. It is a Linux-only, on-demand harness (requires
+  amd64 + cgroup v2/systemd); run it via
+  `internal/benchmark/scripts/run-capacity.sh`. Formal measurements and the
+  suite contract live in `internal/benchmark/REPORT.md` and its README.
 - Release: `binary-release.yml` on `v*` tags (CGO builds per platform).
 
 ---

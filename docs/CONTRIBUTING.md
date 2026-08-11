@@ -59,6 +59,14 @@ npm --prefix ./web run build            # vite production build
 
 You can run any of them individually while iterating.
 
+**Capacity benchmarking** is deliberately **not** part of the verification
+baseline. The production capacity suite under `internal/benchmark/` is a
+Linux-only, on-demand harness (amd64, cgroup v2 + systemd) intended to run on
+dedicated benchmarking hosts — not as a per-PR gate. Run it via
+`internal/benchmark/scripts/run-capacity.sh`; see
+`internal/benchmark/README.md` for prerequisites and `REPORT.md` for the
+formal measurements.
+
 ---
 
 ## 4. Backend Conventions (Go)
