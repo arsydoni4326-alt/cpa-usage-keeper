@@ -92,6 +92,8 @@ CPA Usage Keeper is a standalone persistence and analytics dashboard for [CLIPro
 > Before using CPA Usage Keeper, make sure CPA usage statistics are enabled: `usage-statistics-enabled: true`.
 >
 > When multiple usage collectors share one CPA instance, ensure they all use subscription mode; otherwise, collection may stop or become incomplete.
+>
+> When working inside the CLIProxyAPI workspace (CPA backend + management panel + Keeper checked out together), see [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) §5 "Usage Keeper topology" for the canonical CPA + Keeper wiring (`CPA_BASE_URL`, `CPA_MANAGEMENT_KEY`, `usage-statistics-enabled: true`, optional `CPA_PUBLIC_URL`).
 
 Docker Compose is the recommended deployment method. Use the full stack when deploying CPA and Keeper together, or the Keeper-only stack when CPA already exists.
 
@@ -200,6 +202,8 @@ npm --prefix ./web run build
 Docker Compose is recommended for both a complete CPA + Keeper stack and a Keeper-only deployment.
 
 #### CPA + Keeper
+
+> Workspace note: `../docs/docker-compose.keeper.yml` is a copy-paste reference overlay of this block (adds `${CPA_MANAGEMENT_KEY}`/`${KEEPER_LOGIN_PASSWORD}` required-var guards and TCP/HTTP `REDIS_QUEUE_ADDR` fallback hint). See `../docs/ARCHITECTURE.md` §5 "Usage Keeper topology" for the wiring contract.
 
 Save the following as `docker-compose.yml`, then replace the management key and login password:
 
