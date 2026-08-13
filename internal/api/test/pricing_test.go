@@ -29,6 +29,12 @@ type pricingStub struct {
 	err        error
 }
 
+type pricingTimeoutError struct{}
+
+func (pricingTimeoutError) Error() string   { return "net/http: TLS handshake timeout" }
+func (pricingTimeoutError) Timeout() bool   { return true }
+func (pricingTimeoutError) Temporary() bool { return true }
+
 func (s pricingStub) ListUsedModels(context.Context) ([]string, error) {
 	return s.usedModels, s.err
 }
@@ -167,6 +173,36 @@ func TestPricingSyncPreviewRouteReturnsGatewayTimeoutForUpstreamTimeout(t *testi
 	if resp.Code != http.StatusGatewayTimeout ||
 		!contains(resp.Body.String(), `"error":"Models.dev request timed out"`) {
 		t.Fatalf("unexpected pricing sync timeout response: %d %s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestPricingSyncPreviewRouteReturnsGatewayTimeoutForNetworkTimeout(t *testing.T) {
+	router := NewRouter(nil, nil, nil, &pricingStub{
+		err: fmt.Errorf("fetch pricing catalog: %w", pricingTimeoutError{}),
+	}, AuthConfig{}, nil, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/pricing/sync/preview", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusGatewayTimeout ||
+		!contains(resp.Body.String(), `"error":"Models.dev request timed out"`) {
+		t.Fatalf("unexpected pricing sync network timeout response: %d %s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestPricingSyncPreviewRouteKeepsNonTimeoutErrorsInternal(t *testing.T) {
+	router := NewRouter(nil, nil, nil, &pricingStub{
+		err: errors.New("decode pricing catalog: invalid character"),
+	}, AuthConfig{}, nil, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/pricing/sync/preview", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusInternalServerError ||
+		!contains(resp.Body.String(), `"error":"internal server error"`) {
+		t.Fatalf("unexpected pricing sync non-timeout response: %d %s", resp.Code, resp.Body.String())
 	}
 }
 

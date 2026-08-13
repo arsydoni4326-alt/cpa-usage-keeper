@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"strings"
 
@@ -152,7 +153,9 @@ func registerPricingRoutes(router gin.IRoutes, pricingProvider service.PricingPr
 }
 
 func writePricingSyncPreviewError(c *gin.Context, err error) {
-	if !errors.Is(err, context.DeadlineExceeded) {
+	var networkError net.Error
+	if !errors.Is(err, context.DeadlineExceeded) &&
+		(!errors.As(err, &networkError) || !networkError.Timeout()) {
 		writeInternalError(c, "preview pricing sync failed", err)
 		return
 	}
