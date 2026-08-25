@@ -398,6 +398,9 @@ cp .env.example .env
 | `AUTH_ENABLED` | 否 | `true` | 是否启用登录保护 |
 | `LOGIN_PASSWORD` | 鉴权启用时必填 | - | 登录密码 |
 | `AUTH_SESSION_TTL` | 否 | `168h` | 登录 session 有效时长 |
+| `IP_ENRICHMENT_ENABLED` | 否 | `false` | 可选：为 Session Settings 的 `login_ip`/`last_seen_ip` 增加隐私保护的反向 DNS/内网标记信息 |
+| `IP_ENRICHMENT_TTL` | 否 | `24h` | IP 增强结果缓存时长 |
+| `IP_ENRICHMENT_TIMEOUT` | 否 | `2s` | 单次 IP 增强查询超时 |
 
 ### 时区与请求行为
 

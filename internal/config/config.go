@@ -99,6 +99,13 @@ type Config struct {
 	LoginPassword string
 	// AuthSessionTTL 是登录 session 有效时长。
 	AuthSessionTTL time.Duration
+	// IPEnrichmentEnabled 控制是否为 Session Settings 面板开启可选的、
+	// 隐私保护的登录 IP 反解/增强（默认关闭，opt-in）。私有/保留地址不会发起查询。
+	IPEnrichmentEnabled bool
+	// IPEnrichmentTTL 是 IP 增强结果在内存缓存中的保留时长。
+	IPEnrichmentTTL time.Duration
+	// IPEnrichmentTimeout 是单次后台反解查询的超时时间。
+	IPEnrichmentTimeout time.Duration
 }
 
 type LoadOptions struct {
@@ -206,6 +213,25 @@ func Load(options LoadOptions) (*Config, error) {
 		return nil, fmt.Errorf("AUTH_SESSION_TTL must be positive")
 	}
 
+	ipEnrichmentEnabled, err := getBool("IP_ENRICHMENT_ENABLED", false)
+	if err != nil {
+		return nil, err
+	}
+	ipEnrichmentTTL, err := getDuration("IP_ENRICHMENT_TTL", 24*time.Hour)
+	if err != nil {
+		return nil, err
+	}
+	if ipEnrichmentTTL <= 0 {
+		return nil, fmt.Errorf("IP_ENRICHMENT_TTL must be positive")
+	}
+	ipEnrichmentTimeout, err := getDuration("IP_ENRICHMENT_TIMEOUT", 2*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	if ipEnrichmentTimeout <= 0 {
+		return nil, fmt.Errorf("IP_ENRICHMENT_TIMEOUT must be positive")
+	}
+
 	authEnabledValue := strings.TrimSpace(os.Getenv("AUTH_ENABLED"))
 	authEnabled, err := getBool("AUTH_ENABLED", true)
 	if err != nil {
@@ -274,6 +300,9 @@ func Load(options LoadOptions) (*Config, error) {
 		AuthEnabled:                authEnabled,
 		LoginPassword:              strings.TrimSpace(os.Getenv("LOGIN_PASSWORD")),
 		AuthSessionTTL:             authSessionTTL,
+		IPEnrichmentEnabled:        ipEnrichmentEnabled,
+		IPEnrichmentTTL:            ipEnrichmentTTL,
+		IPEnrichmentTimeout:        ipEnrichmentTimeout,
 	}
 	if appHost := strings.TrimSpace(options.AppHost); appHost != "" {
 		cfg.AppHost = appHost

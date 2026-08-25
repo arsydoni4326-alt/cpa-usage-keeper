@@ -52,3 +52,64 @@ describe('SessionSettingsCard client metadata', () => {
     expect(html).toMatch(/<dt[^>]*>Login IP<\/dt><dd[^>]*>Unknown<\/dd>/);
   });
 });
+it('renders geo enrichment when private IP info is present', () => {
+    const session: AuthManagedSessionItem = {
+      id: 'geo-session-hash',
+      kind: 'admin',
+      role: 'admin',
+      source: 'standard',
+      loginIp: '127.0.0.1',
+      loginAt: '2026/08/13 10:00:00',
+      lastSeenAt: '2026/08/13 10:15:00',
+      expiresAt: '2026/08/20 10:00:00',
+      loginGeo: { enabled: true, private: true },
+    };
+
+    const html = renderToStaticMarkup(
+      <SessionSettingsCard sessions={[session]} onLogout={() => undefined} />,
+    );
+
+    expect(html).toMatch(/<dt[^>]*>IP location<\/dt><dd[^>]*>Private \/ local network<\/dd>/);
+    expect(html).toMatch(/<dt[^>]*>Login IP<\/dt><dd[^>]*>127\.0\.0\.1<\/dd>/);
+  });
+
+  it('renders geo enrichment when a hostname is resolved', () => {
+    const session: AuthManagedSessionItem = {
+      id: 'geo-session-hostname',
+      kind: 'admin',
+      role: 'admin',
+      source: 'standard',
+      loginIp: '203.0.113.9',
+      loginAt: '2026/08/13 10:00:00',
+      lastSeenAt: '2026/08/13 10:15:00',
+      expiresAt: '2026/08/20 10:00:00',
+      loginGeo: { enabled: true, hostname: 'host-203-0-113-9.example.com' },
+    };
+
+    const html = renderToStaticMarkup(
+      <SessionSettingsCard sessions={[session]} onLogout={() => undefined} />,
+    );
+
+    expect(html).toContain('host-203-0-113-9.example.com');
+    expect(html).toMatch(/<dt[^>]*>IP location<\/dt>/);
+  });
+
+  it('omits geo row when geo object is missing (enrichment disabled)', () => {
+    const session: AuthManagedSessionItem = {
+      id: 'no-geo-hash',
+      kind: 'admin',
+      role: 'admin',
+      source: 'standard',
+      loginIp: '203.0.113.9',
+      loginAt: '2026/08/13 10:00:00',
+      lastSeenAt: '2026/08/13 10:15:00',
+      expiresAt: '2026/08/20 10:00:00',
+    };
+
+    const html = renderToStaticMarkup(
+      <SessionSettingsCard sessions={[session]} onLogout={() => undefined} />,
+    );
+
+    expect(html).not.toContain('IP location');
+    expect(html).toMatch(/<dt[^>]*>Login IP<\/dt><dd[^>]*>203\.0\.113\.9<\/dd>/);
+  });

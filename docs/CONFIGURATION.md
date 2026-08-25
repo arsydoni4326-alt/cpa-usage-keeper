@@ -44,6 +44,14 @@ layout of `WORK_DIR`.
 | `LOGIN_PASSWORD` | unset | Admin password. Required when `AUTH_ENABLED=true` (including the default). Never returned by any endpoint; public example placeholder values are rejected at startup. |
 | `AUTH_SESSION_TTL` | `168h` (7 days) | Session lifetime. Persistent sessions are stored in SQLite when auth is enabled. |
 
+## 4a. IP Enrichment (opt-in)
+
+| Variable | Default | Description |
+|---|---|---|
+| `IP_ENRICHMENT_ENABLED` | `false` | When `true`, the Session Settings panel enriches `login_ip` / `last_seen_ip` with optional privacy-preserving metadata (reverse-DNS hostname, private-network marker). Private/reserved addresses are classified locally and never queried. |
+| `IP_ENRICHMENT_TTL` | `24h` | Lifetime of a resolved enrichment value in the in-memory cache. |
+| `IP_ENRICHMENT_TIMEOUT` | `2s` | Timeout for a single background reverse-DNS lookup. |
+
 ## 5. Quota
 
 | Variable | Default | Description |

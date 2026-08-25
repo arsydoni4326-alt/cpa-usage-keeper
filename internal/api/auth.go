@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"cpa-usage-keeper/internal/auth"
+	"cpa-usage-keeper/internal/enrichgeo"
 	"cpa-usage-keeper/internal/entities"
 	"cpa-usage-keeper/internal/helper"
 	"cpa-usage-keeper/internal/service"
@@ -48,6 +49,9 @@ type authHandler struct {
 	sessions          *auth.SessionManager
 	cpaAPIKeyProvider service.CPAAPIKeyProvider
 	loginAttempts     *auth.LoginAttemptLimiter
+	// ipEnricher is the optional IP geo/enrichment layer for the Session
+	// Settings panel. Nil means the feature is disabled (opt-in).
+	ipEnricher *enrichgeo.Enricher
 
 	mu                  sync.Mutex
 	keyOverviewRequests map[string]time.Time
@@ -114,6 +118,14 @@ func NewAuthHandler(config AuthConfig, sessions *auth.SessionManager) *authHandl
 func (h *authHandler) setCPAAPIKeyProvider(provider service.CPAAPIKeyProvider) {
 	if h != nil {
 		h.cpaAPIKeyProvider = provider
+	}
+}
+
+// SetIPEnricher installs the optional IP enrichment layer (see
+// internal/enrichgeo). A nil value (the default) keeps the feature disabled.
+func (h *authHandler) SetIPEnricher(enricher *enrichgeo.Enricher) {
+	if h != nil {
+		h.ipEnricher = enricher
 	}
 }
 

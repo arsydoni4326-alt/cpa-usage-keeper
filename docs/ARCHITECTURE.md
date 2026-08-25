@@ -63,7 +63,8 @@ internal/api ────── Gin router, handlers, auth middleware, DTO mappi
         ├── internal/benchmark ─── production capacity suite (test-only tooling)
         ├── internal/pricing ───── price catalog, resolver, snapshot
         ├── internal/cpa ───────── CPA management API client (HTTP + Redis queue client)
-        ├── internal/auth ──────── session management (memory/persistent)
+        ├── internal/auth ──────── session management (memory/persistent; captures login IP, user-agent, and async activity touch — login_ip/last_seen_ip/user_agent/last_seen_at)
+        ├── internal/enrichgeo ─── opt-in privacy-preserving IP geo/enrichment (stdlib reverse-DNS + TTL cache; private/reserved IPs classified locally)
         ├── internal/backup ────── scheduled SQLite backups
         ├── internal/updatecheck ─ GitHub release check
         ├── internal/entities ──── GORM models (single source of schema truth)
@@ -235,6 +236,16 @@ Key invariants:
   auth-file identities may also carry `subscription` on identity responses.
 - The request-events custom date range is capped at **90 days**
   (`utils/usage/customRange.ts`), and the events default page size is 50.
+- The **Session Settings** card (`SessionSettingsCard.tsx`) was redesigned to
+  display client metadata for each admin session. Each session item now shows
+  a User-Agent block in a dedicated bordered box and a `<dl>` detail grid
+  with **Login IP**, **Recent IP** (shown only when it differs from the
+  login IP), **Last active**, **Login**, and **Expires** fields — laid out
+  with named-area CSS Grid that degrades gracefully from desktop to mobile.
+  Sessions are sorted with the current session pinned first, then by most
+  recent activity (`last_seen_at` descending). Additive migration
+  `20260813_add_auth_session_client_metadata` backfills `last_seen_at` for
+  pre-existing sessions.
 - i18n: **i18next**-backed system (`src/i18n`), locales **en + zh + zh-TW**
   (Traditional Chinese) selected via `LanguageSwitcher`.
 - Structure: `assets`, `components/{ui,usage,test}`, `embed` (CPAMC iframe

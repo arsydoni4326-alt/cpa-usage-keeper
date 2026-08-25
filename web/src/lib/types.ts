@@ -14,6 +14,13 @@ export interface AuthSessionResponse {
 export type AuthManagedSessionKind = 'admin' | 'api_key'
 export type AuthManagedSessionSource = 'standard' | 'embed'
 
+export interface IPGeo {
+  enabled: boolean
+  hostname?: string
+  private?: boolean
+  pending?: boolean
+}
+
 export interface AuthManagedSessionItem {
   id: string
   kind: AuthManagedSessionKind
@@ -27,6 +34,8 @@ export interface AuthManagedSessionItem {
   loginIp?: string
   lastSeenIp?: string
   userAgent?: string
+  loginGeo?: IPGeo
+  lastSeenGeo?: IPGeo
   apiKeyId?: string
   label?: string
   displayKey?: string

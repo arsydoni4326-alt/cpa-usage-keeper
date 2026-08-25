@@ -6,7 +6,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Modal } from '@/components/ui/Modal';
 import { IconCheck, IconPencil, IconX } from '@/components/ui/icons';
 import { useScrollBoundaryContainment } from '@/hooks/useScrollBoundaryContainment';
-import type { AuthManagedSessionItem } from '@/lib/types';
+import type { AuthManagedSessionItem, IPGeo } from '@/lib/types';
 import styles from '@/pages/UsagePage.module.scss';
 
 export interface SessionSettingsCardProps {
@@ -42,6 +42,24 @@ function getSessionDisplayName(session: AuthManagedSessionItem, t: (key: string)
 
 function getSessionClientLabel(session: AuthManagedSessionItem, t: (key: string) => string) {
   return session.userAgent || t('usage_stats.session_settings_unknown_value');
+}
+
+function getSessionIPGeoLabel(geo: IPGeo | undefined, t: (key: string) => string): string | null {
+  if (!geo || !geo.enabled) {
+    return null;
+  }
+  if (geo.private) {
+    return t('usage_stats.session_settings_geo_private');
+  }
+  if (geo.pending) {
+    return t('usage_stats.session_settings_geo_pending');
+  }
+  if (geo.hostname) {
+    return geo.hostname;
+  }
+  // Enrichment is on for a public address but produced no hostname (e.g. no
+  // PTR record, or resolution failed after TTL). Omit a redundant geo row.
+  return null;
 }
 
 interface AdminSessionAliasEditorProps {
@@ -207,14 +225,22 @@ export function SessionSettingsCard({ sessions, loading = false, revokingId = nu
               const aliasSaving = aliasSavingId === session.id;
               const aliasDisabled = Boolean(aliasSavingId && !aliasSaving);
               // 详情项交给 CSS Grid 按可用宽度铺开，额外的最近 IP 不占用固定列。
+              const loginGeoLabel = getSessionIPGeoLabel(session.loginGeo, t);
+              const lastSeenGeoLabel = getSessionIPGeoLabel(session.lastSeenGeo, t);
               const details = [
                 {
                   key: 'login-ip',
                   label: t('usage_stats.session_settings_login_ip'),
                   value: session.loginIp || t('usage_stats.session_settings_unknown_value'),
                 },
+                ...(loginGeoLabel
+                  ? [{ key: 'login-geo', label: t('usage_stats.session_settings_geo'), value: loginGeoLabel }]
+                  : []),
                 ...(session.lastSeenIp && session.lastSeenIp !== session.loginIp
                   ? [{ key: 'last-seen-ip', label: t('usage_stats.session_settings_last_seen_ip'), value: session.lastSeenIp }]
+                  : []),
+                ...(lastSeenGeoLabel && session.lastSeenIp && session.lastSeenIp !== session.loginIp
+                  ? [{ key: 'last-seen-geo', label: t('usage_stats.session_settings_geo'), value: lastSeenGeoLabel }]
                   : []),
                 {
                   key: 'last-seen-at',

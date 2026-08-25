@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"cpa-usage-keeper/internal/auth"
+	"cpa-usage-keeper/internal/enrichgeo"
 	"cpa-usage-keeper/internal/entities"
 	"cpa-usage-keeper/internal/helper"
 	"cpa-usage-keeper/internal/timeutil"
@@ -28,23 +29,25 @@ type authSessionListResponse struct {
 }
 
 type authSessionItemResponse struct {
-	ID          string    `json:"id"`
-	Kind        string    `json:"kind"`
-	Role        auth.Role `json:"role"`
-	Source      string    `json:"source"`
-	Current     bool      `json:"current,omitempty"`
-	LoginAt     string    `json:"loginAt,omitempty"`
-	LastSeenAt  string    `json:"lastSeenAt,omitempty"`
-	ExpiresAt   string    `json:"expiresAt,omitempty"`
-	LoginIP     string    `json:"loginIp,omitempty"`
-	LastSeenIP  string    `json:"lastSeenIp,omitempty"`
-	UserAgent   string    `json:"userAgent,omitempty"`
-	Alias       *string   `json:"alias,omitempty"`
-	APIKeyID    string    `json:"apiKeyId,omitempty"`
-	Label       string    `json:"label,omitempty"`
-	DisplayKey  string    `json:"displayKey,omitempty"`
-	sortSeenAt  time.Time `json:"-"`
-	sortLoginAt time.Time `json:"-"`
+	ID          string                `json:"id"`
+	Kind        string                `json:"kind"`
+	Role        auth.Role             `json:"role"`
+	Source      string                `json:"source"`
+	Current     bool                  `json:"current,omitempty"`
+	LoginAt     string                `json:"loginAt,omitempty"`
+	LastSeenAt  string                `json:"lastSeenAt,omitempty"`
+	ExpiresAt   string                `json:"expiresAt,omitempty"`
+	LoginIP     string                `json:"loginIp,omitempty"`
+	LastSeenIP  string                `json:"lastSeenIp,omitempty"`
+	UserAgent   string                `json:"userAgent,omitempty"`
+	Alias       *string               `json:"alias,omitempty"`
+	LoginGeo    *enrichgeo.Enrichment `json:"loginGeo,omitempty"`
+	LastSeenGeo *enrichgeo.Enrichment `json:"lastSeenGeo,omitempty"`
+	APIKeyID    string                `json:"apiKeyId,omitempty"`
+	Label       string                `json:"label,omitempty"`
+	DisplayKey  string                `json:"displayKey,omitempty"`
+	sortSeenAt  time.Time             `json:"-"`
+	sortLoginAt time.Time             `json:"-"`
 }
 
 func registerAuthSessionManagementRoutes(router gin.IRoutes, handler *authHandler) {
@@ -63,7 +66,34 @@ func (h *authHandler) listManagedSessions(c *gin.Context) {
 	if !ok {
 		return
 	}
-	c.JSON(http.StatusOK, authSessionListResponse{Items: buildAuthSessionItems(records, apiKeysByID, currentAuthSessionHash(c))})
+	items := buildAuthSessionItems(records, apiKeysByID, currentAuthSessionHash(c))
+	h.enrichManagedSessions(items)
+	c.JSON(http.StatusOK, authSessionListResponse{Items: items})
+}
+
+// enrichManagedSessions augments each session item with optional, opt-in,
+// privacy-preserving enrichment for its login/last-seen IP, resolved from the
+// in-memory TTL cache. It never blocks on the network: cache hits are used
+// directly, and cache misses mark the item pending while a background lookup
+// runs.
+func (h *authHandler) enrichManagedSessions(items []authSessionItemResponse) {
+	if h == nil || h.ipEnricher == nil {
+		return
+	}
+	for i := range items {
+		if ip := items[i].LoginIP; ip != "" {
+			if value := h.ipEnricher.Lookup(ip); value.Enabled {
+				value := value
+				items[i].LoginGeo = &value
+			}
+		}
+		if ip := items[i].LastSeenIP; ip != "" && ip != items[i].LoginIP {
+			if value := h.ipEnricher.Lookup(ip); value.Enabled {
+				value := value
+				items[i].LastSeenGeo = &value
+			}
+		}
+	}
 }
 
 func (h *authHandler) updateManagedSessionAlias(c *gin.Context) {

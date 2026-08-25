@@ -279,6 +279,61 @@ key's data.
   version with
   `-ldflags -X cpa-usage-keeper/internal/version.Version=${VERSION}`.
 
+### 6.8 Session Client Metadata and Activity Tracking
+
+Password-authenticated admin sessions now carry optional client metadata:
+
+- **Login-time capture.** On password login, the session is stamped with:
+  - `login_ip` — the client IP, resolved from the **rightmost** parseable
+    entry in the `X-Forwarded-For` header (entries are trimmed; IPv4-mapped
+    IPv6 is unmapped). Falls back to Gin's `c.ClientIP()` when no valid XFF
+    entry exists, which is the trusted-proxy-aware IP. This field is for
+    **presentation only** — unlike login rate limiting (which keys on
+    `c.ClientIP()` hardened by `TRUSTED_PROXY_CIDRS`), the session IP
+    capture does not gate authentication, rate limits, or authorization.
+  - `user_agent` — the raw `User-Agent` HTTP header string at login time.
+- **Activity "touch" (best-effort).** On any authenticated request, the
+  session's `last_seen_at` and `last_seen_ip` are updated asynchronously.
+  If the write fails, the in-memory session remains usable — activity
+  tracking is a non-blocking, presentation-only concern.
+- **Session sorting.** In the managed sessions list, the current session is
+  pinned first. Remaining sessions are sorted by `last_seen_at` descending
+  (most recently active first), so stale sessions sink naturally to the
+  bottom.
+- **Retroactive backfill.** The additive migration
+  `20260813_add_auth_session_client_metadata` sets `last_seen_at = created_at`
+  for pre-existing rows where `last_seen_at IS NULL`, so old sessions
+  immediately have a meaningful "last active" value.
+- **Best-effort guarantee.** Activity persistence must never block
+  authentication, session validation, or any request pipeline. A slow or
+  failing DB write is silently tolerated — the session stays valid and
+  the metadata is simply not updated until the next successful touch.
+
+### 6.9 Login-IP Geo/Enrichment (opt-in)
+
+Optional, privacy-preserving enrichment of `login_ip` / `last_seen_ip` for
+the Session Settings panel. Controlled by `IP_ENRICHMENT_ENABLED` (default
+`false`):
+
+- **Privacy-first provider.** The only built-in provider is reverse-DNS (PTR)
+  via the standard library. No third-party service is contacted and no data
+  leaves the host beyond an ordinary DNS query. Private, loopback, link-local,
+  documentation (RFC 5737 / 2001:db8), CGNAT (100.64/10), benchmark
+  (198.18/15), limited-broadcast, and other reserved addresses are classified
+  locally as `private` and are never resolved.
+- **Non-blocking, async.** The `GET /api/v1/auth/sessions` endpoint never
+  waits on DNS. A cache hit is returned immediately; a cache miss reserves the
+  address and schedules a single background resolution, returning
+  `pending: true`. The in-memory cache applies `IP_ENRICHMENT_TTL` (default
+  `24h`) and per-lookup `IP_ENRICHMENT_TIMEOUT` (default `2s`).
+- **Response shape.** Each session item may carry `loginGeo` / `lastSeenGeo`,
+  each an object: `{ enabled, hostname?, private?, pending? }`. Because the
+  fields are `omitempty`, responses are unchanged while the feature is off, so
+  the change is backward-compatible for existing clients.
+- **Presentation only.** Enrichment never factors into authentication, rate
+  limiting, or authorization — it is displayed in the Session Settings card
+  only.
+
 ---
 
 ## 7. Security Requirements
@@ -286,6 +341,10 @@ key's data.
 - **Sessions.** HttpOnly cookie transport; a per-tab header token is
   supported only as the CPAMC iframe embed fallback. Sessions are in-memory,
   or persisted in SQLite (`auth_sessions`) when password auth is enabled.
+  Sessions now capture `login_ip`, `last_seen_ip`, `user_agent`, and
+  `last_seen_at` in SQLite, adding client metadata alongside the session
+  hash. Like all raw data, the SQLite database and its unencrypted backups
+  contain these original values.
 - **Login hardening.** Failed-attempt counters and rate limiting on both
   admin and API-key login endpoints; viewer API endpoints are rate-limited
   per viewer session.

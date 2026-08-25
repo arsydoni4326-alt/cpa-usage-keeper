@@ -14,6 +14,7 @@ import (
 	"cpa-usage-keeper/internal/auth"
 	"cpa-usage-keeper/internal/config"
 	"cpa-usage-keeper/internal/cpa"
+	"cpa-usage-keeper/internal/enrichgeo"
 	"cpa-usage-keeper/internal/logging"
 	"cpa-usage-keeper/internal/poller"
 	"cpa-usage-keeper/internal/pricing"
@@ -323,7 +324,14 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 		FrameAncestorOrigins: frameAncestorOrigins(cfg),
 		TrustedProxyCIDRs:    cfg.TrustedProxyCIDRs,
 	}
+	// 可选的隐私保护登录 IP 反解/增强层（默认关闭，opt-in）。
+	ipEnricher := enrichgeo.NewEnricher(enrichgeo.Options{
+		Enabled: cfg.IPEnrichmentEnabled,
+		TTL:     cfg.IPEnrichmentTTL,
+		Timeout: cfg.IPEnrichmentTimeout,
+	}, nil)
 	authHandler := api.NewAuthHandler(authConfig, sessionManager)
+	authHandler.SetIPEnricher(ipEnricher)
 
 	return &App{
 		Config: &cfg,
@@ -357,13 +365,13 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 			cfg.AppBasePath,
 			api.OptionalProviders{
 				UsageIdentity:      usageIdentityService,
-				ErrorEvents:   		errorEventService,
+				ErrorEvents:        errorEventService,
 				Quota:              quotaService,
 				CPAAPIKeys:         cpaAPIKeyService,
 				AuthFiles:          authFilesManagementService,
 				RequestLogs:        requestLogService,
 				Ranking:            rankingService,
-				LocalRanking:  		localRankingService,
+				LocalRanking:       localRankingService,
 				ProviderModelGraph: providerModelGraphService,
 				Status: api.StatusRouteConfig{
 					CPAPublicURL:               cfg.CPAPublicURL,

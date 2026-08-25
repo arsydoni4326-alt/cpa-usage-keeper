@@ -32,6 +32,11 @@ the foundation every later phase builds on.
 - **0.5 Architecture decision records (ADRs).** ⬜
   - Start `docs/adr/` for consequential decisions (single-writer SQLite,
     checkpoint aggregation, archive design, embed transports).
+- **0.6 Trusted-proxy parity tests and poisoning-prevention contract.** ⬜
+  - Extend session IP-capture tests to cover multi-hop `X-Forwarded-For`
+    sequences, `TRUSTED_PROXY_CIDRS` boundary cases, and mismatched
+    `NUM_PROXIES` semantics. Document the exact poisoning-prevention contract
+    in the SPECIFICATION security notes (follow-up to upstream PR #423).
 
 ---
 
@@ -59,6 +64,15 @@ of the system that already work.
 - **1.6 Chaos/recovery test matrix.** ⬜
   - Scripted kill/restart scenarios asserting exactly-once aggregation and
     no inbox loss (documented pass criteria per scenario).
+- **1.7 Session pruning policy.** ⬜
+  - Leverage the reliable `last_seen_at` field (including backfilled rows) to
+    introduce an optional auto-revoke/cleanup policy for sessions idle past a
+    configurable TTL, superseding the fixed `AUTH_SESSION_TTL` for the
+    in-memory session sweep (follow-up to upstream PR #423).
+- **1.8 Touch coalescing/backpressure for async activity writer.** ⬜
+  - Formalize the async session-activity writer with a bounded queue,
+    drop-oldest policy, and periodic flush so a burst of touches under load
+    cannot grow an unbounded queue in memory (follow-up to upstream PR #423).
 
 ---
 
@@ -125,6 +139,32 @@ of the system that already work.
     expanded-plan and binary SHA-256 digests so results stay attributable to
     an exact, reproducible build.
 
+### Auth Session & Client Metadata Enhancements (new, from upstream PR #423)
+
+*Derived from the session client-activity tracking merge — recommended
+follow-ups for richer session insight and manageability.*
+
+- **2.15 Login-IP geo/enrichment layer.** ✅ done 2026-08-26 → [PHASE_2_15_PLAN.md](PHASE_2_15_PLAN.md)
+  - Optional reverse-DNS or privacy-preserving geo lookup keyed by
+    `login_ip` / `last_seen_ip` for the Session Settings panel (opt-in,
+    async, cache with TTL). Implemented as `internal/enrichgeo` (stdlib-only,
+    opt-in via `IP_ENRICHMENT_ENABLED`, async PTR resolution, in-memory TTL
+    cache, private/reserved IPs classified locally). Enriches the session
+    list with `loginGeo` / `lastSeenGeo`; frontend Session Settings card
+    renders enriched labels in en/zh/zh-TW.
+- **2.16 Session activity history table.** ⬜
+  - Rather than overwriting `last_seen_ip` / `last_seen_at`, record an
+    append-only per-session activity trail (timestamps + IP + UA), exposing
+    "first login", "last login", and unusual-IP transitions; aligns with
+    the existing usage-events archive pattern.
+- **2.17 Embed-session metadata caption.** ⬜
+  - Propagate login IP / last-seen for CPAMC embed sessions so the session
+    list is equally informative for the header-token session fallback path.
+- **2.18 Frontend a11y & layout polish for session metadata.** ⬜
+  - Test the `auto-fit` detail grid at narrow widths, ensure `aria` labeling
+    for the `<dl>` rows, and consider a copy-to-clipboard action for the
+    User-Agent value.
+
 ---
 
 ## Phase 3 — Alerts, Metrics & Integrations
@@ -148,6 +188,12 @@ of the system that already work.
 - **3.5 SSO / OAuth2 login.** ⬜
   - Optional external identity providers (OIDC) alongside password auth, with
     role mapping to admin.
+- **3.6 Anomalous-access detection signals.** ⬜
+  - Surface sessions where the client metadata (IP, User-Agent) has changed
+    relative to the login baseline, for example `LoginIP != LastSeenIP && UA
+    changed`. Keep it deterministic and non-blocking; use the existing
+    session-activity fields without adding extra upstream calls (follow-up
+    to upstream PR #423).
 
 ---
 

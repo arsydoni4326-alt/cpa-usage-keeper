@@ -28,6 +28,9 @@ const translations: Record<string, string> = {
   'usage_stats.session_settings_last_seen_at': 'Last active',
   'usage_stats.session_settings_login_at': 'Login',
   'usage_stats.session_settings_expires_at': 'Expires',
+  'usage_stats.session_settings_geo': 'IP location',
+  'usage_stats.session_settings_geo_private': 'Private / local network',
+  'usage_stats.session_settings_geo_pending': 'Resolving…',
   'usage_stats.session_settings_logout_one': 'Sign out this session',
   'common.logout': 'Sign out',
 }
