@@ -5,17 +5,27 @@ RUN set -eux;   npm install;   npm ci
 COPY ./web/ ./
 RUN npm run build
 
-FROM --platform=$BUILDPLATFORM golang:alpine AS go-builder
+FROM --platform=$BUILDPLATFORM golang:trixie AS go-builder
 WORKDIR /app
-RUN apk add --no-cache build-base
+# Define the build arguments passed from GitHub Actions
+ARG APP_VERSION=v0.0.0
+ARG APP_COMMIT=unknown
+RUN set -eux;     apt update -y && apt-get install -y --no-install-recommends       ca-certificates       build-essential       git;     apt-mark showmanual > /savedAptMark.txt
+RUN set -eux;   apt-mark auto '.*' > /dev/null ;	apt-mark manual $(cat /savedAptMark.txt) > /dev/null; 	apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false;     apt-get clean;     apt-get autoclean;     rm -rf /var/lib/apt/lists/*
 COPY ./go.mod ./go.sum ./
 RUN go mod download
 COPY ./cmd/ ./cmd/
 COPY ./internal/ ./internal/
 COPY --from=web-builder /app/web/dist ./web/dist
 COPY ./web/static.go ./web/static.go
-ARG VERSION=dev
-RUN CGO_ENABLED=1 GOOS=linux go build     -ldflags="-s -w -X cpa-usage-keeper/internal/version.Version=${VERSION}"     -o /out/cpa-usage-keeper ./cmd/server/main.go
+RUN set -eux;   \
+    export BUILD_DATE="$(date +%Y-%m-%d)";   \
+    CGO_ENABLED=1 \
+        GOOS=linux \
+        go build \
+            -ldflags="-s -w -X cpa-usage-keeper/internal/version.Version=${APP_VERSION} -X 'main.Commit=${APP_COMMIT}' -X 'main.BuildDate=${BUILD_DATE}'" \
+            -o /out/cpa-usage-keeper ./cmd/server/main.go; \
+    chmod +x /out/cpa-usage-keeper
 
 FROM --platform=$BUILDPLATFORM alpine:3.20
 WORKDIR /
