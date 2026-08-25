@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 const usagePageSource = readFileSync(new URL('../UsagePage.tsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
 describe('UsagePage CPAMC embed behavior', () => {
-  it('detects CPAMC embed mode for per-tab session fallback', () => {
-    expect(usagePageSource).toContain("import { isCPAMCEmbed } from '@/embed/cpamcEmbed';");
+  it('does not render the Back to CPA link in CPAMC embed mode', () => {
+    expect(usagePageSource).toMatch(/import \{[^}]*\bisCPAMCEmbed\b[^}]*\} from '@\/embed\/cpamcEmbed';/);
     expect(usagePageSource).toMatch(/const isEmbeddedInCPAMC = isCPAMCEmbed\(\);/);
   });
 
