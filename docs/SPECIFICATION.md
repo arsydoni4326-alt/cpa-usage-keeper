@@ -167,6 +167,7 @@ the SPA/embedding assets are public; everything else requires a session
 | `GET /api/models/used` | Models observed in usage. |
 | `GET /api/pricing` (+`/rules`, `/sync/preview`, `/batch/:model`) | Price catalog, rule CRUD, sync preview, batch/single-model mutation. |
 | `GET/POST /api/quota/...` | Quota reads, refresh, auto-refresh settings/cache, raw payload inspection, per-provider and global credit resets. Quota responses may include a response-level `subscription` object (`{provider, plan, tierId?, tierName?}`) when the provider exposes subscription metadata (see §6.5). |
+| `GET /api/quota/history/:auth_index` | Codex quota efficiency history for an Auth File. Returns the real window series (primary/secondary), current-cycle Token/USD-per-percentage-point chart data, and completed-cycle details from the last 30 days. Cost is computed dynamically against the current pricing snapshot; no tokens or costs are persisted in the history tables. Optional query: `window_role`, `window_seconds`. |
 | `GET /api/provider-model-gnn` | Provider ↔ model relationship as a Graph Neural Network (GNN), proxied from the CPA `/v0/management/config` endpoint through a whitelisted-field DTO (secrets never parsed — see §7). The GNN exposes current structure and optional learned node/edge state. |
 | `GET /api/update/check` | GitHub release check (suppressed for dev builds). |
 
