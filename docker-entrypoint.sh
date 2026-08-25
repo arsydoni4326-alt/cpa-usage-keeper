@@ -29,4 +29,4 @@ case "${LOG_FILE_ENABLED:-true}" in
     ;;
 esac
 
-exec su-exec app "$@"
+exec gosu app "$@"

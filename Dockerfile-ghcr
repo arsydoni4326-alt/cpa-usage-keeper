@@ -10,8 +10,19 @@ WORKDIR /app
 # Define the build arguments passed from GitHub Actions
 ARG APP_VERSION=v0.0.0
 ARG APP_COMMIT=unknown
-RUN set -eux;     apt update -y && apt-get install -y --no-install-recommends       ca-certificates       build-essential       git;     apt-mark showmanual > /savedAptMark.txt
-RUN set -eux;   apt-mark auto '.*' > /dev/null ;	apt-mark manual $(cat /savedAptMark.txt) > /dev/null; 	apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false;     apt-get clean;     apt-get autoclean;     rm -rf /var/lib/apt/lists/*
+RUN set -eux;     \
+    apt update -y && \
+    apt install -y --no-install-recommends \
+        ca-certificates       \
+        build-essential;     \
+    apt-mark showmanual > /savedAptMark.txt
+RUN set -eux;   \
+    apt-mark auto '.*' > /dev/null ;	\
+    apt-mark manual $(cat /savedAptMark.txt) > /dev/null; 	\
+    apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false;     \
+    apt-get clean;     \
+    apt-get autoclean;     \
+    rm -rf /var/lib/apt/lists/*
 COPY ./go.mod ./go.sum ./
 RUN go mod download
 COPY ./cmd/ ./cmd/
@@ -27,14 +38,36 @@ RUN set -eux;   \
             -o /out/cpa-usage-keeper ./cmd/server/main.go; \
     chmod +x /out/cpa-usage-keeper
 
-FROM --platform=$BUILDPLATFORM alpine:3.20
+FROM --platform=$BUILDPLATFORM debian:trixie-slim
 WORKDIR /
 ENV TZ="Asia/Jakarta"
-RUN [ ! -f /etc/localtime ] && ln -s /usr/share/zoneinfo/$TZ /etc/localtime;     echo $TZ > /etc/timezone
-RUN apk add --no-cache ca-certificates tzdata su-exec 	&& addgroup -S app 	&& adduser -S -G app app 	&& mkdir -p /data 	&& chown -R app:app /data
+RUN set -eux; \
+    [ ! -f /etc/localtime ] && ln -s /usr/share/zoneinfo/$TZ /etc/localtime;     \
+    echo $TZ > /etc/timezone
+RUN set -eux; \
+    apt update -y; \
+    apt install --no-install-recommends -y \ 
+        gosu \
+        ca-certificates \
+        tzdata \
+    apt-mark showmanual > /savedAptMark.txt
+RUN set -eux;   \
+    apt-mark auto '.*' > /dev/null ;	\
+    apt-mark manual $(cat /savedAptMark.txt) > /dev/null; 	\
+    apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false;     \
+    apt-get clean;     \
+    apt-get autoclean;     \
+    rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    addgroup -S app; \
+    adduser -S -G app app; \
+    mkdir -p /data; \
+    chown -R app:app /data
 COPY --from=go-builder /out/cpa-usage-keeper /app/cpa-usage-keeper
 COPY ./docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh 	&& chmod +x /usr/local/bin/docker-entrypoint.sh
+RUN set -eux; \
+    sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh 	&& \
+    chmod +x /usr/local/bin/docker-entrypoint.sh
 VOLUME ["/data"]
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD wget -q --spider "http://127.0.0.1:${APP_PORT:-8080}${APP_BASE_PATH:-}/healthz" || exit 1
