@@ -420,6 +420,7 @@ For cross-origin CPAMC embedding, `CPA_PUBLIC_URL` must be a complete `http://` 
 | `IP_ENRICHMENT_ENABLED` | No | `false` | Opt-in: enrich Session Settings `login_ip`/`last_seen_ip` with privacy-preserving reverse-DNS/private-network info |
 | `IP_ENRICHMENT_TTL` | No | `24h` | Cache lifetime for IP enrichment results |
 | `IP_ENRICHMENT_TIMEOUT` | No | `2s` | Per-lookup timeout for IP enrichment |
+| `API_KEY_VIEWER_LOCAL_RANKING_ENABLED` | No | `false` | Allow API Key viewers to read Local Ranking; Community Ranking remains read-only |
 
 ### Timezone And Request Behavior
 

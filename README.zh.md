@@ -401,6 +401,7 @@ cp .env.example .env
 | `IP_ENRICHMENT_ENABLED` | 否 | `false` | 可选：为 Session Settings 的 `login_ip`/`last_seen_ip` 增加隐私保护的反向 DNS/内网标记信息 |
 | `IP_ENRICHMENT_TTL` | 否 | `24h` | IP 增强结果缓存时长 |
 | `IP_ENRICHMENT_TIMEOUT` | 否 | `2s` | 单次 IP 增强查询超时 |
+| `API_KEY_VIEWER_LOCAL_RANKING_ENABLED` | 否 | `false` | 允许 API Key 登录用户只读查看本地排行；Community 排行始终只读 |
 
 ### 时区与请求行为
 
