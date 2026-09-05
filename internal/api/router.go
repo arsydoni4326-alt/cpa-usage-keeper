@@ -50,16 +50,16 @@ type StatusRouteConfig struct {
 }
 
 type OptionalProviders struct {
-	UsageIdentity      	service.UsageIdentityProvider
-	ErrorEvents   		service.ErrorEventProvider
-	Quota              	QuotaProvider
-	CPAAPIKeys         	service.CPAAPIKeyProvider
-	AuthFiles          	service.AuthFilesManagementProvider
-	RequestLogs        	service.RequestLogProvider
-	Ranking            	rankinghttpapi.Provider
-	LocalRanking  		rankinghttpapi.LocalProvider
-	Status             	StatusRouteConfig
-	ProviderModelGraph 	service.ProviderModelGNNProvider
+	UsageIdentity      service.UsageIdentityProvider
+	ErrorEvents        service.ErrorEventProvider
+	Quota              QuotaProvider
+	CPAAPIKeys         service.CPAAPIKeyProvider
+	AuthFiles          service.AuthFilesManagementProvider
+	RequestLogs        service.RequestLogProvider
+	Ranking            rankinghttpapi.Provider
+	LocalRanking       rankinghttpapi.LocalProvider
+	Status             StatusRouteConfig
+	ProviderModelGraph service.ProviderModelGNNProvider
 }
 
 func NewRouter(

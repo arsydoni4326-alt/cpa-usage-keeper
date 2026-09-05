@@ -75,7 +75,6 @@ CPA Usage Keeper is a standalone persistence and analytics dashboard for [CLIPro
 - Monitor Auth Files and AI Providers with usage metrics, health inspection, quota refresh, and provider subscription plan badges (Claude, Codex, Antigravity)
 - Inspect Codex quota efficiency history with Token/USD per-percentage-point metrics, current-cycle charts, and completed-cycle details in the credential drawer
 - Visualize provider ↔ model relationships as an interactive **Graph Neural Network (GNN)**, sourced from the CPA management config, enabling advanced analytics such as structural learning and prediction
-
 - Opt into community rankings by overall score, tokens, requests, cache rate, average TTFT/latency, or peak TPM/RPM
 - Open a read-only usage view scoped to an individual CPA API Key
 - Sync CPA Auth Files, API Keys, and AI Providers automatically, and maintain model pricing for cost estimates
@@ -437,6 +436,7 @@ Scheduled Auth Files quota refresh is configured from the gear button in the Aut
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
 | `QUOTA_REFRESH_WORKER_LIMIT` | No | `10` | Maximum Auth Files quota refresh concurrency for manual and scheduled refresh, capped at `100` |
+| `QUOTA_UPSTREAM_RESPONSES_ENABLED` | No | `false` | Cache each credential's latest raw upstream quota responses and return them through quota task/cache APIs for browser Network debugging; responses may contain account data |
 
 ### Redis Queue Advanced Settings
 
