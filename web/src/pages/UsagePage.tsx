@@ -1027,7 +1027,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     if (topNotice.kind === 'success') return styles.updateCheckToastSuccess;
     return styles.updateCheckToastInfo;
   })() : '';
-  const loadApiKeyOptions = useCallback(async () => {
+const loadApiKeyOptions = useCallback(async () => {
     apiKeyOptionsRequestControllerRef.current?.abort();
     const controller = new AbortController();
     apiKeyOptionsRequestControllerRef.current = controller;
