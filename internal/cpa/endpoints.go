@@ -13,6 +13,7 @@ const (
 	cpaManagementUsageQueueEndpoint          = "/v0/management/usage-queue"
 	cpaManagementConfigEndpoint              = "/v0/management/config"
 	cpaManagementAPICallEndpoint             = "/v0/management/api-call"
+	cpaManagementResetQuotaEndpoint          = "/v0/management/reset-quota"
 	cpaManagementRequestLogByIDEndpoint      = "/v0/management/request-log-by-id"
 	cpaModelsEndpoint                        = "/v1/models"
 
