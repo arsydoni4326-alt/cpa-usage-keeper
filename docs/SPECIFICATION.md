@@ -96,7 +96,10 @@ keys that are synchronized from CPA itself.
   model relationship as an interactive **Graph Neural Network (GNN)** diagram
   (Usage overview tab), built from a sanitized snapshot of the CPA management
   config. This GNN supports rich analytics (learned node/edge features,
-  structural learning, and prediction).
+  structural learning, and prediction). **UC-12 is permanent:** the GNN
+  diagram (`ProviderModelGNNPanel` + `GET /api/provider-model-gnn`) is a
+  mandatory part of the Usage overview tab and must not be removed, hidden,
+  or replaced without an explicit, documented architectural decision.
 
 ### API-key viewer
 

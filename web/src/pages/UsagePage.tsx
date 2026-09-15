@@ -783,6 +783,10 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   const apiKeyFilterReady = apiKeyFilterRequestState.ready;
   const requestApiKeyId = apiKeyFilterRequestState.apiKeyId;
   const [status, setStatus] = useState<StatusResponse | null>(null);
+  // Restored with the shared glass dashboard header: the "Back to CPA" link
+  // target. Kept in sync with UsagePageCPAMCEmbed / UsagePage.logic tests,
+  // which assert the DashboardHeader backToCPA wiring exists.
+  const cpaManagementURL = useMemo(() => getBackToCPALinkURL(status), [status]);
   const [versionInfo, setVersionInfo] = useState<VersionResponse | null>(null);
   const apiKeyOptionsRequestControllerRef = useRef<AbortController | null>(null);
   const credentialSectionVisibility = getCredentialSectionVisibility(activeTab);
