@@ -202,8 +202,20 @@ Key invariants:
 - Charts: **Chart.js 4** via `react-chartjs-2` (`src/lib/chartjs.ts`).
 - Graphs: the Usage overview tab hosts an interactive **Graph Neural Network
   (GNN)** diagram of the provider ↔ model relationship
-  (`ProviderModelGNNPanel`), fed by `GET /api/provider-model-gnn`. Two
-  renderers are switchable at runtime from a header toggle:
+  (`ProviderModelGNNPanel`), fed by `GET /api/provider-model-gnn`.
+
+  > **Permanence requirement:** the Provider Model GNN diagram is a **core,
+  > permanent feature** of the Usage overview tab. It must always remain
+  > mounted on the overview tab (`UsagePage.tsx`), backed by the
+  > `GET /api/provider-model-gnn` route
+  > (`internal/api/provider_model_graph.go` →
+  > `internal/service/provider_model_gnn.go`). Do **not** remove, rename,
+  > hide, or replace it (or either of its two renderers) without an explicit,
+  > documented architectural decision approved by the maintainers and
+  > recorded in `docs/ARCHITECTURE.md`, `docs/SPECIFICATION.md` (UC-12), and
+  > `session.md`.
+
+  Two renderers are switchable at runtime from a header toggle:
   - **Grid (xyflow)** — `@xyflow/react` (React Flow) compact two-column grid
     layout; labels prefer the model alias, Gemini entries merge into a
     single node, oauth aliases are sorted.

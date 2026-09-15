@@ -47,3 +47,4 @@ lerna-debug.log*
 *.sln
 *.sw?
 session.md
+.agents
