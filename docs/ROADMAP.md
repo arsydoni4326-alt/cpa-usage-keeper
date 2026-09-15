@@ -5,6 +5,15 @@
 > overlap, but steps within a phase are roughly sequential. Nothing here is a
 > commitment — items may be re-scoped as the project evolves.
 
+> **⚠️ Policy reminder — Provider Model GNN permanence.** The
+> `ProviderModelGNNPanel` diagram (Usage overview tab,
+> `GET /api/provider-model-gnn`) is protected by a project permanence
+> contract: it must never be removed, hidden, or replaced without a
+> documented architectural decision approved by the maintainers. Any
+> refactoring or redesign touching it must preserve the feature and record
+> the decision in `docs/ARCHITECTURE.md` (§7), `docs/SPECIFICATION.md`
+> (UC-12), and `session.md`.
+
 Legend: ⬜ not started · 🟡 in progress · ✅ done
 
 ---
