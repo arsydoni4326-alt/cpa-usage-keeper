@@ -10,7 +10,7 @@ import { buildUsageChartTooltipStyle, getUsageChartTheme, toUsageChartGradientFi
 import usageStyles from '@/pages/UsagePage.module.scss';
 import styles from './RealtimeInsights.module.scss';
 
-const FAILURE_COLOR = { base: '#b91c1c', light: '#fca5a5' };
+const FAILURE_COLOR = { base: '#b91c1c', light: '#ef4444' };
 const CACHE_RATE_COLOR = '#14b8a6';
 const FAILURE_RATE_COLOR = '#f97316';
 const ratio = (value: number, denominator: number) => denominator > 0 ? value / denominator * 100 : null;
@@ -51,7 +51,7 @@ export function buildRealtimeCacheData(points: RealtimeCacheLevelPoint[], labels
     { type: 'bar', label: t('usage_stats.insights_uncached'), data: points.map(p => Math.max(0, p.input_tokens - p.cache_read_tokens - p.cache_creation_tokens)), backgroundColor: context => toUsageChartGradientFill(context, COLORS.input), borderColor: COLORS.input.base, stack: 'input', order: 2 },
     { type: 'bar', label: t('usage_stats.comparison_cache_read'), data: points.map(p => p.cache_read_tokens), backgroundColor: context => toUsageChartGradientFill(context, COLORS.cacheRead), borderColor: COLORS.cacheRead.base, stack: 'input', order: 2 },
     { type: 'bar', label: t('usage_stats.comparison_cache_write'), data: points.map(p => p.cache_creation_tokens), backgroundColor: context => toUsageChartGradientFill(context, COLORS.cacheWrite), borderColor: COLORS.cacheWrite.base, stack: 'input', order: 2 },
-    { type: 'line', label: t('usage_stats.comparison_cache'), data: points.map(p => p.cache_read_rate ?? null), borderColor: CACHE_RATE_COLOR, backgroundColor: CACHE_RATE_COLOR, yAxisID: 'rate', borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: .3, order: 1 },
+    { type: 'line', label: t('usage_stats.comparison_cache'), data: points.map(p => p.cache_read_rate ?? 0), borderColor: CACHE_RATE_COLOR, backgroundColor: CACHE_RATE_COLOR, yAxisID: 'rate', borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: .3, order: 1 },
   ] };
 }
 
