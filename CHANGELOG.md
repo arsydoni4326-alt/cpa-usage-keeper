@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [v1.16.0-arsydoni4326-alt] — 2026-09-21
+
 ### Changed
 - **Provider Model GNN domain isolation** (`feature/model-gnn-domain`): the
   entire GNN feature moved into a dedicated, self-contained domain so future
