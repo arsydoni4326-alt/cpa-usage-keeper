@@ -16,11 +16,11 @@ import { CREDENTIAL_PAGES_REFRESH_INTERVAL_MS } from '@/components/usage/credent
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useThemeStore } from '@/stores';
+import { ProviderModelGNNPanel } from '@/features/model-gnn';
 import {
   StatCards,
   RecentActivityPanel,
   OverviewRealtimePanel,
-  ProviderModelGNNPanel,
   AnalysisPanel,
   ApiKeySettingsCard,
   SessionSettingsCard,

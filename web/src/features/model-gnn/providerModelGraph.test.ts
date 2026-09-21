@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { ProviderModelGraphResponse } from '@/lib/types'
+import type { ProviderModelGraphResponse } from './types'
 
 import { buildProviderModelGraph } from './providerModelGraph'
 

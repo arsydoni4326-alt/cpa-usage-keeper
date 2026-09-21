@@ -1,7 +1,9 @@
 export { StatCards } from './StatCards';
 export { DailyAverageCard } from './DailyAverageCard';
 export { OverviewRealtimePanel } from './OverviewRealtimePanel';
-export { ProviderModelGNNPanel } from './ProviderModelGNNPanel';
+// Note: ProviderModelGNNPanel lives in its own permanent feature domain at
+// @/features/model-gnn (see docs/ARCHITECTURE.md §7). It is intentionally NOT
+// re-exported here so the whole domain stays independently mergeable.
 // Note: ProviderModelReagraphPanel is intentionally NOT re-exported here — it is
 // lazy-loaded by ProviderModelGNNPanel so the WebGL/three.js code chunks separately.
 export { AnalysisPanel } from './analysis';

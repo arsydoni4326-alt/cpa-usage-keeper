@@ -15,6 +15,7 @@ import (
 	"cpa-usage-keeper/internal/config"
 	"cpa-usage-keeper/internal/cpa"
 	"cpa-usage-keeper/internal/enrichgeo"
+	"cpa-usage-keeper/internal/gnn"
 	"cpa-usage-keeper/internal/logging"
 	"cpa-usage-keeper/internal/poller"
 	"cpa-usage-keeper/internal/pricing"
@@ -307,7 +308,7 @@ func NewWithConfig(cfg config.Config) (*App, error) {
 	})
 	cpaAPIKeyService := service.NewCPAAPIKeyService(db)
 	authFilesManagementService := service.NewAuthFilesManagementService(cpaClient)
-	providerModelGraphService := service.NewProviderModelGraphService(cpaClient)
+	providerModelGraphService := gnn.NewService(cpaClient)
 	// 单条凭证开关成功后立即与 CPA 对齐；runner 自带合并窗口和 nil 保护。
 	credentialStatusService := service.NewCredentialStatusService(db, cpaClient, metadataSyncRunner)
 	if cfg.TLSSkipVerify {
