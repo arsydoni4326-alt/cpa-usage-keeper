@@ -61,3 +61,9 @@ All notable changes to this project are documented here.
 ### Validation
 - `tsc --noEmit` clean; `vitest run` 177 files / 1450 tests pass.
 - `go build ./...` verified.
+- Domain-isolation validation (`feature/model-gnn-domain`): `go build ./...`
+  clean; `go test ./cmd/... ./internal/...` all packages pass (incl. the
+  relocated `internal/gnn` tests); frontend `typecheck` clean; `vitest run`
+  185 files / 1506 tests pass; `eslint` clean; `vite build` succeeds with the
+  Reagraph WebGL chunk still lazy-loaded separately
+  (`ProviderModelReagraphPanel` chunk, ~378 kB gzip).
