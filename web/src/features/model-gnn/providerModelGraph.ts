@@ -4,7 +4,7 @@ import type { Edge, Node } from '@xyflow/react'
 import type {
 	ProviderModelGNNGraph,
 	ProviderModelGraphResponse,
-} from '@/lib/types'
+} from './types'
 
 // label is a string when built; the panel may swap it for a styled React node.
 interface GraphModelDatum extends Record<string, unknown> {

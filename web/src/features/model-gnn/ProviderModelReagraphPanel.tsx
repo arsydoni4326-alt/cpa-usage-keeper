@@ -9,8 +9,8 @@ import {
 	type InternalGraphNode,
 	type Theme,
 } from 'reagraph'
-import { fetchProviderModelGNN } from '@/lib/api'
-import type { ProviderModelGraphResponse } from '@/lib/types'
+import { fetchProviderModelGNN } from './api'
+import type { ProviderModelGraphResponse } from './types'
 import {
 	buildProviderModelGraph,
 	type ProviderGraphEdge,

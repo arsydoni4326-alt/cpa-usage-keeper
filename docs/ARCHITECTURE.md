@@ -48,8 +48,11 @@ internal/api ────── Gin router, handlers, auth middleware, DTO mappi
         │
         ├── internal/service ───── business services (usage, request logs,
         │                          identities, CPA API keys, auth files,
-        │                          pricing, metadata sync, token processor,
-        │                          provider-model Graph Neural Network (GNN))
+        │                          pricing, metadata sync, token processor)
+        ├── internal/gnn ────────── Provider Model GNN feature domain (self-
+        │                          contained: sanitized provider↔model graph,
+        │                          GNN node/edge features + embeddings; HTTP
+        │                          surface in internal/gnn/httpapi)
         ├── internal/poller ────── ingestion: subscribe/pull sources, inbox
         │                          writer, ingest/process runners, the
         │                          serial usage aggregation runner
@@ -107,7 +110,7 @@ constructor builds components in this strict order (see
     the `poller.NewRedisPoller` facade.
 12. Optional `DatabaseBackupRunner`.
 13. Domain services: Usage, RequestLog, UsageIdentity, CPAAPIKey,
-    AuthFilesManagement, Pricing, ProviderModelGNN (sanitized proxy of the
+    AuthFilesManagement, Pricing, `gnn.NewService` (sanitized proxy of the
     CPA `/v0/management/config` — the DTO in
     `internal/cpa/dto/providerconfig` decodes only whitelisted fields;
     `api-key`/`base-url`/`headers` are never parsed; internally, this
@@ -208,12 +211,24 @@ Key invariants:
   > permanent feature** of the Usage overview tab. It must always remain
   > mounted on the overview tab (`UsagePage.tsx`), backed by the
   > `GET /api/provider-model-gnn` route
-  > (`internal/api/provider_model_graph.go` →
-  > `internal/service/provider_model_gnn.go`). Do **not** remove, rename,
+  > (`internal/gnn/httpapi/routes.go` →
+  > `internal/gnn/gnn.go`). Do **not** remove, rename,
   > hide, or replace it (or either of its two renderers) without an explicit,
   > documented architectural decision approved by the maintainers and
   > recorded in `docs/ARCHITECTURE.md`, `docs/SPECIFICATION.md` (UC-12), and
   > `session.md`.
+
+  > **Domain isolation:** the entire feature lives in a dedicated,
+  > self-contained domain so upstream merges cannot remove or replace it:
+  > backend `internal/gnn` (+ `internal/gnn/httpapi` for route registration,
+  > following the `internal/ranking/httpapi` pattern) and frontend
+  > `web/src/features/model-gnn/` (panel, both renderers, layout/join helper,
+  > feature-local `api.ts`/`types.ts` after the `features/ranking`
+  > convention). The only allowed integration points are: `gnn.NewService`
+  > wiring in `internal/app/app.go`, the `OptionalProviders.ProviderModelGraph`
+  > field + `gnnhttpapi.RegisterRoutes` call in `internal/api/router.go`, the
+  > `@/features/model-gnn` import in `web/src/pages/UsagePage.tsx`, and the
+  > `usage_stats.provider_model_graph.*` i18n keys in `src/i18n`.
 
   Two renderers are switchable at runtime from a header toggle:
   - **Grid (xyflow)** — `@xyflow/react` (React Flow) compact two-column grid

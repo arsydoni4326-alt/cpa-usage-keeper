@@ -12,8 +12,8 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
-import { fetchProviderModelGNN } from '@/lib/api'
-import type { ProviderModelGraphResponse } from '@/lib/types'
+import { fetchProviderModelGNN } from './api'
+import type { ProviderModelGraphResponse } from './types'
 
 import styles from './ProviderModelGNNPanel.module.scss'
 import { buildProviderModelGraph, type ProviderGraphNode } from './providerModelGraph'

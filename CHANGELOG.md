@@ -4,6 +4,37 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Changed
+- **Provider Model GNN domain isolation** (`feature/model-gnn-domain`): the
+  entire GNN feature moved into a dedicated, self-contained domain so future
+  upstream merges cannot remove or replace it. Backend: `internal/service/
+  provider_model_gnn.go` → `internal/gnn/gnn.go` (package `gnn`, constructor
+  renamed to `gnn.NewService`), route registration moved out of `internal/api`
+  into `internal/gnn/httpapi` (following the `internal/ranking/httpapi`
+  pattern; `GET /api/v1/provider-model-gnn` and the
+  `/provider-model-graph` alias unchanged). Frontend: panel, both renderers,
+  and the layout/join helper moved from `web/src/components/usage/` to
+  `web/src/features/model-gnn/` with feature-local `api.ts` and `types.ts`
+  (after the `features/ranking` convention); the shared
+  `ProviderModelGraphResponse` type block and `fetchProviderModelGNN` were
+  removed from `web/src/lib/types.ts` / `web/src/lib/api.ts`. Wiring is now
+  limited to four integration points: `gnn.NewService` in `internal/app/
+  app.go`, `OptionalProviders.ProviderModelGraph` +
+  `gnnhttpapi.RegisterRoutes` in `internal/api/router.go`, the
+  `@/features/model-gnn` import in `web/src/pages/UsagePage.tsx`, and the
+  `usage_stats.provider_model_graph.*` i18n keys. API contract, response
+  shape, and UI behavior are unchanged.
+
+### Documentation
+- `docs/ARCHITECTURE.md`: module map now lists `internal/gnn`; the §7
+  permanence callout records the domain-isolation contract and the allowed
+  integration points.
+- `docs/SPECIFICATION.md`: UC-12 permanence note extended with the domain
+  isolation (backend `internal/gnn`, frontend `web/src/features/model-gnn/`).
+- `README.md` / `README.zh.md`: permanent-feature notes mention the domain
+  isolation.
+- `AGENTS.md`: frontend GNN guidance points at the dedicated domain.
+
 ### Fixed
 - Restored the `cpaManagementURL` definition (`getBackToCPALinkURL(status)`)
   in `web/src/pages/UsagePage.tsx`, which was dropped during the merge that
@@ -30,3 +61,9 @@ All notable changes to this project are documented here.
 ### Validation
 - `tsc --noEmit` clean; `vitest run` 177 files / 1450 tests pass.
 - `go build ./...` verified.
+- Domain-isolation validation (`feature/model-gnn-domain`): `go build ./...`
+  clean; `go test ./cmd/... ./internal/...` all packages pass (incl. the
+  relocated `internal/gnn` tests); frontend `typecheck` clean; `vitest run`
+  185 files / 1506 tests pass; `eslint` clean; `vite build` succeeds with the
+  Reagraph WebGL chunk still lazy-loaded separately
+  (`ProviderModelReagraphPanel` chunk, ~378 kB gzip).

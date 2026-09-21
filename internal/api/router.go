@@ -15,6 +15,7 @@ import (
 	"cpa-usage-keeper/internal/auth"
 	"cpa-usage-keeper/internal/logging"
 	"cpa-usage-keeper/internal/poller"
+	gnnhttpapi "cpa-usage-keeper/internal/gnn/httpapi"
 	"cpa-usage-keeper/internal/quota"
 	rankinghttpapi "cpa-usage-keeper/internal/ranking/httpapi"
 	"cpa-usage-keeper/internal/service"
@@ -61,7 +62,7 @@ type OptionalProviders struct {
 	Ranking				rankinghttpapi.Provider
 	LocalRanking		rankinghttpapi.LocalProvider
 	Status				StatusRouteConfig
-	ProviderModelGraph	service.ProviderModelGNNProvider
+	ProviderModelGraph	gnnhttpapi.Provider
 }
 
 func NewRouter(
@@ -105,7 +106,7 @@ func NewRouter(
 	var credentialStatusProvider service.CredentialStatusProvider
 	var requestLogProvider service.RequestLogProvider
 	var rankingProvider rankinghttpapi.Provider
-	var providerModelGraphProvider service.ProviderModelGNNProvider
+	var providerModelGraphProvider gnnhttpapi.Provider
 	var localRankingProvider rankinghttpapi.LocalProvider
 	var statusConfig StatusRouteConfig
 	if len(optionalProviders) > 0 {
@@ -146,7 +147,9 @@ func NewRouter(
 	registerCPAAPIKeyRoutes(adminProtected, cpaAPIKeyProvider)
 	registerPricingRoutes(adminProtected, pricingProvider)
 	registerQuotaRoutes(adminProtected, quotaProvider)
-	registerProviderModelGNNRoutes(adminProtected, providerModelGraphProvider)
+	// Provider Model GNN is a permanent, self-contained feature domain
+	// (docs/ARCHITECTURE.md §7); routes are registered by the domain itself.
+	gnnhttpapi.RegisterRoutes(adminProtected, providerModelGraphProvider)
 	if rankingProvider != nil {
 		rankinghttpapi.RegisterRoutes(adminProtected, rankingProvider)
 	}
