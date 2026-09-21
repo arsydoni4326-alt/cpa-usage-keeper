@@ -1,4 +1,4 @@
-package service
+package gnn
 
 import (
 	"context"
@@ -29,7 +29,7 @@ func graphResult(config providerconfig.ManagementConfig) *response.ManagementCon
 }
 
 func TestGetProviderModelGraphRequiresConfiguredClient(t *testing.T) {
-	provider := NewProviderModelGraphService(nil)
+	provider := NewService(nil)
 	if _, err := provider.GetProviderModelGraph(context.Background()); err == nil || !strings.Contains(err.Error(), "not configured") {
 		t.Fatalf("expected not-configured error, got %v", err)
 	}
@@ -37,14 +37,14 @@ func TestGetProviderModelGraphRequiresConfiguredClient(t *testing.T) {
 
 func TestGetProviderModelGraphPassesThroughFetchErrors(t *testing.T) {
 	boom := errors.New("cpa unreachable")
-	provider := NewProviderModelGraphService(&fakeProviderModelGraphClient{err: boom})
+	provider := NewService(&fakeProviderModelGraphClient{err: boom})
 	if _, err := provider.GetProviderModelGraph(context.Background()); !errors.Is(err, boom) {
 		t.Fatalf("expected passthrough error, got %v", err)
 	}
 }
 
 func TestGetProviderModelGraphMergesGeminiEntriesIntoSingleNode(t *testing.T) {
-	provider := NewProviderModelGraphService(&fakeProviderModelGraphClient{result: graphResult(providerconfig.ManagementConfig{
+	provider := NewService(&fakeProviderModelGraphClient{result: graphResult(providerconfig.ManagementConfig{
 		GeminiAPIKey: []providerconfig.ConfigGeminiEntry{
 			{Models: []providerconfig.ModelAliasEntry{
 				{Name: "gemini-2.5-pro", Alias: "gemini-pro"},
@@ -92,7 +92,7 @@ func TestGetProviderModelGraphMergesGeminiEntriesIntoSingleNode(t *testing.T) {
 }
 
 func TestGetProviderModelGraphMapsOpenAICompatibilityEntries(t *testing.T) {
-	provider := NewProviderModelGraphService(&fakeProviderModelGraphClient{result: graphResult(providerconfig.ManagementConfig{
+	provider := NewService(&fakeProviderModelGraphClient{result: graphResult(providerconfig.ManagementConfig{
 		OpenAICompatibility: []providerconfig.ConfigOpenAICompatibilityEntry{
 			{Name: "Prod Pool", Disabled: true, Models: []providerconfig.ModelAliasEntry{{Name: "gpt-4o", Alias: "fast-gpt"}}},
 			{Name: "   ", Models: []providerconfig.ModelAliasEntry{{Name: "gpt-4o-mini"}}},
@@ -125,7 +125,7 @@ func TestGetProviderModelGraphMapsOpenAICompatibilityEntries(t *testing.T) {
 }
 
 func TestGetProviderModelGraphSortsOAuthProvidersAndSkipsEmpty(t *testing.T) {
-	provider := NewProviderModelGraphService(&fakeProviderModelGraphClient{result: graphResult(providerconfig.ManagementConfig{
+	provider := NewService(&fakeProviderModelGraphClient{result: graphResult(providerconfig.ManagementConfig{
 		OAuthModelAlias: map[string][]providerconfig.ModelAliasEntry{
 			"qwen":   {{Name: "qwen3-coder-plus"}},
 			"kiro":   {},
@@ -161,7 +161,7 @@ func TestGetProviderModelGraphSortsOAuthProvidersAndSkipsEmpty(t *testing.T) {
 }
 
 func TestGetProviderModelGraphDedupesModelsByLabelWithinNode(t *testing.T) {
-	provider := NewProviderModelGraphService(&fakeProviderModelGraphClient{result: graphResult(providerconfig.ManagementConfig{
+	provider := NewService(&fakeProviderModelGraphClient{result: graphResult(providerconfig.ManagementConfig{
 		OpenAICompatibility: []providerconfig.ConfigOpenAICompatibilityEntry{
 			{Name: "Pool", Models: []providerconfig.ModelAliasEntry{
 				{Name: "gpt-4o", Alias: "shared"},
@@ -193,7 +193,7 @@ func TestGetProviderModelGraphDedupesModelsByLabelWithinNode(t *testing.T) {
 }
 
 func TestGetProviderModelGraphIncludesGNNEmbeddings(t *testing.T) {
-	provider := NewProviderModelGraphService(&fakeProviderModelGraphClient{result: graphResult(providerconfig.ManagementConfig{
+	provider := NewService(&fakeProviderModelGraphClient{result: graphResult(providerconfig.ManagementConfig{
 		OpenAICompatibility: []providerconfig.ConfigOpenAICompatibilityEntry{
 			{Name: "A", Models: []providerconfig.ModelAliasEntry{{Name: "m1"}, {Name: "m2"}}},
 			{Name: "B", Models: []providerconfig.ModelAliasEntry{{Name: "m1"}}},
@@ -261,7 +261,7 @@ func TestGetProviderModelGraphIncludesGNNEmbeddings(t *testing.T) {
 }
 
 func TestGetProviderModelGraphSerializesOnlySanitizedFields(t *testing.T) {
-	provider := NewProviderModelGraphService(&fakeProviderModelGraphClient{result: graphResult(providerconfig.ManagementConfig{
+	provider := NewService(&fakeProviderModelGraphClient{result: graphResult(providerconfig.ManagementConfig{
 		OpenAICompatibility: []providerconfig.ConfigOpenAICompatibilityEntry{
 			{Name: "Pool", Models: []providerconfig.ModelAliasEntry{
 				{Name: "gpt-4o", Alias: "fast"},

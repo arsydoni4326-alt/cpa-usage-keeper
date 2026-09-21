@@ -99,7 +99,10 @@ keys that are synchronized from CPA itself.
   structural learning, and prediction). **UC-12 is permanent:** the GNN
   diagram (`ProviderModelGNNPanel` + `GET /api/provider-model-gnn`) is a
   mandatory part of the Usage overview tab and must not be removed, hidden,
-  or replaced without an explicit, documented architectural decision.
+  or replaced without an explicit, documented architectural decision. The
+  feature is additionally isolated in a dedicated domain — backend
+  `internal/gnn` + `internal/gnn/httpapi`, frontend `web/src/features/model-gnn/`
+  — so upstream merges cannot remove or replace it.
 
 ### API-key viewer
 

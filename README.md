@@ -76,7 +76,7 @@ CPA Usage Keeper is a standalone persistence and analytics dashboard for [CLIPro
 - Inspect Codex quota efficiency history with Token/USD per-percentage-point metrics, current-cycle charts, and completed-cycle details in the credential drawer
 - Visualize provider ↔ model relationships as an interactive **Graph Neural Network (GNN)**, sourced from the CPA management config, enabling advanced analytics such as structural learning and prediction
 
-> ⚠️ **Permanent feature.** The Provider Model GNN diagram is a required, non-removable capability of CPA Usage Keeper. Do **not** remove, hide, or replace it (or either of its renderers) without a formal architectural decision approved by the maintainers — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (§7) and [docs/SPECIFICATION.md](docs/SPECIFICATION.md) (UC-12) for the full policy.
+> ⚠️ **Permanent feature.** The Provider Model GNN diagram is a required, non-removable capability of CPA Usage Keeper. Do **not** remove, hide, or replace it (or either of its renderers) without a formal architectural decision approved by the maintainers — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (§7) and [docs/SPECIFICATION.md](docs/SPECIFICATION.md) (UC-12) for the full policy. The feature is isolated in a dedicated domain (backend `internal/gnn`, frontend `web/src/features/model-gnn/`) so upstream merges cannot remove or replace it.
 
 - Opt into community rankings by overall score, tokens, requests, cache rate, average TTFT/latency, or peak TPM/RPM
 - Open a read-only usage view scoped to an individual CPA API Key

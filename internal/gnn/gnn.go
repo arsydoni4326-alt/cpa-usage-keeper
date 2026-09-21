@@ -1,4 +1,12 @@
-package service
+// Package gnn isolates the Provider Model GNN feature domain: it derives the
+// sanitized provider↔model graph from the CPA management config and computes
+// GNN-style node/edge features and one-layer message-passing embeddings.
+// The response never contains api-key, base-url, headers, or other secrets.
+//
+// This package is a self-contained feature domain (see docs/ARCHITECTURE.md);
+// it must stay independently mergeable so upstream changes cannot remove or
+// replace the feature.
+package gnn
 
 import (
 	"context"
@@ -109,7 +117,7 @@ type providerModelGNNService struct {
 	client ProviderModelGraphClient
 }
 
-func NewProviderModelGraphService(client ProviderModelGraphClient) ProviderModelGNNProvider {
+func NewService(client ProviderModelGraphClient) ProviderModelGNNProvider {
 	return &providerModelGNNService{client: client}
 }
 
