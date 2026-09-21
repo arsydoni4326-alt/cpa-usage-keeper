@@ -76,7 +76,7 @@ CPA Usage Keeper 是面向 [CLIProxyAPI（CPA）](https://github.com/router-for-
 - 查看 Codex 额度效率历史，包含 Token/USD 每百分点指标、当前周期图表和已完成周期详情
 - 以交互式 **GNN（图神经网络）关系图** 直观展示各 Provider 与其模型别名的对应关系，数据来源于 CPA management config，支持网格（React Flow）与 WebGL 力导向（Reagraph）两种渲染视图
 
-> ⚠️ **永久核心功能。** Provider Model GNN 关系图是 CPA Usage Keeper 必不可少、不可移除的能力。未经维护者批准并记录在案的架构决策，不得删除、隐藏或替换该功能及其任一渲染视图 —— 完整策略见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)（§7）与 [docs/SPECIFICATION.md](docs/SPECIFICATION.md)（UC-12）。
+> ⚠️ **永久核心功能。** Provider Model GNN 关系图是 CPA Usage Keeper 必不可少、不可移除的能力。未经维护者批准并记录在案的架构决策，不得删除、隐藏或替换该功能及其任一渲染视图 —— 完整策略见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)（§7）与 [docs/SPECIFICATION.md](docs/SPECIFICATION.md)（UC-12）。该功能已隔离在独立领域中（后端 `internal/gnn`，前端 `web/src/features/model-gnn/`），上游合并不会删除或替换它。
 
 - 可选择加入社区排名，按综合得分、Token、请求量、缓存率、平均 TTFT/延迟或峰值 TPM/RPM 对比表现
 - 为单个 CPA API Key 提供独立的只读用量视图
