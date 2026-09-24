@@ -4,6 +4,28 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [v1.16.1-arsydoni4326-alt] — 2026-09-24
+
+### Changed
+- **Merged upstream `v1.15.7`** into `develop` (git flow). All custom
+  features are preserved: Provider Model GNN domain (`internal/gnn` +
+  `web/src/features/model-gnn/`), IP geo/enrichment for Session Settings
+  (`internal/enrichgeo`), workspace docs & deployment files. The merge was
+  clean (no file overlap with upstream changes).
+- Upstream fixes now included:
+  - `fix(ui): align controls and improve quota error styling` (#570)
+  - `fix(usage): normalize empty parent sessions` (#569)
+  - `fix(credentials): align table header weight` (#568)
+  - `fix(credentials): improve credential subtitle layout` (#567)
+
+### Validation
+- `go build ./...` and `go vet ./internal/...` clean.
+- `go test ./cmd/... ./internal/...` all packages pass.
+- Frontend `tsc --noEmit` clean; `eslint` clean.
+- `vitest run` full suite: 1287 tests; the handful of timeouts observed
+  under heavy system load (load avg ~11, memory pressure) all pass when
+  re-run in isolation — environmental flakiness, not merge-related.
+
 ## [v1.16.0-arsydoni4326-alt] — 2026-09-21
 
 ### Changed
