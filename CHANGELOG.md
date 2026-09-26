@@ -4,6 +4,32 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [v1.16.3-arsydoni4326-alt] — 2026-09-27
+
+### Changed
+- **Merged upstream `main`** into `develop` (git flow). All custom features
+  are preserved: Provider Model GNN domain (`internal/gnn` +
+  `web/src/features/model-gnn/`), IP geo/enrichment for Session Settings
+  (`internal/enrichgeo`), Session Settings card, workspace docs & deployment
+  files. One file required conflict resolution (`web/src/pages/UsagePage.tsx`)
+  — the overview tab now uses upstream's `UsageComparisonCharts` with
+  `isDark`/`isMobile` props while keeping the custom `ProviderModelGNNPanel`
+  mounted; upstream's removal of `OverviewRealtimePanel` from the overview
+  tab (it remains on the realtime tab) is adopted.
+- Upstream changes now included:
+  - `feat(usage)!: combine realtime latency charts` (#580)
+  - `feat(usage): visualize realtime token shares with ribbons` (#579)
+  - `feat(usage): unify overview usage in a stacked token chart` (#578)
+  - `fix(credentials): align priority saves with status updates` (#581)
+  - `fix(quota): refresh Codex subscription expiry after renewal` (#577)
+
+### Validation
+- `go build ./...` and `go vet ./internal/...` clean.
+- `go test ./cmd/... ./internal/...` all packages pass.
+- Frontend `tsc --noEmit` clean; `eslint` clean.
+- `vitest run` full suite passes (176 files / 1313 tests).
+- `vite build` succeeds (Reagraph WebGL chunk lazy-loaded separately).
+
 ## [v1.16.2-arsydoni4326-alt] — 2026-09-26
 
 ### Changed

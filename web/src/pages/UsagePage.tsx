@@ -2260,19 +2260,7 @@ const loadApiKeyOptions = useCallback(async () => {
                   requestIdentity={activityRequestIdentity}
                   onWindowChange={setActivityWindow}
                 />
-
-                <OverviewRealtimePanel
-                  realtime={currentRealtime ?? undefined}
-                  loading={realtimeLoading}
-                  error={displayRealtimeError}
-                  window={realtimeWindow}
-                  onWindowChange={setRealtimeWindow}
-                  isDark={isDark}
-                  isMobile={isMobile}
-                  timezone={currentRealtime?.timezone ?? usage?.timezone}
-                />
-
-                <UsageComparisonCharts comparisons={overviewComparisons ?? undefined} loading={comparisonsLoading} />
+<UsageComparisonCharts isDark={resolvedTheme === 'dark'} isMobile={isMobile} comparisons={overviewComparisons ?? undefined} loading={comparisonsLoading} />
                 <ProviderModelGNNPanel />
               </>
             )}
