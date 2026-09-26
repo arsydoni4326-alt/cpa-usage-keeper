@@ -4,6 +4,27 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [v1.16.2-arsydoni4326-alt] — 2026-09-26
+
+### Changed
+- **Merged upstream `main`** into `develop` (git flow). All custom features
+  are preserved: Provider Model GNN domain (`internal/gnn` +
+  `web/src/features/model-gnn/`), IP geo/enrichment for Session Settings
+  (`internal/enrichgeo`), Session Settings card, workspace docs & deployment
+  files. Two files required conflict resolution (`internal/api/router.go`,
+  `internal/app/app.go`) — both now carry the upstream `CredentialPriority`
+  wiring alongside the custom `ProviderModelGraph` wiring.
+- Upstream changes now included:
+  - `feat(credentials): add unified editing and priority controls` (#575)
+  - `fix(ui): keep card heading count badges consistent and intact` (#574)
+  - `fix: prefer resolved client IP in usage events` (#573)
+
+### Validation
+- `go build ./...` and `go vet ./internal/...` clean.
+- `go test ./cmd/... ./internal/...` all packages pass.
+- Frontend `tsc --noEmit` clean; `eslint` clean.
+- `vitest run` full suite passes.
+
 ## [v1.16.1-arsydoni4326-alt] — 2026-09-24
 
 ### Changed
