@@ -1,3 +1,4 @@
+import { CredentialEditModal } from '@/components/usage/credentials/CredentialEditModal';
 import { UsageComparisonCharts } from '@/components/usage/UsageComparisonCharts';
 import { useState, useMemo, useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -951,7 +952,10 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   const [eventsExportingFormat, setEventsExportingFormat] = useState<UsageEventsExportFormat | null>(null);
   const [eventsFilterOptionsLoaded, setEventsFilterOptionsLoaded] = useState(false);
   const [credentialDetailSelection, setCredentialDetailSelection] = useState<CredentialDetailSelection | null>(null);
+  const credentialEditFallbackRef = useRef<HTMLElement | null>(null);
+  const [credentialEditSelection, setCredentialEditSelection] = useState<CredentialDetailSelection | null>(null);
   const [credentialDetailOpen, setCredentialDetailOpen] = useState(false);
+  const [credentialPriorityRevision, setCredentialPriorityRevision] = useState(0);
   const credentialDetailRequestRef = useRef<{ id: string; controller: AbortController } | null>(null);
   const [requestLogResponse, setRequestLogResponse] = useState<UsageEventRequestLogResponse | null>(null);
   const [requestLogError, setRequestLogError] = useState('');
@@ -1019,6 +1023,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
     enabledAiProviders: credentialSectionVisibility.showAiProvider && pageVisible,
     onAuthRequired,
     onNotice: showTopNotice,
+    onPrioritySaved: () => setCredentialPriorityRevision((current) => current + 1),
   });
   const refreshCredentials = credentialsData.refresh;
   const [analysisLoading, setAnalysisLoading] = useState(false);
@@ -1692,6 +1697,10 @@ const loadApiKeyOptions = useCallback(async () => {
   }, [credentialDetailID, credentialDetailOpen, onAuthRequired]);
 
   useEffect(() => {
+    if (credentialPriorityRevision > 0) void refreshCredentialDetail();
+  }, [credentialPriorityRevision, refreshCredentialDetail]);
+
+  useEffect(() => {
     if (!credentialDetailOpen) return;
     // 详情按稳定 ID 独立刷新，凭证因重置移出当前分页后仍能观察新增用量。
     void refreshCredentialDetail();
@@ -1718,10 +1727,10 @@ const loadApiKeyOptions = useCallback(async () => {
     const id = credentialDetailSelection.row.identity.id;
     if (credentialDetailSelection.kind === 'auth-file') {
       const row = credentialsData.authFileRows.find((item) => item.identity.id === id);
-      return row ? updateCredentialDetailStats({ kind: 'auth-file', row }, credentialDetailSelection.row.identity) : credentialDetailSelection;
+      return row ? updateCredentialDetailStats({ kind: 'auth-file', row }, { ...credentialDetailSelection.row.identity, priority: row.identity.priority }) : credentialDetailSelection;
     }
     const row = credentialsData.aiProviderRows.find((item) => item.identity.id === id);
-    return row ? updateCredentialDetailStats({ kind: 'ai-provider', row }, credentialDetailSelection.row.identity) : credentialDetailSelection;
+    return row ? updateCredentialDetailStats({ kind: 'ai-provider', row }, { ...credentialDetailSelection.row.identity, priority: row.identity.priority }) : credentialDetailSelection;
   }, [credentialDetailSelection, credentialsData.authFileRows, credentialsData.aiProviderRows]);
 
   const handleRequestLogDownload = useCallback(async (eventId: string) => {
@@ -2071,7 +2080,7 @@ const loadApiKeyOptions = useCallback(async () => {
           updateAvailable={hasNewVersion}
         />}
 
-        <main className={styles.contentColumn}>
+        <main ref={credentialEditFallbackRef} tabIndex={-1} className={styles.contentColumn}>
           <div className={styles.container}>
             {loading && !usage && activeTab === 'overview' && (
               <div className={styles.loadingOverlay} aria-busy="true">
@@ -2399,11 +2408,11 @@ const loadApiKeyOptions = useCallback(async () => {
                       onRefreshQuota={credentialsData.refreshQuotaForCurrentAuthFilePage}
                       onRefreshQuotaForAuthIndex={credentialsData.refreshQuotaForAuthIndex}
                       onResetQuotaForAuthIndex={credentialsData.resetQuotaForAuthIndex}
-                      aliasSavingId={credentialsData.aliasSavingId}
-                      onSaveAlias={credentialsData.saveUsageIdentityAlias}
+                      onEdit={(row) => setCredentialEditSelection({ kind: 'auth-file', row })}
                       onOpenDetails={(row) => handleCredentialDetailOpen({ kind: 'auth-file', row })}
                       statusPendingIdentityIds={credentialsData.credentialStatusPendingIdentityIds}
                       onToggleStatus={credentialsData.toggleAuthFileStatus}
+                      onSavePriority={credentialsData.saveAuthFilePriority}
                       onRefreshInspectionStatus={credentialsData.refreshQuotaInspectionStatus}
                       onStartInspection={credentialsData.startQuotaInspection}
                       onAfterInvalidAccountAction={credentialsData.refresh}
@@ -2419,11 +2428,11 @@ const loadApiKeyOptions = useCallback(async () => {
                       activeOnly={credentialsData.aiProviderActiveOnly}
                       sort={credentialsData.aiProviderSort}
                       loading={credentialsData.loading}
-                      aliasSavingId={credentialsData.aliasSavingId}
-                      onSaveAlias={credentialsData.saveUsageIdentityAlias}
+                      onEdit={(row) => setCredentialEditSelection({ kind: 'ai-provider', row })}
                       onOpenDetails={(row) => handleCredentialDetailOpen({ kind: 'ai-provider', row })}
                       statusPendingIdentityIds={credentialsData.credentialStatusPendingIdentityIds}
                       onToggleStatus={credentialsData.toggleAiProviderStatus}
+                      onSavePriority={credentialsData.saveAiProviderPriority}
                       onPageChange={credentialsData.setAiProviderPage}
                       onPageSizeChange={credentialsData.setAiProviderPageSize}
                       onActiveOnlyChange={credentialsData.setAiProviderActiveOnly}
@@ -2468,6 +2477,17 @@ const loadApiKeyOptions = useCallback(async () => {
           </div>
         </main>
       </div>
+      {credentialEditSelection && <CredentialEditModal
+        key={`${credentialEditSelection.kind}:${credentialEditSelection.row.identity.id}`}
+        selection={credentialEditSelection}
+        fallbackFocusRef={credentialEditFallbackRef}
+        onClose={() => setCredentialEditSelection(null)}
+        onSaveField={(change) => credentialsData.saveCredentialField(credentialEditSelection.kind, credentialEditSelection.row.identity.id, credentialEditSelection.row.identity.identity, change)}
+        onSaved={() => {
+          setCredentialEditSelection(null);
+          showTopNotice('success', t('usage_stats.credentials_edit_saved'));
+        }}
+      />}
       <CredentialDetailDrawer
         open={credentialDetailOpen}
         selection={currentCredentialDetailSelection}

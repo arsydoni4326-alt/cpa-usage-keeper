@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"cpa-usage-keeper/internal/auth"
+	gnnhttpapi "cpa-usage-keeper/internal/gnn/httpapi"
 	"cpa-usage-keeper/internal/logging"
 	"cpa-usage-keeper/internal/poller"
-	gnnhttpapi "cpa-usage-keeper/internal/gnn/httpapi"
 	"cpa-usage-keeper/internal/quota"
 	rankinghttpapi "cpa-usage-keeper/internal/ranking/httpapi"
 	"cpa-usage-keeper/internal/service"
@@ -52,17 +52,18 @@ type StatusRouteConfig struct {
 }
 
 type OptionalProviders struct {
-	UsageIdentity		service.UsageIdentityProvider
-	ErrorEvents			service.ErrorEventProvider
-	Quota				QuotaProvider
-	CPAAPIKeys			service.CPAAPIKeyProvider
-	AuthFiles			service.AuthFilesManagementProvider
-	CredentialStatus 	service.CredentialStatusProvider
-	RequestLogs			service.RequestLogProvider
-	Ranking				rankinghttpapi.Provider
-	LocalRanking		rankinghttpapi.LocalProvider
-	Status				StatusRouteConfig
-	ProviderModelGraph	gnnhttpapi.Provider
+	UsageIdentity      service.UsageIdentityProvider
+	ErrorEvents        service.ErrorEventProvider
+	Quota              QuotaProvider
+	CPAAPIKeys         service.CPAAPIKeyProvider
+	AuthFiles          service.AuthFilesManagementProvider
+	CredentialStatus   service.CredentialStatusProvider
+	CredentialPriority service.CredentialPriorityProvider
+	RequestLogs        service.RequestLogProvider
+	Ranking            rankinghttpapi.Provider
+	LocalRanking       rankinghttpapi.LocalProvider
+	Status             StatusRouteConfig
+	ProviderModelGraph gnnhttpapi.Provider
 }
 
 func NewRouter(
@@ -104,6 +105,7 @@ func NewRouter(
 	var cpaAPIKeyProvider service.CPAAPIKeyProvider
 	var authFilesProvider service.AuthFilesManagementProvider
 	var credentialStatusProvider service.CredentialStatusProvider
+	var credentialPriorityProvider service.CredentialPriorityProvider
 	var requestLogProvider service.RequestLogProvider
 	var rankingProvider rankinghttpapi.Provider
 	var providerModelGraphProvider gnnhttpapi.Provider
@@ -116,6 +118,7 @@ func NewRouter(
 		cpaAPIKeyProvider = optionalProviders[0].CPAAPIKeys
 		authFilesProvider = optionalProviders[0].AuthFiles
 		credentialStatusProvider = optionalProviders[0].CredentialStatus
+		credentialPriorityProvider = optionalProviders[0].CredentialPriority
 		requestLogProvider = optionalProviders[0].RequestLogs
 		rankingProvider = optionalProviders[0].Ranking
 		providerModelGraphProvider = optionalProviders[0].ProviderModelGraph
@@ -143,6 +146,7 @@ func NewRouter(
 	registerErrorEventRoutes(adminProtected, errorEventProvider)
 	registerAuthFileManagementRoutes(adminProtected, authFilesProvider)
 	registerCredentialStatusRoutes(adminProtected, credentialStatusProvider)
+	registerCredentialPriorityRoutes(adminProtected, credentialPriorityProvider)
 	registerAuthSessionManagementRoutes(adminProtected, authHandler)
 	registerCPAAPIKeyRoutes(adminProtected, cpaAPIKeyProvider)
 	registerPricingRoutes(adminProtected, pricingProvider)
