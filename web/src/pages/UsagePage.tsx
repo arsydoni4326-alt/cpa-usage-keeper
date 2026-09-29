@@ -952,7 +952,7 @@ export function UsagePage({ onAuthRequired }: { onAuthRequired?: () => void }) {
   const [eventsExportingFormat, setEventsExportingFormat] = useState<UsageEventsExportFormat | null>(null);
   const [eventsFilterOptionsLoaded, setEventsFilterOptionsLoaded] = useState(false);
   const [credentialDetailSelection, setCredentialDetailSelection] = useState<CredentialDetailSelection | null>(null);
-  const credentialEditFallbackRef = useRef<HTMLElement | null>(null);
+  const credentialEditFallbackRef = useRef<HTMLInputElement | null>(null);
   const [credentialEditSelection, setCredentialEditSelection] = useState<CredentialDetailSelection | null>(null);
   const [credentialDetailOpen, setCredentialDetailOpen] = useState(false);
   const [credentialPriorityRevision, setCredentialPriorityRevision] = useState(0);
@@ -2080,7 +2080,7 @@ const loadApiKeyOptions = useCallback(async () => {
           updateAvailable={hasNewVersion}
         />}
 
-        <main ref={credentialEditFallbackRef} tabIndex={-1} className={styles.contentColumn}>
+        <main className={styles.contentColumn}>
           <div className={styles.container}>
             {loading && !usage && activeTab === 'overview' && (
               <div className={styles.loadingOverlay} aria-busy="true">
@@ -2396,6 +2396,7 @@ const loadApiKeyOptions = useCallback(async () => {
                       onRefreshQuota={credentialsData.refreshQuotaForCurrentAuthFilePage}
                       onRefreshQuotaForAuthIndex={credentialsData.refreshQuotaForAuthIndex}
                       onResetQuotaForAuthIndex={credentialsData.resetQuotaForAuthIndex}
+                      editFallbackRef={credentialEditFallbackRef}
                       onEdit={(row) => setCredentialEditSelection({ kind: 'auth-file', row })}
                       onOpenDetails={(row) => handleCredentialDetailOpen({ kind: 'auth-file', row })}
                       statusPendingIdentityIds={credentialsData.credentialStatusPendingIdentityIds}
@@ -2416,6 +2417,7 @@ const loadApiKeyOptions = useCallback(async () => {
                       activeOnly={credentialsData.aiProviderActiveOnly}
                       sort={credentialsData.aiProviderSort}
                       loading={credentialsData.loading}
+                      editFallbackRef={credentialEditFallbackRef}
                       onEdit={(row) => setCredentialEditSelection({ kind: 'ai-provider', row })}
                       onOpenDetails={(row) => handleCredentialDetailOpen({ kind: 'ai-provider', row })}
                       statusPendingIdentityIds={credentialsData.credentialStatusPendingIdentityIds}
